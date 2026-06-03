@@ -495,8 +495,8 @@ class BorrowingView(ctk.CTkFrame):
                       hover_color="#CCCCCC", font=("Inter", 11, "bold"),
                       command=self.load_transaction_history).pack(side="right")
                       
-        ctk.CTkButton(top_bar, text="📥 Retrieve Tools", width=120, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.open_retrieval_modal).pack(side="right", padx=(10, 5))
-        ctk.CTkButton(top_bar, text="📤 Issue Tools", width=110, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 12, "bold"), command=self.open_issuance_modal).pack(side="right", padx=(10, 5))
+        ctk.CTkButton(top_bar, text="📥 Retrieve Tools", width=120, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.open_retrieval_modal).pack(side="right", padx=(5, 10))
+        ctk.CTkButton(top_bar, text="📤 Issue Tools", width=110, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 12, "bold"), command=self.open_issuance_modal).pack(side="right", padx=(10, 0))
 
         self.data_scroll = ctk.CTkScrollableFrame(table_card, fg_color="transparent")
         self.data_scroll.pack(fill="both", expand=True, padx=20, pady=(10, 20))
@@ -911,6 +911,9 @@ class BorrowingView(ctk.CTkFrame):
             
             if not tool:
                 messagebox.showerror("Not Found", "Invalid or Unassigned Tag ID.", parent=self.winfo_toplevel())
+                return
+            if tool['condition'] in ['Damaged', 'Needs Repair', 'Lost']:
+                messagebox.showerror("Unavailable", f"'{tool['name']}' cannot be issued. It is flagged as {tool['condition']}.", parent=self.winfo_toplevel())
                 return
             if tool['qty'] <= 0:
                 messagebox.showerror("Out of Stock", f"'{tool['name']}' is currently out of stock!", parent=self.winfo_toplevel())

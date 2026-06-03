@@ -37,7 +37,7 @@ class LoginApp(ctk.CTk):
         except Exception:
             pass
 
-        self.failed_attempts = 0
+        self._ensure_login_columns()
 
         self.main_frame = ctk.CTkFrame(self, fg_color="white", corner_radius=10,
                                        border_width=1, border_color="#E0E0E0")
@@ -71,7 +71,6 @@ class LoginApp(ctk.CTk):
                                        fg_color="#F9FAFB", border_color="#D1D5DB",
                                        text_color="black")
         self.user_entry.pack(side="left", padx=(0, 5))
-        self.user_entry.bind("<Return>", lambda e: self.pass_entry.focus())
 
         self.scan_btn = ctk.CTkButton(self.user_frame_container, text="📷 Scan", width=60, height=40,
                                       fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 12, "bold"),
@@ -80,6 +79,7 @@ class LoginApp(ctk.CTk):
         
         # Intercept scanner carriage return to drop focus instantly to password
         self.user_entry.bind("<Return>", lambda e: self.pass_entry.focus_set())
+        self.user_entry.bind("<KeyRelease>", lambda e: self.format_emp_id(e, self.user_entry))
         
         # Set window focus to this entry field immediately upon application startup
         self.user_entry.focus_set()
@@ -136,6 +136,37 @@ class LoginApp(ctk.CTk):
         lbl_p.bind("<Button-1>", lambda e: self.open_forgot_password())
 
         self.load_remember_me()
+
+    def _ensure_login_columns(self):
+        conn = get_connection()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SHOW COLUMNS FROM `user` LIKE 'failed_attempts'")
+                if not cursor.fetchone():
+                    cursor.execute("ALTER TABLE `user` ADD COLUMN failed_attempts INT DEFAULT 0")
+                cursor.execute("SHOW COLUMNS FROM `user` LIKE 'reset_requested'")
+                if not cursor.fetchone():
+                    cursor.execute("ALTER TABLE `user` ADD COLUMN reset_requested TINYINT(1) DEFAULT 0")
+                conn.commit()
+            except Exception:
+                pass
+            finally:
+                if conn.is_connected(): cursor.close(); conn.close()
+
+    def format_emp_id(self, event, widget):
+        if event.keysym in ('BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 'Tab'):
+            return
+        text = widget.get().replace('-', '').upper()
+        text = ''.join(c for c in text if c.isalnum())[:10]
+        formatted = ''
+        for i, char in enumerate(text):
+            if i == 3 or i == 7:
+                formatted += '-'
+            formatted += char
+        if widget.get() != formatted:
+            widget.delete(0, 'end')
+            widget.insert(0, formatted)
 
     def center_window(self, window, width, height):
         window.update_idletasks()
@@ -203,35 +234,42 @@ class LoginApp(ctk.CTk):
                 "SELECT * FROM user WHERE employee_id = %s", (username,))
             user = cursor.fetchone()
 
+            if not user:
+                self.show_error("Invalid Credentials.")
+                self.login_button.configure(state="normal", text="Login")
+                return
+
             # Hard-block: Workers are field personnel with no system login access
-            if user and user.get("role") == "Worker":
+            if user.get("role") == "Worker":
                 self.show_error(
                     "Access Denied: Field Workers do not have system login privileges.")
                 self.login_button.configure(state="normal", text="Login")
                 return
 
-            if user and bcrypt.checkpw(password.encode('utf-8'),
-                                       user['password_hash'].encode('utf-8')):
-                self.failed_attempts = 0
+            if user.get("status") == "Locked":
+                self.show_error("Account Locked. Please contact Admin.")
+                self.login_button.configure(state="normal", text="Login")
+                return
+
+            if bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+                if user.get("failed_attempts", 0) > 0:
+                    cursor.execute("UPDATE user SET failed_attempts = 0 WHERE user_id = %s", (user['user_id'],))
+                    conn.commit()
                 self.handle_remember_me(username)
                 self.show_loading_screen(user)
                 return
 
-            self.failed_attempts += 1
-            if self.failed_attempts >= 3:
-                # --- FIX C: Permanent Lockout until Reset ---
-                self.show_error("System Locked: Maximum attempts reached.")
-                self.login_button.configure(state="disabled", text="Locked")
-                self.user_entry.configure(state="disabled")
-                self.pass_entry.configure(state="disabled")
-                
-                messagebox.showwarning("Security Alert",
-                                       "Too many failed attempts. Your session is locked. Please request a password reset.", parent=self)
-                self.open_forgot_password()
-                return  # Forcefully exit function to prevent re-enabling the button below
+            failed_attempts = user.get("failed_attempts", 0) + 1
+            if failed_attempts >= 3:
+                cursor.execute("UPDATE user SET failed_attempts = %s, status = 'Locked' WHERE user_id = %s", (failed_attempts, user['user_id']))
+                conn.commit()
+                self.show_error("Account Locked: Maximum attempts reached.")
+                messagebox.showwarning("Account Locked", "Too many failed attempts. Your account has been locked. Please request a password reset.", parent=self)
             else:
+                cursor.execute("UPDATE user SET failed_attempts = %s WHERE user_id = %s", (failed_attempts, user['user_id']))
+                conn.commit()
                 self.show_error(
-                    f"Invalid Credentials. {3 - self.failed_attempts} attempt(s) left.")
+                    f"Invalid Credentials. {3 - failed_attempts} attempt(s) left.")
             self.login_button.configure(state="normal", text="Login")
         except Exception as e:
             self.show_error(f"System Error: {e}")
@@ -371,9 +409,10 @@ class LoginApp(ctk.CTk):
                      text="Enter your Employee ID. A notification will be sent\nto the System Administrator to reset your password.",
                      font=("Inter", 11), text_color="gray", justify="left").pack(anchor="w", padx=10, pady=(0, 15))
 
-        emp_id_entry = ctk.CTkEntry(content, placeholder_text="Employee ID (e.g. EMP-001)",
+        emp_id_entry = ctk.CTkEntry(content, placeholder_text="Employee ID (e.g. ADM-2026-001)",
                                     width=340, height=35)
         emp_id_entry.pack(padx=10, pady=(5, 15))
+        emp_id_entry.bind("<KeyRelease>", lambda e: self.format_emp_id(e, emp_id_entry))
 
         def send_reset_request():
             e_id = emp_id_entry.get().strip()
@@ -389,16 +428,18 @@ class LoginApp(ctk.CTk):
             try:
                 cursor = conn.cursor(dictionary=True)
                 cursor.execute(
-                    "SELECT user_id, full_name FROM user WHERE employee_id=%s", (e_id,))
+                    "SELECT user_id, full_name, status FROM user WHERE employee_id=%s", (e_id,))
                 user = cursor.fetchone()
 
                 if user:
-                    # Log the request straight to the Admin's Activity Dashboard!
+                    cursor.execute("UPDATE user SET reset_requested = 1 WHERE user_id = %s", (user['user_id'],))
+                    conn.commit()
+
                     log_action(user['user_id'], "Flagged", "Authentication",
                                f"ACCOUNT LOCKED: '{user['full_name']}' requested a password reset.")
 
                     messagebox.showinfo("Request Sent",
-                                        "Your request has been logged to the Admin Dashboard.\nPlease contact your administrator for your temporary password.",
+                                        "Your request has been logged to the Admin Dashboard.\nPlease contact your administrator to unlock your account.",
                                         parent=dialog)
                     dialog.destroy()
                 else:

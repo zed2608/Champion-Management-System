@@ -67,13 +67,13 @@ class InventoryView(ctk.CTkFrame):
 
         t_frame = ctk.CTkFrame(row_type, fg_color="transparent")
         t_frame.grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ctk.CTkLabel(t_frame, text="Item Type", font=("Inter", 11, "bold"), text_color="#1E4528").pack(anchor="w")
+        ctk.CTkLabel(t_frame, text="Item Type *", font=("Inter", 11, "bold"), text_color="#1E4528").pack(anchor="w")
         self.type_menu = ctk.CTkOptionMenu(t_frame, values=["Equipment", "Consumable"], fg_color="#E8F8F5", text_color="black")
         self.type_menu.pack(fill="x", pady=(5, 0))
 
         uom_frame = ctk.CTkFrame(row_type, fg_color="transparent")
         uom_frame.grid(row=0, column=1, sticky="ew", padx=(5, 0))
-        ctk.CTkLabel(uom_frame, text="Unit (UoM)", font=("Inter", 11, "bold"), text_color="#1E4528").pack(anchor="w")
+        ctk.CTkLabel(uom_frame, text="Unit (UoM) *", font=("Inter", 11, "bold"), text_color="#1E4528").pack(anchor="w")
         self.uom_menu = ctk.CTkOptionMenu(uom_frame, values=["pcs", "boxes", "sets", "kg", "rolls", "packs", "liters", "meters", "feet"], fg_color="#E8F8F5", text_color="black")
         self.uom_menu.pack(fill="x", pady=(5, 0))
 
@@ -87,7 +87,7 @@ class InventoryView(ctk.CTkFrame):
         self.desc_entry = ctk.CTkEntry(form_card, placeholder_text="Brief details about the item...")
         self.desc_entry.pack(fill="x", padx=20, pady=(5, 10))
 
-        ctk.CTkLabel(form_card, text="Category", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+        ctk.CTkLabel(form_card, text="Category *", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
         self.cat_menu = ctk.CTkComboBox(form_card, values=["Loading..."], fg_color="#F9FAFB", text_color="black")
         self.cat_menu.pack(fill="x", padx=20, pady=(5, 10))
 
@@ -108,7 +108,7 @@ class InventoryView(ctk.CTkFrame):
 
         q_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
         q_frame.grid(row=0, column=1, sticky="ew", padx=(5, 0))
-        ctk.CTkLabel(q_frame, text="Quantity", font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(anchor="w")
+        ctk.CTkLabel(q_frame, text="Quantity *", font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(anchor="w")
         self.qty_entry = ctk.CTkEntry(q_frame, placeholder_text="0", height=36)
         self.qty_entry.pack(fill="x", pady=(5, 0))
 
@@ -339,11 +339,20 @@ class InventoryView(ctk.CTkFrame):
         if not name:
             messagebox.showerror("Validation Error", "Product Name is required.", parent=self.add_modal)
             return
+            
+        if not cat or cat == "Type or select...":
+            messagebox.showerror("Validation Error", "Category is required.", parent=self.add_modal)
+            return
 
         try:
             price_val = self.price_entry.get().strip()
             price = float(price_val) if price_val else 0.00
-            qty = float(self.qty_entry.get())
+            
+            qty_val = self.qty_entry.get().strip()
+            if not qty_val:
+                messagebox.showerror("Validation Error", "Quantity is required.", parent=self.add_modal)
+                return
+            qty = float(qty_val)
             
             if qty < 0 or price < 0:
                 messagebox.showerror("Validation Error", "Price and Quantity cannot be negative values.", parent=self.winfo_toplevel())

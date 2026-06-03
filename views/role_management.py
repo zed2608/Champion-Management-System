@@ -296,8 +296,9 @@ class RoleManagementView(ctk.CTkFrame):
             cursor = conn.cursor(dictionary=True)
             sql = """
                 SELECT user_id, employee_id, full_name,
-                       IFNULL(email,'—') as email, role
-                FROM user WHERE IFNULL(status, 'Active') = 'Active'
+                       IFNULL(email,'—') as email, role, IFNULL(status, 'Active') as status,
+                       IFNULL(failed_attempts, 0) as failed_attempts, IFNULL(reset_requested, 0) as reset_requested
+                FROM user WHERE IFNULL(status, 'Active') != 'Archived'
             """
             params = []
             if q:
@@ -316,14 +317,19 @@ class RoleManagementView(ctk.CTkFrame):
                 r_idx = i + 1
                 bg = "#F9FAFB" if i % 2 == 0 else "white"
 
-                vals = [row["employee_id"], row["full_name"], row["email"], row["role"]]
+                is_locked = row["status"] == "Locked" or row["reset_requested"] == 1
+                display_name = f"🔒 {row['full_name']}" if is_locked else row["full_name"]
+
+                vals = [row["employee_id"], display_name, row["email"], row["role"]]
                 
                 for col, val in enumerate(vals):
                     cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
                     color = "#1A1A1A"
-                    if col == 3:
+                    if is_locked and col in (0, 1, 2):
+                        color = "#D8000C"
+                    elif col == 3:
                         if val == "Admin": color = "#2ECC71"
                         elif val == "Worker": color = "#D35400"
 
@@ -379,6 +385,10 @@ class RoleManagementView(ctk.CTkFrame):
                      font=("Inter", 15, "bold"), text_color="black").pack(pady=(20, 3))
         ctk.CTkLabel(modal, text=f"Employee ID: {row['employee_id']}",
                      font=("Inter", 11), text_color="gray").pack(pady=(0, 15))
+
+        if row.get("status") == "Locked" or row.get("reset_requested") == 1:
+            ctk.CTkLabel(modal, text="⚠ This account is locked or requested a password reset.",
+                         font=("Inter", 12, "bold"), text_color="#D8000C").pack(pady=(0, 10))
 
         form = ctk.CTkFrame(modal, fg_color="transparent")
         form.pack(fill="x", padx=30)
@@ -458,7 +468,8 @@ class RoleManagementView(ctk.CTkFrame):
                 if new_role == "Worker":
                     # Keep existing hash or store placeholder — Workers never log in
                     cursor.execute("""
-                        UPDATE user SET full_name=%s, email=%s, role=%s
+                        UPDATE user SET full_name=%s, email=%s, role=%s,
+                                        status='Active', failed_attempts=0, reset_requested=0
                         WHERE user_id=%s
                     """, (new_name, new_email or None, new_role, row["user_id"]))
                 elif new_pass:
@@ -470,12 +481,14 @@ class RoleManagementView(ctk.CTkFrame):
                     hashed = bcrypt.hashpw(new_pass.encode("utf-8"),
                                            bcrypt.gensalt()).decode("utf-8")
                     cursor.execute("""
-                        UPDATE user SET full_name=%s, email=%s, role=%s, password_hash=%s
+                        UPDATE user SET full_name=%s, email=%s, role=%s, password_hash=%s,
+                                        status='Active', failed_attempts=0, reset_requested=0
                         WHERE user_id=%s
                     """, (new_name, new_email or None, new_role, hashed, row["user_id"]))
                 else:
                     cursor.execute("""
-                        UPDATE user SET full_name=%s, email=%s, role=%s
+                        UPDATE user SET full_name=%s, email=%s, role=%s,
+                                        status='Active', failed_attempts=0, reset_requested=0
                         WHERE user_id=%s
                     """, (new_name, new_email or None, new_role, row["user_id"]))
                 conn.commit()
