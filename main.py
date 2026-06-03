@@ -219,10 +219,16 @@ class LoginApp(ctk.CTk):
 
             self.failed_attempts += 1
             if self.failed_attempts >= 3:
+                # --- FIX C: Permanent Lockout until Reset ---
+                self.show_error("System Locked: Maximum attempts reached.")
+                self.login_button.configure(state="disabled", text="Locked")
+                self.user_entry.configure(state="disabled")
+                self.pass_entry.configure(state="disabled")
+                
                 messagebox.showwarning("Security Alert",
-                                       "Too many failed attempts. Please reset your password.", parent=self)
-                self.failed_attempts = 0
+                                       "Too many failed attempts. Your session is locked. Please request a password reset.", parent=self)
                 self.open_forgot_password()
+                return  # Forcefully exit function to prevent re-enabling the button below
             else:
                 self.show_error(
                     f"Invalid Credentials. {3 - self.failed_attempts} attempt(s) left.")
@@ -272,6 +278,11 @@ class LoginApp(ctk.CTk):
             dashboard = DashboardApp(self, user_info=user)
             self.center_window(dashboard, 1350, 850)
             self.login_button.configure(state="normal", text="Login")
+            
+            # Re-enable inputs if it was logged out correctly previously
+            self.user_entry.configure(state="normal")
+            self.pass_entry.configure(state="normal")
+            
             if self.remember_check.get() == 0:
                 self.user_entry.delete(0, 'end')
             self.pass_entry.delete(0, 'end')

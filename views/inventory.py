@@ -344,6 +344,11 @@ class InventoryView(ctk.CTkFrame):
             price_val = self.price_entry.get().strip()
             price = float(price_val) if price_val else 0.00
             qty = float(self.qty_entry.get())
+            
+            if qty < 0 or price < 0:
+                messagebox.showerror("Validation Error", "Price and Quantity cannot be negative values.", parent=self.winfo_toplevel())
+                return
+            
         except ValueError:
             messagebox.showerror("Type Error", "Price and Quantity must be numbers.", parent=self.add_modal)
             return
@@ -423,6 +428,10 @@ class InventoryView(ctk.CTkFrame):
         desc_entry = create_modal_row(form_scroll, "Description", data['description'])
         cat_entry = create_modal_row(form_scroll, "Category", data['category'])
         sup_entry = create_modal_row(form_scroll, "Supplier", data['supplier'])
+        
+        # --- FIX C: Added Missing Price Field ---
+        price_entry = create_modal_row(form_scroll, "Price", data['price'])
+        
         qty_entry = create_modal_row(form_scroll, "Total Qty", f"{data['qty_tot']:g}")
 
         uom_frame = ctk.CTkFrame(form_scroll, fg_color="transparent")
@@ -579,8 +588,19 @@ class InventoryView(ctk.CTkFrame):
         def execute_update():
             try:
                 new_qty = float(qty_entry.get())
+                # --- FIX C: Capture and Validate Price Update ---
+                new_price = float(price_entry.get()) if price_entry.get().strip() else 0.00
+                if new_qty < 0 or new_price < 0:
+                    return messagebox.showerror("Error", "Quantity and Price cannot be negative.", parent=modal)
             except ValueError:
-                return messagebox.showerror("Error", "Quantity must be a number.", parent=modal)
+                return messagebox.showerror("Error", "Quantity and Price must be valid numbers.", parent=modal)
+
+            qty_diff = new_qty - float(data['qty_tot'])
+            new_avail = float(data['qty_avail']) + qty_diff
+            
+            if new_avail < 0:
+                borrowed_out = float(data['qty_tot']) - float(data['qty_avail'])
+                return messagebox.showerror("Warning", f"Invalid adjustment.\n\nYou cannot lower the Total Quantity to {new_qty} because there are {borrowed_out} unit(s) currently deployed to workers.\n\nThis would result in a negative Available Qty ({new_avail}).", parent=modal)
 
             if messagebox.askyesno("Confirm Update", "Save all changes to the database?", parent=modal):
                 conn = get_connection()
@@ -599,7 +619,6 @@ class InventoryView(ctk.CTkFrame):
                         WHERE tool_id=%s
                     """, (name_entry.get(), desc_entry.get(), cat_entry.get(), sup_entry.get(), loc_entry.get(), type_menu.get(), uom_menu.get(), status_menu.get(), new_tag, lookup_id))
 
-                    qty_diff = new_qty - float(data['qty_tot'])
                     cursor.execute("""
                         UPDATE inventory SET quantity_total=%s, quantity_available=quantity_available + %s WHERE tool_id=%s
                     """, (new_qty, qty_diff, lookup_id))
@@ -643,7 +662,9 @@ class InventoryView(ctk.CTkFrame):
         name_entry.bind("<Return>", lambda e: desc_entry.focus_set())
         desc_entry.bind("<Return>", lambda e: cat_entry.focus_set())
         cat_entry.bind("<Return>", lambda e: sup_entry.focus_set())
-        sup_entry.bind("<Return>", lambda e: qty_entry.focus_set())
+        # --- FIX C: Adjusted bindings to include Price Field ---
+        sup_entry.bind("<Return>", lambda e: price_entry.focus_set())
+        price_entry.bind("<Return>", lambda e: qty_entry.focus_set())
         qty_entry.bind("<Return>", lambda e: loc_entry.focus_set())
         loc_entry.bind("<Return>", lambda e: execute_update())
 

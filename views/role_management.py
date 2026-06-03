@@ -68,7 +68,8 @@ class RoleManagementView(ctk.CTkFrame):
             return e
 
         self.reg_name   = field(form_card, "Full Name *",   "Juan Dela Cruz")
-        self.reg_email  = field(form_card, "Email Address", "employee@champion.com")
+        # Added asterisk to Email label to indicate it's now required
+        self.reg_email  = field(form_card, "Email Address *", "employee@champion.com")
 
         ctk.CTkLabel(form_card, text="Role *",
                      font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
@@ -390,8 +391,8 @@ class RoleManagementView(ctk.CTkFrame):
             e.pack(fill="x", pady=(4, 10))
             return e
 
-        name_e  = make_field("Full Name",  row["full_name"])
-        email_e = make_field("Email",      row["email"] if row["email"] != "—" else "")
+        name_e  = make_field("Full Name *",  row["full_name"])
+        email_e = make_field("Email *",      row["email"] if row["email"] != "—" else "")
 
         ctk.CTkLabel(form, text="Role", font=("Inter", 11, "bold"),
                      text_color="#1A1A1A").pack(anchor="w")
@@ -434,6 +435,11 @@ class RoleManagementView(ctk.CTkFrame):
 
             if not new_name:
                 messagebox.showerror("Error", "Full Name is required.", parent=modal)
+                return
+
+            # --- FIX A: Require Email for login-enabled roles (Admin/Staff)
+            if new_role != "Worker" and not new_email:
+                messagebox.showerror("Error", "Email Address is required to enable the Forgot Password feature.", parent=modal)
                 return
 
             # If promoting a Worker to a login role, a password is required
