@@ -14,7 +14,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from views.projects import ProjectsView
 from views.inventory import InventoryView
 from views.profile import ProfileView
-from views.tagging import TaggingView
 from views.borrowing import BorrowingView
 from views.tracking import TrackingView
 from views.reports import ReportsView
@@ -89,7 +88,6 @@ class DashboardApp(ctk.CTkToplevel):
             "Dashboard",
             "Project Management",
             "Products / Inventory",
-            "Tagging",
             "Issuance & Retrieval",
             "Tracking & Accountability",
         ]
@@ -363,8 +361,6 @@ class DashboardApp(ctk.CTkToplevel):
             self.current_frame = ProjectsView(self.main_container, self.user_info)
         elif page_name == "Products / Inventory":
             self.current_frame = InventoryView(self.main_container, self.user_info)
-        elif page_name == "Tagging":
-            self.current_frame = TaggingView(self.main_container)
         elif page_name == "Issuance & Retrieval":
             self.current_frame = BorrowingView(self.main_container, self.user_info)
         elif page_name == "Tracking & Accountability":
@@ -372,9 +368,9 @@ class DashboardApp(ctk.CTkToplevel):
         elif page_name == "Reports":
             self.current_frame = ReportsView(self.main_container)
         elif page_name == "Maintenance":
-            self.current_frame = MaintenanceView(self.main_container)
+            self.current_frame = MaintenanceView(self.main_container, self.user_info)
         elif page_name == "Role Management":
-            self.current_frame = RoleManagementView(self.main_container)
+            self.current_frame = RoleManagementView(self.main_container, self.user_info)
         elif page_name == "Help":
             self.current_frame = HelpView(self.main_container, self.user_info)
         elif page_name == "Dashboard":
@@ -500,16 +496,19 @@ class DashboardApp(ctk.CTkToplevel):
         inner_frame = ctk.CTkFrame(frame, fg_color="transparent")
         inner_frame.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(inner_frame, text="EXECUTIVE BRIEFING", font=("Inter", 24, "bold"),
+        ctk.CTkLabel(inner_frame, text="EXECUTIVE DASHBOARD", font=("Inter", 24, "bold"),
                      text_color="#1A1A1A").pack(anchor="w", pady=(0, 5))
         ctk.CTkLabel(inner_frame, text="High-level overview of system health and asset utilization. Auto-updates live.",
                      font=("Inter", 13), text_color="gray").pack(anchor="w", pady=(0, 20))
 
         metrics, activities, chart_data = self.get_live_metrics()
 
+        is_admin = self.user_info.get("role", "Staff") == "Admin"
+        num_cards = 5 if is_admin else 3
+
         cards_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
         cards_frame.pack(fill="x", pady=(0, 20))
-        for i in range(5):
+        for i in range(num_cards):
             cards_frame.grid_columnconfigure(i, weight=1)
 
         # 1. Asset Utilization Card (Stored reference for auto-update)
@@ -539,42 +538,43 @@ class DashboardApp(ctk.CTkToplevel):
         ctk.CTkLabel(c3, text="Total Inventory", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
         ctk.CTkLabel(c3, text="Total physical items", font=("Inter", 11), text_color="black").pack(anchor="w", padx=20)
 
-        # 4. Action Items Card — fully clickable, navigates to Maintenance
-        c4_bg = "#FFF5F5" if metrics["action_items"] > 0 else "#F9FAFB"
-        c4_border = "#D8000C" if metrics["action_items"] > 0 else "#E0E0E0"
-        self.dash_action_card = ctk.CTkFrame(cards_frame, fg_color=c4_bg, corner_radius=10, height=130, border_width=1, border_color=c4_border)
-        self.dash_action_card.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
-        self.dash_action_card.pack_propagate(False)
+        if is_admin:
+            # 4. Action Items Card — fully clickable, navigates to Maintenance
+            c4_bg = "#FFF5F5" if metrics["action_items"] > 0 else "#F9FAFB"
+            c4_border = "#D8000C" if metrics["action_items"] > 0 else "#E0E0E0"
+            self.dash_action_card = ctk.CTkFrame(cards_frame, fg_color=c4_bg, corner_radius=10, height=130, border_width=1, border_color=c4_border)
+            self.dash_action_card.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
+            self.dash_action_card.pack_propagate(False)
 
-        self.dash_action_top = ctk.CTkFrame(self.dash_action_card, fg_color="transparent")
-        self.dash_action_top.pack(fill="x", padx=20, pady=(15, 0))
+            self.dash_action_top = ctk.CTkFrame(self.dash_action_card, fg_color="transparent")
+            self.dash_action_top.pack(fill="x", padx=20, pady=(15, 0))
 
-        self._render_action_badges(metrics)
+            self._render_action_badges(metrics)
 
-        ctk.CTkLabel(self.dash_action_card, text="Action Items", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
-        lbl_hint = ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=("Inter", 11), text_color="#888888")
-        lbl_hint.pack(anchor="w", padx=20, pady=(0, 0))
+            ctk.CTkLabel(self.dash_action_card, text="Action Items", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
+            lbl_hint = ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=("Inter", 11), text_color="#888888")
+            lbl_hint.pack(anchor="w", padx=20, pady=(0, 0))
 
-        # Bind entire card tree to navigate to Maintenance
-        self._bind_widget_tree(self.dash_action_card, lambda *_: self.show_frame("Maintenance"))
+            # Bind entire card tree to navigate to Maintenance
+            self._bind_widget_tree(self.dash_action_card, lambda *_: self.show_frame("Maintenance"))
 
-        # 5. Overdue Projects Card — fully clickable, navigates to Project Management
-        c5_bg = "#FFF5F5" if metrics["overdue_projects"] > 0 else "#F9FAFB"
-        c5_border = "#D8000C" if metrics["overdue_projects"] > 0 else "#E0E0E0"
-        self.dash_overdue_card = ctk.CTkFrame(cards_frame, fg_color=c5_bg, corner_radius=10, height=130, border_width=1, border_color=c5_border)
-        self.dash_overdue_card.grid(row=0, column=4, padx=5, pady=5, sticky="ew")
-        self.dash_overdue_card.pack_propagate(False)
+            # 5. Overdue Projects Card — fully clickable, navigates to Project Management
+            c5_bg = "#FFF5F5" if metrics["overdue_projects"] > 0 else "#F9FAFB"
+            c5_border = "#D8000C" if metrics["overdue_projects"] > 0 else "#E0E0E0"
+            self.dash_overdue_card = ctk.CTkFrame(cards_frame, fg_color=c5_bg, corner_radius=10, height=130, border_width=1, border_color=c5_border)
+            self.dash_overdue_card.grid(row=0, column=4, padx=5, pady=5, sticky="ew")
+            self.dash_overdue_card.pack_propagate(False)
 
-        self.dash_overdue_top = ctk.CTkFrame(self.dash_overdue_card, fg_color="transparent")
-        self.dash_overdue_top.pack(fill="x", padx=20, pady=(15, 0))
+            self.dash_overdue_top = ctk.CTkFrame(self.dash_overdue_card, fg_color="transparent")
+            self.dash_overdue_top.pack(fill="x", padx=20, pady=(15, 0))
 
-        self._render_overdue_badges(metrics)
+            self._render_overdue_badges(metrics)
 
-        ctk.CTkLabel(self.dash_overdue_card, text="Overdue Projects", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
-        lbl_hint_proj = ctk.CTkLabel(self.dash_overdue_card, text="Project Mgmt →", font=("Inter", 11), text_color="#888888")
-        lbl_hint_proj.pack(anchor="w", padx=20, pady=(0, 0))
+            ctk.CTkLabel(self.dash_overdue_card, text="Overdue Projects", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
+            lbl_hint_proj = ctk.CTkLabel(self.dash_overdue_card, text="Project Mgmt →", font=("Inter", 11), text_color="#888888")
+            lbl_hint_proj.pack(anchor="w", padx=20, pady=(0, 0))
 
-        self._bind_widget_tree(self.dash_overdue_card, lambda *_: self.show_frame("Project Management"))
+            self._bind_widget_tree(self.dash_overdue_card, lambda *_: self.show_frame("Project Management"))
 
         # Bottom Split (Activity Feed & Chart)
         bottom_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
@@ -622,6 +622,7 @@ class DashboardApp(ctk.CTkToplevel):
             self._bind_widget_tree(child, callback)
 
     def _render_action_badges(self, metrics):
+        if not hasattr(self, "dash_action_top"): return
         for w in self.dash_action_top.winfo_children(): w.destroy()
 
         if metrics["action_items"] == 0:
@@ -640,6 +641,7 @@ class DashboardApp(ctk.CTkToplevel):
             self._bind_widget_tree(self.dash_action_top, lambda *_: self.show_frame("Maintenance"))
 
     def _render_overdue_badges(self, metrics):
+        if not hasattr(self, "dash_overdue_top"): return
         for w in self.dash_overdue_top.winfo_children(): w.destroy()
 
         if metrics["overdue_projects"] == 0:

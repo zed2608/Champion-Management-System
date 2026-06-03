@@ -51,20 +51,28 @@ class ProjectsView(ctk.CTkFrame):
         self.inner = ctk.CTkFrame(self, fg_color="transparent")
         self.inner.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 20))
         
-        self.inner.grid_columnconfigure(0, weight=1, minsize=400) 
-        self.inner.grid_columnconfigure(1, weight=2, minsize=600) 
+        self.inner.grid_columnconfigure(0, weight=1) 
         self.inner.grid_rowconfigure(0, weight=1)
 
-        self.build_form_panel()
         self.build_table_panel()
         
-        self.p_name.focus_set()
+    def open_draft_project_modal(self, edit_row=None, reqs=None):
+        self.draft_modal = ctk.CTkToplevel(self)
+        self.draft_modal.title("Edit Project" if edit_row else "Draft Project Plan")
+        self.draft_modal.geometry("500x750")
+        self.draft_modal.configure(fg_color="white")
+        self.draft_modal.attributes("-topmost", True)
+        self.draft_modal.grab_set()
+        
+        self.draft_modal.update_idletasks()
+        x = (self.draft_modal.winfo_screenwidth() // 2) - (500 // 2)
+        y = (self.draft_modal.winfo_screenheight() // 2) - (750 // 2)
+        self.draft_modal.geometry(f"+{x}+{y}")
+        
+        form_card = ctk.CTkScrollableFrame(self.draft_modal, fg_color="white", corner_radius=0)
+        form_card.pack(fill="both", expand=True)
 
-    def build_form_panel(self):
-        form_card = ctk.CTkScrollableFrame(self.inner, fg_color="white", corner_radius=10, width=400)
-        form_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-
-        ctk.CTkLabel(form_card, text="Draft Project Plan", font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 10))
+        ctk.CTkLabel(form_card, text="Edit Project Plan" if edit_row else "Draft Project Plan", font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 10))
 
         def field(label, ph):
             ctk.CTkLabel(form_card, text=label, font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
@@ -134,7 +142,35 @@ class ProjectsView(ctk.CTkFrame):
         self.p_start.bind("<Return>", lambda e: self.p_end.focus_set())
         self.p_end.bind("<Return>", lambda e: self.save_project())
 
-        ctk.CTkButton(form_card, text="Submit for Approval", height=40, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 13, "bold"), command=self.save_project).pack(fill="x", padx=20, pady=(20, 20))
+        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
+        btn_row.pack(fill="x", padx=20, pady=(20, 20))
+        ctk.CTkButton(btn_row, text="Update Project" if edit_row else "Submit for Approval", height=40, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 13, "bold"), command=self.save_project).pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ctk.CTkButton(btn_row, text="Cancel", height=40, width=90, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 13, "bold"), command=self.draft_modal.destroy).pack(side="right")
+
+        if edit_row:
+            self.editing_project_id = edit_row['project_id']
+            self.editing_project_status = edit_row['status']
+            
+            self.p_name.insert(0, edit_row['name'])
+            self.p_desc.insert("1.0", edit_row.get('description') or "")
+            self.p_head.insert(0, edit_row.get('project_head') or "")
+            self.p_client.insert(0, edit_row['client'])
+            self.p_location.insert(0, edit_row['location'])
+            self.p_start.insert(0, str(edit_row['start_date']) if edit_row.get('start_date') else "")
+            self.p_end.insert(0, str(edit_row['end_date']) if edit_row.get('end_date') else "")
+            
+            self.workers_list = [w.strip() for w in (edit_row.get('workers_assigned') or "").split(',') if w.strip()]
+            self._refresh_worker_tags()
+            
+            self.req_cart = [{'tool_id': r['tool_id'], 'name': r['name'], 'uom': r['unit_of_measure'], 'qty': r['quantity'], 'needs_retrieval': r['status'] == 'Warning'} for r in reqs]
+            self.refresh_req_cart()
+        else:
+            self.editing_project_id = None
+            self.editing_project_status = None
+            self.workers_list.clear()
+            self.req_cart.clear()
+
+        self.p_name.focus_set()
 
     def _format_date_mask(self, event, entry_widget):
         if event.keysym in ('BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 'Tab'):
@@ -185,7 +221,10 @@ class ProjectsView(ctk.CTkFrame):
         modal.geometry("900x600")
         modal.configure(fg_color="white")
         modal.attributes("-topmost", True)
+        modal.attributes("-topmost", False) # Must be false or it will hide message boxes
         modal.grab_set()
+        # Keep the draft modal on top but this modal above it
+        modal.transient(self.draft_modal)
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - (900 // 2)
         y = (modal.winfo_screenheight() // 2) - (600 // 2)
@@ -408,7 +447,7 @@ class ProjectsView(ctk.CTkFrame):
         if not name or not client: return messagebox.showerror("Error", "Project Name and Client are required.", parent=self.winfo_toplevel())
         if not self._validate_date(start_date, "Start Date"): return
         if not self._validate_date(end_date, "End Date"): return
-        if not self.req_cart: return messagebox.showerror("Error", "Please add at least one tool requirement.", parent=self.winfo_toplevel())
+        if not self.req_cart: return messagebox.showerror("Error", "Please add at least one tool requirement.", parent=self.draft_modal)
 
         conn = get_connection()
         if not conn: return
@@ -422,6 +461,7 @@ class ProjectsView(ctk.CTkFrame):
                 if 'Approved' in old_status and not self.is_admin:
                     new_status = 'Pending'
                     messagebox.showwarning("Notice", "Modifying an approved project reverts it to Pending status for Admin review.", parent=self.winfo_toplevel())
+                    messagebox.showwarning("Notice", "Modifying an approved project reverts it to Pending status for Admin review.", parent=self.draft_modal)
                 
                 cursor.execute('''
                     UPDATE projects
@@ -450,7 +490,7 @@ class ProjectsView(ctk.CTkFrame):
             conn.commit()
             if self.user_info.get("user_id"): log_action(self.user_info['user_id'], action_text, "Projects", f"{action_text} project '{name}' (ID: {project_id}).")
 
-            messagebox.showinfo("Success", f"Project successfully {action_text.lower()}!", parent=self.winfo_toplevel())
+            messagebox.showinfo("Success", f"Project successfully {action_text.lower()}!", parent=self.draft_modal)
 
             self.p_name.delete(0, 'end'); self.p_desc.delete("1.0", "end")
             self.p_head.delete(0, 'end'); self.p_client.delete(0, 'end')
@@ -460,16 +500,16 @@ class ProjectsView(ctk.CTkFrame):
             self._refresh_worker_tags(); self.req_cart.clear()
             self.refresh_req_cart()
             self.editing_project_id = None; self.editing_project_status = None
+            self.draft_modal.destroy()
             self.load_projects()
-            self.p_name.focus_set()
 
-        except Exception as e: messagebox.showerror("DB Error", str(e), parent=self.winfo_toplevel())
+        except Exception as e: messagebox.showerror("DB Error", str(e), parent=self.draft_modal)
         finally:
             if conn.is_connected(): cursor.close(); conn.close()
 
     def build_table_panel(self):
         table_card = ctk.CTkFrame(self.inner, fg_color="white", corner_radius=10)
-        table_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        table_card.grid(row=0, column=0, sticky="nsew", padx=0)
         table_card.grid_columnconfigure(0, weight=1)
         table_card.grid_rowconfigure(1, weight=1)
 
@@ -483,6 +523,8 @@ class ProjectsView(ctk.CTkFrame):
         
         ctk.CTkButton(top, text="Search", width=80, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 11, "bold"), command=lambda: self.load_projects(self.proj_search.get().strip())).pack(side="right", padx=5)
         ctk.CTkButton(top, text="↻ Reset", width=70, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=lambda: [self.proj_search.delete(0, "end"), self.load_projects()]).pack(side="right")
+
+        ctk.CTkButton(top, text="+ Draft New Project", width=140, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_draft_project_modal).pack(side="right", padx=(10, 5))
 
         # Removed the crashing "both" orientation - back to safe standard vertical scrolling
         self.project_scroll = ctk.CTkScrollableFrame(table_card, fg_color="transparent")
@@ -695,6 +737,7 @@ class ProjectsView(ctk.CTkFrame):
             modal.destroy()
             messagebox.showinfo("Edit Mode", "Project data loaded into the draft form.\nThe Submit button will now update this project.", parent=self.winfo_toplevel())
             self.p_name.focus_set()
+            self.open_draft_project_modal(edit_row=row, reqs=reqs)
 
         raw_status = row['status'].replace(' (OVERDUE)', '')
         if raw_status in ['Pending', 'Approved']:

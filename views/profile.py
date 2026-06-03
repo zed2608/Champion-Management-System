@@ -261,6 +261,17 @@ class ProfileView(ctk.CTkFrame):
         if messagebox.askyesno("Confirm Update", "Are you sure you want to save these changes?"):
             try:
                 cursor = self.db_conn.cursor()
+                
+                cursor.execute("SELECT user_id FROM user WHERE full_name = %s AND employee_id != %s", (new_name, self.user_info['employee_id']))
+                if cursor.fetchone():
+                    messagebox.showerror("Duplicate", "A user with this full name already exists.")
+                    return
+                    
+                cursor.execute("SELECT user_id FROM user WHERE email = %s AND employee_id != %s", (new_email, self.user_info['employee_id']))
+                if cursor.fetchone():
+                    messagebox.showerror("Duplicate", "A user with this email already exists.")
+                    return
+
                 cursor.execute("UPDATE user SET full_name = %s, email = %s WHERE employee_id = %s",
                                (new_name, new_email, self.user_info['employee_id']))
                 self.db_conn.commit()

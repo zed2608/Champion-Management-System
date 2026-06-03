@@ -207,7 +207,7 @@ class TrackingView(ctk.CTkFrame):
                 vals = [
                     str(row["transaction_id"]), row["type"], row["tool_name"],
                     row["tag_id"], row["full_name"],
-                    row["borrow_date"], row["return_date"], row["status"]
+                    row["borrow_date"], row["return_date"], row["status"],
                 ]
                 
                 for col, val in enumerate(vals):
@@ -215,20 +215,18 @@ class TrackingView(ctk.CTkFrame):
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
                     txt_color = "#1A1A1A"
+                    font_w = "normal"
                     if col == 7:
                         txt_color = "#D8000C" if val == "Active" else "#2ECC71"
-                        
-                    font_w = "bold" if col == 7 else "normal"
+                        font_w = "bold"
+                    elif col == 3 and val == "Unassigned":
+                        txt_color = "#D8000C"
+                        font_w = "bold"
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
                     
-                    # SAFE AUTO-WRAP
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
+                    # High-performance static wrapping
+                    lbl.configure(wraplength=min_sizes[col] - 10)
 
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
@@ -381,19 +379,18 @@ class TrackingView(ctk.CTkFrame):
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
                     txt_color = "#1A1A1A"
+                    font_w = "normal"
                     if col == 8:
                         txt_color = "#D8000C" if val == "Active" else "#2ECC71"
-                        
-                    font_w = "bold" if col == 8 else "normal"
+                        font_w = "bold"
+                    elif col == 3 and val == "Unassigned":
+                        txt_color = "#D8000C"
+                        font_w = "bold"
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center")
                     
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
+                    # High-performance static wrapping
+                    lbl.configure(wraplength=min_sizes[col] - 10)
 
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
@@ -443,18 +440,18 @@ class TrackingView(ctk.CTkFrame):
         self.act_search = ctk.CTkEntry(
             filter_row, placeholder_text="Search user or details...", width=200)
         self.act_search.pack(side="left", padx=(0, 5))
-        self.act_search.bind("<Return>", lambda e: self.load_activity())
+        self.act_search.bind("<Return>", lambda e: self.do_act_search())
 
         ctk.CTkButton(filter_row, text="Search", width=80,
                       fg_color="#1E4528", hover_color="#14301C",
                       font=("Inter", 11, "bold"),
-                      command=self.load_activity).pack(side="left", padx=5)
+                      command=self.do_act_search).pack(side="left", padx=5)
         ctk.CTkButton(filter_row, text="↻ Reset", width=70,
                       fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
                       command=lambda: [
                           self.act_search.delete(0, "end"),
                           self.act_module_filter.set("All"),
-                          self.load_activity()
+                          self.do_act_search()
                       ]).pack(side="left")
 
         self.act_summary = ctk.CTkLabel(frame, text="", font=(
@@ -463,8 +460,38 @@ class TrackingView(ctk.CTkFrame):
 
         self._act_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
-        self._act_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
+        self._act_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 5))
+        
+        self.pagination_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        self.pagination_frame.pack(fill="x", padx=20, pady=(0, 20))
+
+        self.act_prev_btn = ctk.CTkButton(self.pagination_frame, text="◀ Previous", width=100, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=self.act_prev_page)
+        self.act_prev_btn.pack(side="left", padx=5)
+
+        self.act_page_label = ctk.CTkLabel(self.pagination_frame, text="Page 1", font=("Inter", 11, "bold"))
+        self.act_page_label.pack(side="left", expand=True)
+
+        self.act_next_btn = ctk.CTkButton(self.pagination_frame, text="Next ▶", width=100, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 11, "bold"), command=self.act_next_page)
+        self.act_next_btn.pack(side="right", padx=5)
+
+        self.current_act_page = 1
+        self.act_page_size = 50
+
         self.load_activity()
+
+    def do_act_search(self):
+        self.current_act_page = 1
+        self.load_activity()
+
+    def act_prev_page(self):
+        if self.current_act_page > 1:
+            self.current_act_page -= 1
+            self.load_activity()
+
+    def act_next_page(self):
+        if getattr(self, "has_more_act_pages", False):
+            self.current_act_page += 1
+            self.load_activity()
 
     def load_activity(self):
         for w in self._act_scroll.winfo_children():
@@ -495,6 +522,23 @@ class TrackingView(ctk.CTkFrame):
             return
         try:
             cursor = conn.cursor(dictionary=True)
+            count_sql = """
+                SELECT COUNT(*) as cnt
+                FROM system_logs sl
+                LEFT JOIN user u ON sl.user_id = u.user_id
+                WHERE 1=1
+            """
+            count_params = []
+            if module_filter != "All":
+                count_sql += " AND sl.module = %s"
+                count_params.append(module_filter)
+            if q:
+                count_sql += " AND (u.full_name LIKE %s OR sl.details LIKE %s OR sl.action_type LIKE %s)"
+                count_params += [f"%{q}%", f"%{q}%", f"%{q}%"]
+                
+            cursor.execute(count_sql, count_params)
+            total_records = cursor.fetchone()["cnt"]
+            
             sql = """
                 SELECT sl.log_id,
                        DATE_FORMAT(DATE_ADD(sl.timestamp, INTERVAL 8 HOUR),
@@ -505,19 +549,24 @@ class TrackingView(ctk.CTkFrame):
                 LEFT JOIN user u ON sl.user_id = u.user_id
                 WHERE 1=1
             """
-            params = []
-            if module_filter != "All":
-                sql += " AND sl.module = %s"
-                params.append(module_filter)
-            if q:
-                sql += " AND (u.full_name LIKE %s OR sl.details LIKE %s OR sl.action_type LIKE %s)"
-                params += [f"%{q}%", f"%{q}%", f"%{q}%"]
-            sql += " ORDER BY sl.log_id DESC LIMIT 500"
+            params = list(count_params)
+            offset = (self.current_act_page - 1) * self.act_page_size
+            sql += f" ORDER BY sl.log_id DESC LIMIT {self.act_page_size} OFFSET {offset}"
+            
             cursor.execute(sql, params)
             rows = cursor.fetchall()
 
-            self.act_summary.configure(
-                text=f"  Showing {len(rows)} entries (max 500 per query)")
+            total_pages = (total_records + self.act_page_size - 1) // self.act_page_size
+            if total_pages == 0: total_pages = 1
+            
+            self.has_more_act_pages = self.current_act_page < total_pages
+            self.act_page_label.configure(text=f"Page {self.current_act_page} of {total_pages}")
+            self.act_prev_btn.configure(state="normal" if self.current_act_page > 1 else "disabled")
+            self.act_next_btn.configure(state="normal" if self.has_more_act_pages else "disabled")
+
+            start_idx = offset + 1 if total_records > 0 else 0
+            end_idx = min(offset + self.act_page_size, total_records)
+            self.act_summary.configure(text=f"  Showing {start_idx}-{end_idx} of {total_records} entries")
 
             if not rows:
                 ctk.CTkLabel(table_inner, text="No activity records found.",
@@ -546,19 +595,15 @@ class TrackingView(ctk.CTkFrame):
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
                     txt_color = "#1A1A1A"
+                    font_w = "normal"
                     if col == 3:
                         txt_color = action_colors.get(val, "#555555")
-                        
-                    font_w = "bold" if col == 3 else "normal"
+                        font_w = "bold"
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center")
                     
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
+                    # High-performance static wrapping
+                    lbl.configure(wraplength=min_sizes[col] - 10)
 
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
@@ -648,6 +693,8 @@ class TrackingView(ctk.CTkFrame):
         if not user_id:
             ctk.CTkLabel(table_inner, text="Could not resolve user session. Please log out and log back in.",
                          text_color="red").grid(row=1, column=0, columnspan=len(headers), pady=20)
+            ctk.CTkLabel(scroll, text="Could not resolve user session. Please log out and log back in.",
+                         text_color="red").pack(pady=20)
             return
 
         conn = get_connection()
@@ -689,19 +736,18 @@ class TrackingView(ctk.CTkFrame):
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
                     txt_color = "#1A1A1A"
+                    font_w = "normal"
                     if col == 6:
                         txt_color = "#D8000C" if val == "Active" else "#2ECC71"
-                        
-                    font_w = "bold" if col == 6 else "normal"
+                        font_w = "bold"
+                    elif col == 2 and val == "Unassigned":
+                        txt_color = "#D8000C"
+                        font_w = "bold"
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
                     
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
+                    # High-performance static wrapping
+                    lbl.configure(wraplength=min_sizes[col] - 10)
 
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 

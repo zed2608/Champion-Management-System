@@ -34,10 +34,10 @@ class BorrowingView(ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Tool Management", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkLabel(top_bar, text="Issuance & Retrieval", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
 
-        tabs = ["📤 Tool Issuance", "📥 Tool Retrieval", "📅 Deployment Schedule"]
-        self.tab_var = ctk.StringVar(value=tabs[0])
+        tabs = ["📋 Deployment History", "📅 Deployment Schedule"]
+        self.tab_var = ctk.StringVar(value="📋 Deployment History")
 
         self.seg_btn = ctk.CTkSegmentedButton(
             top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
@@ -47,8 +47,7 @@ class BorrowingView(ctk.CTkFrame):
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
         self.tab_content.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 20))
-        self.tab_content.grid_columnconfigure(0, weight=1, minsize=380) # Left Form
-        self.tab_content.grid_columnconfigure(1, weight=2, minsize=750) # Right History Table
+        self.tab_content.grid_columnconfigure(0, weight=1) 
         self.tab_content.grid_rowconfigure(0, weight=1)
         
         self.switch_tab(tabs[0])
@@ -59,21 +58,10 @@ class BorrowingView(ctk.CTkFrame):
 
         if selected_tab == "📅 Deployment Schedule":
             self.build_calendar_tab(self.tab_content)
-            return
-
-        if selected_tab == "📤 Tool Issuance":
-            self.build_issuance_tab(self.tab_content)
-            self.b_emp_id.focus_set()
         else:
-            self.build_retrieval_tab(self.tab_content)
-            self.r_emp_id.focus_set()
+            self.build_history_table(self.tab_content)
+            self.load_transaction_history()
 
-        self.build_history_table(self.tab_content)
-        self.load_transaction_history()
-
-    # ══════════════════════════════════════════════════════════
-    # DEPLOYMENT SCHEDULE CALENDAR
-    # ══════════════════════════════════════════════════════════
     def build_calendar_tab(self, parent):
         now = datetime.now()
         self._cal_year      = now.year
@@ -348,9 +336,21 @@ class BorrowingView(ctk.CTkFrame):
 
     # --- SIDE-BY-SIDE UI BUILDERS ---
 
-    def build_issuance_tab(self, parent):
-        form_card = ctk.CTkScrollableFrame(parent, fg_color="white", corner_radius=10, width=380)
-        form_card.grid(row=0, column=0, sticky="nsew", padx=(10, 5))
+    def open_issuance_modal(self):
+        self.issuance_modal = ctk.CTkToplevel(self)
+        self.issuance_modal.title("Issue Tools")
+        self.issuance_modal.geometry("500x700")
+        self.issuance_modal.configure(fg_color="white")
+        self.issuance_modal.attributes("-topmost", True)
+        self.issuance_modal.grab_set()
+        
+        self.issuance_modal.update_idletasks()
+        x = (self.issuance_modal.winfo_screenwidth() // 2) - (500 // 2)
+        y = (self.issuance_modal.winfo_screenheight() // 2) - (700 // 2)
+        self.issuance_modal.geometry(f"+{x}+{y}")
+        
+        form_card = ctk.CTkScrollableFrame(self.issuance_modal, fg_color="white", corner_radius=0)
+        form_card.pack(fill="both", expand=True)
 
         ctk.CTkLabel(form_card, text="Project Tool Deployment", font=("Inter", 16, "bold"), text_color="#1E4528").pack(anchor="w", padx=20, pady=(20, 5))
         ctk.CTkLabel(form_card, text="1. Scan ID  ➔  2. Select Project  ➔  3. Scan Required Tools", font=("Inter", 11), text_color="gray").pack(anchor="w", padx=20, pady=(0, 15))
@@ -388,10 +388,33 @@ class BorrowingView(ctk.CTkFrame):
         self.refresh_cart_ui() 
 
         ctk.CTkButton(form_card, text="Issue Tools & Print Receipt", height=40, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 13, "bold"), command=self.execute_borrow).pack(fill="x", padx=20, pady=(0, 20))
+        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
+        btn_row.pack(fill="x", padx=20, pady=(0, 20))
+        ctk.CTkButton(btn_row, text="Cancel", height=40, width=80, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=self.issuance_modal.destroy).pack(side="right")
+        
+        self.active_borrow_user_id = None
+        self.active_borrow_user_name = None
+        self.borrow_cart = []
+        self.current_project_reqs = []
+        self.active_projects_map = {}
 
-    def build_retrieval_tab(self, parent):
-        form_card = ctk.CTkScrollableFrame(parent, fg_color="white", corner_radius=10, width=380)
-        form_card.grid(row=0, column=0, sticky="nsew", padx=(10, 5))
+        self.b_emp_id.focus_set()
+
+    def open_retrieval_modal(self):
+        self.retrieval_modal = ctk.CTkToplevel(self)
+        self.retrieval_modal.title("Retrieve Tools")
+        self.retrieval_modal.geometry("500x650")
+        self.retrieval_modal.configure(fg_color="white")
+        self.retrieval_modal.attributes("-topmost", True)
+        self.retrieval_modal.grab_set()
+        
+        self.retrieval_modal.update_idletasks()
+        x = (self.retrieval_modal.winfo_screenwidth() // 2) - (500 // 2)
+        y = (self.retrieval_modal.winfo_screenheight() // 2) - (650 // 2)
+        self.retrieval_modal.geometry(f"+{x}+{y}")
+        
+        form_card = ctk.CTkScrollableFrame(self.retrieval_modal, fg_color="white", corner_radius=0)
+        form_card.pack(fill="both", expand=True)
 
         ctk.CTkLabel(form_card, text="Secure Tool Retrieval", font=("Inter", 16, "bold"), text_color="#F1C40F").pack(anchor="w", padx=20, pady=(20, 5))
         ctk.CTkLabel(form_card, text="Scan Employee ID and Tool Tag (or enter TRN) to restock.", font=("Inter", 11), text_color="gray").pack(anchor="w", padx=20, pady=(0, 15))
@@ -440,10 +463,21 @@ class BorrowingView(ctk.CTkFrame):
         self.r_qty.insert(0, "1")
 
         ctk.CTkButton(form_card, text="Confirm Retrieval & Restock", height=40, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 13, "bold"), command=self.execute_return).pack(fill="x", padx=20, pady=(0, 20))
+        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
+        btn_row.pack(fill="x", padx=20, pady=(10, 20))
+        ctk.CTkButton(btn_row, text="Cancel", height=40, width=80, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=self.retrieval_modal.destroy).pack(side="right")
+        
+        self.active_return_user_id = None
+        self.active_return_tool_id = None
+        self.max_returnable = 0
+
+        self.r_emp_id.focus_set()
 
     def build_history_table(self, parent):
         table_card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10)
-        table_card.grid(row=0, column=1, sticky="nsew", padx=(5, 10))
+        table_card.grid(row=0, column=0, sticky="nsew", padx=0)
+        table_card.grid_columnconfigure(0, weight=1)
+        table_card.grid_rowconfigure(1, weight=1)
         
         top_bar = ctk.CTkFrame(table_card, fg_color="transparent")
         top_bar.pack(fill="x", padx=20, pady=(20, 10))
@@ -460,6 +494,9 @@ class BorrowingView(ctk.CTkFrame):
         ctk.CTkButton(top_bar, text="Search", width=70, fg_color="#E0E0E0", text_color="black",
                       hover_color="#CCCCCC", font=("Inter", 11, "bold"),
                       command=self.load_transaction_history).pack(side="right")
+                      
+        ctk.CTkButton(top_bar, text="📥 Retrieve Tools", width=120, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.open_retrieval_modal).pack(side="right", padx=(10, 5))
+        ctk.CTkButton(top_bar, text="📤 Issue Tools", width=110, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 12, "bold"), command=self.open_issuance_modal).pack(side="right", padx=(10, 5))
 
         self.data_scroll = ctk.CTkScrollableFrame(table_card, fg_color="transparent")
         self.data_scroll.pack(fill="both", expand=True, padx=20, pady=(10, 20))
@@ -540,19 +577,20 @@ class BorrowingView(ctk.CTkFrame):
                     cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
-                    txt_color = "#D8000C" if col == 6 and val == "Active" else ("#2ECC71" if col == 6 else "#1A1A1A")
-                    font_w = "bold" if col == 6 else "normal"
+                    txt_color = "#1A1A1A"
+                    font_w = "normal"
+                    if col == 6:
+                        txt_color = "#D8000C" if val == "Active" else "#2ECC71"
+                        font_w = "bold"
+                    elif col == 2 and val == "Unassigned":
+                        txt_color = "#D8000C"
+                        font_w = "bold"
                     
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
                     
-                    # SAFE AUTO-WRAP: Uses the strict minimum widths to ensure text NEVER squishes unreadably
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
-                    
+                    # High-performance static wrapping
+                    lbl.configure(wraplength=min_sizes[col] - 10)
+
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
                     # Binds whole cell & text to open the modal
@@ -946,20 +984,20 @@ class BorrowingView(ctk.CTkFrame):
 
     def execute_borrow(self):
         if not self.active_borrow_user_id:
-            return messagebox.showerror("Error", "Please scan and verify an Employee ID first.", parent=self.winfo_toplevel())
+            return messagebox.showerror("Error", "Please scan and verify an Employee ID first.", parent=self.issuance_modal)
         selected_proj = self.b_project_menu.get()
         proj_id = self.active_projects_map.get(selected_proj)
         if not proj_id:
-            return messagebox.showerror("Error", "Please select a target project.", parent=self.winfo_toplevel())
+            return messagebox.showerror("Error", "Please select a target project.", parent=self.issuance_modal)
         if len(self.borrow_cart) == 0:
-            return messagebox.showerror("Error", "The cart is empty! Scan at least one tool.", parent=self.winfo_toplevel())
+            return messagebox.showerror("Error", "The cart is empty! Scan at least one tool.", parent=self.issuance_modal)
             
-        purpose = selected_proj
         conn = get_connection()
         if not conn: return
         try:
             cursor = conn.cursor(dictionary=True)
             transaction_ids = []; receipt_tool_list = []
+            purpose = selected_proj
             
             for item in self.borrow_cart:
                 cursor.execute("UPDATE inventory SET quantity_available = quantity_available - %s WHERE tool_id = %s", (item['qty_borrowed'], item['id']))
@@ -992,21 +1030,15 @@ class BorrowingView(ctk.CTkFrame):
             total_items = sum(item['qty_borrowed'] for item in self.borrow_cart)
             msg = f"{total_items} items issued successfully! Generating receipt..."
             if all_fulfilled: msg += "\n\nAll tools fulfilled! Project status automatically updated to 'Ongoing'."
-            messagebox.showinfo("Success", msg, parent=self.winfo_toplevel())
+            messagebox.showinfo("Success", msg, parent=self.issuance_modal)
             
-            master_trans_id = f"{transaction_ids[0]}-{transaction_ids[-1]}" if len(transaction_ids) > 1 else transaction_ids[0]
+            master_trans_id = f"{transaction_ids[0]}-{transaction_ids[-1]}" if len(transaction_ids) > 1 else str(transaction_ids[0])
             self.print_master_receipt(master_trans_id, self.active_borrow_user_name, receipt_tool_list, purpose)
             
-            self.b_emp_id.delete(0, 'end')
-            self.b_project_menu.set("Scan Employee ID first...")
-            self.b_project_menu.configure(state="disabled")
-            self._clear_proj_req_display()
-            self.b_user_name.configure(text="Name: Pending Scan...", text_color="gray")
-            self.active_borrow_user_id = None; self.borrow_cart.clear()
-            self.refresh_cart_ui(); self.load_transaction_history()
-            
+            self.issuance_modal.destroy()
+            self.load_transaction_history()
         except Exception as e:
-            messagebox.showerror("Database Error", str(e), parent=self.winfo_toplevel())
+            messagebox.showerror("Database Error", str(e), parent=self.issuance_modal)
         finally:
             if conn.is_connected(): cursor.close(); conn.close()
 
@@ -1193,15 +1225,15 @@ class BorrowingView(ctk.CTkFrame):
 
     def execute_return(self):
         if not self.active_return_tool_id or not self.active_return_user_id:
-            return messagebox.showerror("Error", "Please scan and verify both Employee ID and Tag ID/TRN.", parent=self.winfo_toplevel())
+            return messagebox.showerror("Error", "Please scan and verify both Employee ID and Tag ID/TRN.", parent=self.retrieval_modal)
         try:
-            return_qty = int(self.r_qty.get().strip())
+            return_qty = float(self.r_qty.get())
             if return_qty <= 0: raise ValueError
         except ValueError:
-            return messagebox.showerror("Error", "Quantity must be a positive whole number.", parent=self.winfo_toplevel())
+            return messagebox.showerror("Error", "Quantity must be a positive number.", parent=self.retrieval_modal)
             
         if return_qty > self.max_returnable:
-            return messagebox.showerror("Error", f"Cannot retrieve {return_qty}. You only have {self.max_returnable} deployed.", parent=self.winfo_toplevel())
+            return messagebox.showerror("Error", f"Cannot retrieve {return_qty}. You only have {self.max_returnable} deployed.", parent=self.retrieval_modal)
 
         new_cond = self.r_condition.get()
         condition_notes = self.r_condition_desc.get("1.0", "end").strip()
@@ -1226,15 +1258,9 @@ class BorrowingView(ctk.CTkFrame):
             cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
             cursor.execute("UPDATE tool SET `condition` = %s WHERE tool_id = %s", (new_cond, self.active_return_tool_id))
             conn.commit()
-            messagebox.showinfo("Success", f"Successfully retrieved {return_qty} item(s) and restocked inventory!", parent=self.winfo_toplevel())
+            messagebox.showinfo("Success", f"Successfully retrieved {return_qty} item(s) and restocked inventory!", parent=self.retrieval_modal)
             
-            self.r_emp_id.delete(0, 'end'); self.r_tag_id.delete(0, 'end')
-            self.r_user_name.configure(text="Name: Pending Scan...", text_color="gray")
-            self.r_record_info.configure(text="Record: Pending Scan...", text_color="gray")
-            self.r_condition.set("Good"); self.r_qty.delete(0, 'end'); self.r_qty.insert(0, "1")
-            self.r_condition_desc.delete("1.0", "end")
-            self.active_return_tool_id = None; self.active_return_user_id = None; self.max_returnable = 0
-            
+            self.retrieval_modal.destroy()
             self.load_transaction_history()
         finally:
             if conn.is_connected(): cursor.close(); conn.close()

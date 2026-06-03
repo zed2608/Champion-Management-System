@@ -166,13 +166,9 @@ class ReportsView(ctk.CTkFrame):
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center")
                     
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
-
+                    lbl.configure(wraplength=min_sizes[col] - 10)
+                    lbl.configure(wraplength=min_sizes[col] - 10)
+                    lbl.configure(wraplength=min_sizes[col] - 10)
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
         except Exception as e:
@@ -274,6 +270,9 @@ class ReportsView(ctk.CTkFrame):
                         txt_col = "#2ECC71" if val == "Good" else "#D8000C"
                         
                     font_w = "bold" if col == 6 else "normal"
+                if col == 2 and val == "Unassigned":
+                    txt_col = "#D8000C"
+                    font_w = "bold"
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center")
                     

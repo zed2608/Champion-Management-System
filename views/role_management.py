@@ -1,6 +1,6 @@
 import customtkinter as ctk
 from tkinter import messagebox
-from database import get_connection, generate_id_badge
+from database import get_connection, generate_id_badge, log_action
 import bcrypt
 import secrets
 import os
@@ -11,9 +11,10 @@ import re
 
 
 class RoleManagementView(ctk.CTkFrame):
-    def __init__(self, parent):
+    def __init__(self, parent, user_info=None):
         super().__init__(parent, fg_color="transparent")
 
+        self.user_info = user_info or {}
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
@@ -22,20 +23,30 @@ class RoleManagementView(ctk.CTkFrame):
     def build_ui(self):
         self.inner = ctk.CTkFrame(self, fg_color="transparent")
         self.inner.grid(row=0, column=0, sticky="nsew")
-        self.inner.grid_columnconfigure(0, weight=1, minsize=320)
-        self.inner.grid_columnconfigure(1, weight=2, minsize=600)
+        self.inner.grid_columnconfigure(0, weight=1)
         self.inner.grid_rowconfigure(0, weight=1)
 
-        self.build_form_panel()
         self.build_table_panel()
 
     # ==========================================
     # LEFT: Register / Add User Form
     # ==========================================
-    def build_form_panel(self):
+    def open_register_modal(self):
+        self.reg_modal = ctk.CTkToplevel(self)
+        self.reg_modal.title("Register New User")
+        self.reg_modal.geometry("450x650")
+        self.reg_modal.configure(fg_color="white")
+        self.reg_modal.attributes("-topmost", True)
+        self.reg_modal.grab_set()
+        
+        self.reg_modal.update_idletasks()
+        x = (self.reg_modal.winfo_screenwidth() // 2) - (450 // 2)
+        y = (self.reg_modal.winfo_screenheight() // 2) - (650 // 2)
+        self.reg_modal.geometry(f"+{x}+{y}")
+
         self._form_card = ctk.CTkScrollableFrame(
-            self.inner, fg_color="white", corner_radius=10, width=300)
-        self._form_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+            self.reg_modal, fg_color="white", corner_radius=0)
+        self._form_card.pack(fill="both", expand=True)
         form_card = self._form_card
 
         ctk.CTkLabel(form_card, text="Register New User",
@@ -122,17 +133,16 @@ class RoleManagementView(ctk.CTkFrame):
             self.reg_confirm.pack(fill="x", padx=20, pady=(5, 10))
 
         btn_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(5, 20))
+        btn_row.pack(fill="x", padx=20, pady=(15, 20))
         btn_row.grid_columnconfigure((0, 1), weight=1)
-        ctk.CTkButton(btn_row, text="Register",
+        ctk.CTkButton(btn_row, text="Register", height=40,
                       fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 12, "bold"),
+                      font=("Inter", 13, "bold"),
                       command=self.execute_register).grid(row=0, column=0, padx=(0, 5), sticky="ew")
-        ctk.CTkButton(btn_row, text="Clear",
-                      fg_color="white", text_color="black",
-                      border_width=1, border_color="#E0E0E0", hover_color="#F0F0F0",
-                      font=("Inter", 12, "bold"),
-                      command=self.clear_form).grid(row=0, column=1, padx=(5, 0), sticky="ew")
+        ctk.CTkButton(btn_row, text="Cancel", height=40,
+                      fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
+                      font=("Inter", 13, "bold"),
+                      command=self.reg_modal.destroy).grid(row=0, column=1, padx=(5, 0), sticky="ew")
 
     def _on_reg_role_change(self, role):
         self._build_reg_bottom(role)
@@ -147,21 +157,32 @@ class RoleManagementView(ctk.CTkFrame):
         # 1. Validation
         if role == "Worker":
             if not name:
-                return messagebox.showerror("Validation Error", "Full Name is required for Workers.", parent=self.winfo_toplevel())
+                return messagebox.showerror("Validation Error", "Full Name is required for Workers.", parent=self.reg_modal)
             pwd = "FIELD_WORKER_NO_LOGIN_SYSTEM_LOCKED" 
             cpwd = pwd
         else:
             if not all([name, pwd, cpwd]):
-                return messagebox.showerror("Validation Error", "Full Name and Password are required.", parent=self.winfo_toplevel())
+                return messagebox.showerror("Validation Error", "Full Name and Password are required.", parent=self.reg_modal)
             if pwd != cpwd:
-                return messagebox.showerror("Password Mismatch", "Passwords do not match.", parent=self.winfo_toplevel())
+                return messagebox.showerror("Password Mismatch", "Passwords do not match.", parent=self.reg_modal)
             if len(pwd) < 8:
-                return messagebox.showerror("Weak Password", "Password must be at least 8 characters.", parent=self.winfo_toplevel())
+                return messagebox.showerror("Weak Password", "Password must be at least 8 characters.", parent=self.reg_modal)
 
         conn = get_connection()
         if not conn: return
         try:
             cursor = conn.cursor(dictionary=True)
+            
+            cursor.execute("SELECT user_id FROM user WHERE full_name = %s", (name,))
+            if cursor.fetchone():
+                messagebox.showerror("Duplicate User", "A user with this full name already exists.", parent=self.reg_modal)
+                return
+                
+            if email:
+                cursor.execute("SELECT user_id FROM user WHERE email = %s", (email,))
+                if cursor.fetchone():
+                    messagebox.showerror("Duplicate User", "A user with this email address already exists.", parent=self.reg_modal)
+                    return
             
             # --- 2. THE AUTO-GENERATION ENGINE ---
             prefix = ""
@@ -198,26 +219,15 @@ class RoleManagementView(ctk.CTkFrame):
                 log_action(self.user_info['user_id'], "Added", "Role Management", f"Registered new {role}: {name} ({new_emp_id})")
                 
             # Announce the generated ID to the Admin
-            messagebox.showinfo("Registration Success", f"{role} registered successfully!\n\nSystem Assigned ID: {new_emp_id}", parent=self.winfo_toplevel())
+            messagebox.showinfo("Registration Success", f"{role} registered successfully!\n\nSystem Assigned ID: {new_emp_id}", parent=self.reg_modal)
             
-            # Reset UI
-            self.reg_name.delete(0, 'end')
-            self.reg_email.delete(0, 'end')
-            if self.reg_pass: self.reg_pass.delete(0, 'end')
-            if self.reg_confirm: self.reg_confirm.delete(0, 'end')
-            
+            self.reg_modal.destroy()
             self.load_user_table()
             
         except Exception as e:
-            messagebox.showerror("Database Error", str(e), parent=self.winfo_toplevel())
+            messagebox.showerror("Database Error", str(e), parent=self.reg_modal)
         finally:
             if conn.is_connected(): cursor.close(); conn.close()
-
-    def clear_form(self):
-        self.reg_name.delete(0, "end")
-        self.reg_email.delete(0, "end")
-        self.reg_role.set("Staff")
-        self._build_reg_bottom("Staff")
 
     # ==========================================
     # RIGHT: User Management Table
@@ -225,7 +235,7 @@ class RoleManagementView(ctk.CTkFrame):
     def build_table_panel(self):
         table_card = ctk.CTkFrame(
             self.inner, fg_color="white", corner_radius=10)
-        table_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        table_card.grid(row=0, column=0, sticky="nsew", padx=0)
         table_card.grid_columnconfigure(0, weight=1)
         table_card.grid_rowconfigure(1, weight=1)
 
@@ -246,6 +256,8 @@ class RoleManagementView(ctk.CTkFrame):
                       fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
                       command=lambda: [self.user_search.delete(0, "end"),
                                        self.load_user_table()]).pack(side="right")
+                                       
+        ctk.CTkButton(top, text="+ Register New User", width=150, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_register_modal).pack(side="right", padx=(10, 5))
 
         self.user_scroll = ctk.CTkScrollableFrame(
             table_card, fg_color="transparent")
@@ -284,7 +296,7 @@ class RoleManagementView(ctk.CTkFrame):
             sql = """
                 SELECT user_id, employee_id, full_name,
                        IFNULL(email,'—') as email, role
-                FROM user WHERE 1=1
+                FROM user WHERE IFNULL(status, 'Active') = 'Active'
             """
             params = []
             if q:
@@ -316,14 +328,7 @@ class RoleManagementView(ctk.CTkFrame):
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11), text_color=color, justify="center", anchor="center")
                     
-                    # Safe text wrapping to prevent grid explosion
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
-
+                    lbl.configure(wraplength=min_sizes[col] - 10)
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
                 # Action Cell (Contains all 3 Buttons)
@@ -343,7 +348,7 @@ class RoleManagementView(ctk.CTkFrame):
                               hover_color="#2980B9", font=("Inter", 10, "bold"),
                               command=lambda r=row: self.print_user_badge(r)).pack(side="left", padx=(0, 4))
                               
-                ctk.CTkButton(action_frame, text="Delete", width=56, height=28,
+                ctk.CTkButton(action_frame, text="Archive", width=56, height=28,
                               fg_color="#FFEAEA", text_color="#D8000C",
                               hover_color="#FFC0C0", font=("Inter", 10, "bold"),
                               command=lambda r=row: self.delete_user(r)).pack(side="left")
@@ -502,8 +507,8 @@ class RoleManagementView(ctk.CTkFrame):
 
     def delete_user(self, row):
         if messagebox.askyesno(
-            "Confirm Delete",
-            f"Permanently delete the account for '{row['full_name']}' ({row['employee_id']})?\n"
+            "Confirm Archive",
+            f"Permanently archive the account for '{row['full_name']}' ({row['employee_id']})?\n"
             "Their transaction history will remain in the system.",
             parent=self.winfo_toplevel()
         ):
@@ -513,9 +518,9 @@ class RoleManagementView(ctk.CTkFrame):
             try:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "DELETE FROM user WHERE user_id = %s", (row["user_id"],))
+                    "UPDATE user SET status = 'Archived', archived_at = NOW() WHERE user_id = %s", (row["user_id"],))
                 conn.commit()
-                messagebox.showinfo("Deleted", "User account deleted.",
+                messagebox.showinfo("Archived", "User account archived.",
                                     parent=self.winfo_toplevel())
                 self.load_user_table()
             except Exception as e:

@@ -404,13 +404,8 @@ class MaintenanceView(ctk.CTkFrame):
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
                     
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
-
+                    # High-performance static wrapping
+                    lbl.configure(wraplength=min_sizes[col] - 10)
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
                     cell.bind("<Button-1>", lambda e, r=row: self.open_issue_modal(r))
@@ -591,13 +586,7 @@ class MaintenanceView(ctk.CTkFrame):
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11), text_color="#1A1A1A", justify="center", anchor="center")
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
-
+                    lbl.configure(wraplength=min_sizes[col] - 10)
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
                 # Action Cell (Centered Button)
@@ -722,12 +711,7 @@ class MaintenanceView(ctk.CTkFrame):
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11), text_color="#1A1A1A", justify="center", anchor="center")
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
+                    lbl.configure(wraplength=min_sizes[col] - 10)
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
                 # Action Cell (Centered Button)
@@ -859,12 +843,7 @@ class MaintenanceView(ctk.CTkFrame):
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11), text_color="#1A1A1A", justify="center", anchor="center")
-                    def set_wrap(e, l=lbl, m=min_sizes[col]):
-                        target_wrap = max(m - 10, e.width - 10)
-                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                            l.configure(wraplength=target_wrap)
-                            l._last_wrap = target_wrap
-                    cell.bind("<Configure>", set_wrap)
+                    lbl.configure(wraplength=min_sizes[col] - 10)
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
                 # Action Cell (Centered Button)
