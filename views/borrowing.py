@@ -891,6 +891,12 @@ class BorrowingView(ctk.CTkFrame):
                 messagebox.showerror("Limit Reached", f"Cannot add '{tool['name']}'.\nApproved Limit: {allowed_qty:g}\nAlready Issued: {already_issued}\nIn Cart: {in_cart}", parent=self.winfo_toplevel())
                 return
 
+            # --- FIX B: Check real physical inventory constraints before accepting into cart ---
+            if (in_cart + 1) > tool['qty']:
+                messagebox.showerror("Out of Stock", f"Cannot add '{tool['name']}'.\nOnly {tool['qty']} left in the warehouse.", parent=self.winfo_toplevel())
+                return
+            # ---------------------------------------------------------------------------------
+
             existing = next((item for item in self.borrow_cart if item['id'] == tool['tool_id']), None)
             if existing:
                 existing['qty_borrowed'] += 1
@@ -960,6 +966,14 @@ class BorrowingView(ctk.CTkFrame):
         try:
             cursor = conn.cursor(dictionary=True)
             transaction_ids = []; receipt_tool_list = []
+            
+            # --- FIX B: Hard Block Database Check Before Execution ---
+            for item in self.borrow_cart:
+                cursor.execute("SELECT quantity_available FROM inventory WHERE tool_id = %s", (item['id'],))
+                db_qty = cursor.fetchone()['quantity_available']
+                if item['qty_borrowed'] > db_qty:
+                    return messagebox.showerror("Inventory Error", f"Transaction aborted.\n'{item['name']}' only has {db_qty} remaining in stock.", parent=self.winfo_toplevel())
+            # ---------------------------------------------------------
             
             for item in self.borrow_cart:
                 cursor.execute("UPDATE inventory SET quantity_available = quantity_available - %s WHERE tool_id = %s", (item['qty_borrowed'], item['id']))

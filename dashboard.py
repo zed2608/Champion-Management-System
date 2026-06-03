@@ -85,16 +85,18 @@ class DashboardApp(ctk.CTkToplevel):
 
         is_admin = self.user_info.get("role", "Staff") == "Admin"
 
+        # --- FIX B: Removed "Project Management" from the baseline default list
         nav_items = [
             "Dashboard",
-            "Project Management",
             "Products / Inventory",
             "Tagging",
             "Issuance & Retrieval",
             "Tracking & Accountability",
         ]
         
+        # --- FIX B: Explicitly add admin-level modules here
         if is_admin:
+            nav_items.insert(1, "Project Management")
             nav_items += ["Reports", "Maintenance", "Role Management"]
             
         nav_items.append("Help")
@@ -232,6 +234,13 @@ class DashboardApp(ctk.CTkToplevel):
             self.destroy()
             self.master.deiconify()
             self.master.pass_entry.delete(0, "end")
+            
+            # --- FIX A: Reset password visibility back to default ---
+            self.master.pass_entry.configure(show="•")
+            self.master.eye_btn.configure(text="👁")
+            self.master.show_pwd = False
+            # --------------------------------------------------------
+            
             self.master.error_banner.configure(text="", fg_color="transparent")
             self.master.failed_attempts = 0
 
@@ -332,11 +341,26 @@ class DashboardApp(ctk.CTkToplevel):
         self.destroy()
         self.master.deiconify()
         self.master.pass_entry.delete(0, "end")
+        
+        # --- FIX A: Reset password visibility back to default ---
+        self.master.pass_entry.configure(show="•")
+        self.master.eye_btn.configure(text="👁")
+        self.master.show_pwd = False
+        # --------------------------------------------------------
+        
         self.master.error_banner.configure(text="", fg_color="transparent")
         self.master.failed_attempts = 0
     # ── End Inactivity Auto-Logout ───────────────────────────────────────────
 
     def show_frame(self, page_name):
+        # --- FIX B: Hard validation against unauthorized routing attempts
+        is_admin = self.user_info.get("role", "Staff") == "Admin"
+        restricted_modules = ["Project Management", "Reports", "Maintenance", "Role Management"]
+        
+        if not is_admin and page_name in restricted_modules:
+            messagebox.showerror("Access Denied", "You do not have permission to access this module.")
+            return
+            
         self.current_page_name = page_name
         
         # Stop auto-refresh if we navigate away from Dashboard
@@ -495,6 +519,8 @@ class DashboardApp(ctk.CTkToplevel):
         return metrics, activities, chart_data
 
     def create_home_dashboard(self):
+        is_admin = self.user_info.get("role", "Staff") == "Admin"
+        
         frame = ctk.CTkScrollableFrame(self.main_container, fg_color="transparent", orientation="vertical")
 
         inner_frame = ctk.CTkFrame(frame, fg_color="transparent")
@@ -539,7 +565,7 @@ class DashboardApp(ctk.CTkToplevel):
         ctk.CTkLabel(c3, text="Total Inventory", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
         ctk.CTkLabel(c3, text="Total physical items", font=("Inter", 11), text_color="black").pack(anchor="w", padx=20)
 
-        # 4. Action Items Card — fully clickable, navigates to Maintenance
+        # 4. Action Items Card — conditionally clickable based on role
         c4_bg = "#FFF5F5" if metrics["action_items"] > 0 else "#F9FAFB"
         c4_border = "#D8000C" if metrics["action_items"] > 0 else "#E0E0E0"
         self.dash_action_card = ctk.CTkFrame(cards_frame, fg_color=c4_bg, corner_radius=10, height=130, border_width=1, border_color=c4_border)
@@ -552,13 +578,14 @@ class DashboardApp(ctk.CTkToplevel):
         self._render_action_badges(metrics)
 
         ctk.CTkLabel(self.dash_action_card, text="Action Items", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
-        lbl_hint = ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=("Inter", 11), text_color="#888888")
-        lbl_hint.pack(anchor="w", padx=20, pady=(0, 0))
+        
+        # --- FIX B: Only bind navigation and show hint arrow if admin
+        if is_admin:
+            lbl_hint = ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=("Inter", 11), text_color="#888888")
+            lbl_hint.pack(anchor="w", padx=20, pady=(0, 0))
+            self._bind_widget_tree(self.dash_action_card, lambda *_: self.show_frame("Maintenance"))
 
-        # Bind entire card tree to navigate to Maintenance
-        self._bind_widget_tree(self.dash_action_card, lambda *_: self.show_frame("Maintenance"))
-
-        # 5. Overdue Projects Card — fully clickable, navigates to Project Management
+        # 5. Overdue Projects Card — conditionally clickable based on role
         c5_bg = "#FFF5F5" if metrics["overdue_projects"] > 0 else "#F9FAFB"
         c5_border = "#D8000C" if metrics["overdue_projects"] > 0 else "#E0E0E0"
         self.dash_overdue_card = ctk.CTkFrame(cards_frame, fg_color=c5_bg, corner_radius=10, height=130, border_width=1, border_color=c5_border)
@@ -571,10 +598,12 @@ class DashboardApp(ctk.CTkToplevel):
         self._render_overdue_badges(metrics)
 
         ctk.CTkLabel(self.dash_overdue_card, text="Overdue Projects", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
-        lbl_hint_proj = ctk.CTkLabel(self.dash_overdue_card, text="Project Mgmt →", font=("Inter", 11), text_color="#888888")
-        lbl_hint_proj.pack(anchor="w", padx=20, pady=(0, 0))
-
-        self._bind_widget_tree(self.dash_overdue_card, lambda *_: self.show_frame("Project Management"))
+        
+        # --- FIX B: Only bind navigation and show hint arrow if admin
+        if is_admin:
+            lbl_hint_proj = ctk.CTkLabel(self.dash_overdue_card, text="Project Mgmt →", font=("Inter", 11), text_color="#888888")
+            lbl_hint_proj.pack(anchor="w", padx=20, pady=(0, 0))
+            self._bind_widget_tree(self.dash_overdue_card, lambda *_: self.show_frame("Project Management"))
 
         # Bottom Split (Activity Feed & Chart)
         bottom_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
@@ -635,8 +664,9 @@ class DashboardApp(ctk.CTkToplevel):
             if metrics['pending_issues'] > 0:
                 ctk.CTkLabel(self.dash_action_top, text=f"⚠ {metrics['pending_issues']} Tool(s)", fg_color="#D8000C", text_color="white", font=("Inter", 10, "bold"), corner_radius=6, padx=8, pady=3).pack(side="left", padx=(10, 0), pady=(5,0))
 
-        # Re-apply click binding after badge content is rebuilt
-        if hasattr(self, "dash_action_card"):
+        # --- FIX B: Re-apply click binding after badge content is rebuilt ONLY for Admins
+        is_admin = self.user_info.get("role", "Staff") == "Admin"
+        if hasattr(self, "dash_action_card") and is_admin:
             self._bind_widget_tree(self.dash_action_top, lambda *_: self.show_frame("Maintenance"))
 
     def _render_overdue_badges(self, metrics):
@@ -652,8 +682,9 @@ class DashboardApp(ctk.CTkToplevel):
 
             ctk.CTkLabel(self.dash_overdue_top, text=f"⚠ {metrics['overdue_projects']} Overdue", fg_color="#D8000C", text_color="white", font=("Inter", 10, "bold"), corner_radius=6, padx=8, pady=3).pack(side="left", padx=(10, 0), pady=(5,0))
 
-        # Re-apply click binding after badge content is rebuilt
-        if hasattr(self, "dash_overdue_card"):
+        # --- FIX B: Re-apply click binding after badge content is rebuilt ONLY for Admins
+        is_admin = self.user_info.get("role", "Staff") == "Admin"
+        if hasattr(self, "dash_overdue_card") and is_admin:
             self._bind_widget_tree(self.dash_overdue_top, lambda *_: self.show_frame("Project Management"))
 
     def _render_activity_feed(self, activities):
