@@ -81,6 +81,9 @@ class ProfileView(ctk.CTkFrame):
     def build_right_cards(self):
         right_container = ctk.CTkFrame(self, fg_color="transparent")
         right_container.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
+        
+        # Ensures the right section fully expands dynamically
+        right_container.grid_columnconfigure(0, weight=1)
         right_container.grid_rowconfigure(0, weight=0)
         right_container.grid_rowconfigure(1, weight=1)
 
@@ -118,35 +121,42 @@ class ProfileView(ctk.CTkFrame):
         history_card = ctk.CTkFrame(
             right_container, fg_color="white", corner_radius=10)
         history_card.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
-        history_card.grid_columnconfigure(0, weight=1)
-        history_card.grid_rowconfigure(1, weight=1)
 
         ctk.CTkLabel(history_card, text="My Borrowing History",
                      font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(
             anchor="w", padx=30, pady=(20, 5))
 
-        # THE SQUEEZE & ALIGNMENT FIX: Gave the Date columns a massive '3' weight so they stretch out!
+        # --- THE FIX: Unified Grid Table Strategy ---
+        self.history_scroll = ctk.CTkScrollableFrame(history_card, fg_color="transparent")
+        self.history_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
+
+        self._load_profile_history()
+
+    def _load_profile_history(self):
+        for w in self.history_scroll.winfo_children():
+            w.destroy()
+
+        # Inner frame bound to expand across the full width
+        table_inner = ctk.CTkFrame(self.history_scroll, fg_color="transparent")
+        table_inner.pack(fill="x", expand=True)
+
         headers = ["TRN", "Tool Name", "Borrow Date", "Return Date", "Status"]
-        weights = [1, 2, 3, 3, 1]
+        # Balanced weights to stretch cleanly across wide screens
+        weights = [1, 3, 2, 2, 1]
+        # Minimum sizes to prevent squishing when minimized
+        min_sizes = [60, 160, 140, 140, 80]
 
-        hdr = ctk.CTkFrame(history_card, fg_color="#1E4528",
-                           corner_radius=5, height=32)
-        # padding 36 right accounts for the invisible scrollbar width!
-        hdr.pack(fill="x", padx=(20, 36))
-        hdr.pack_propagate(False)
+        # Uniform configuration enforces strict alignment for both headers and rows
+        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
+            table_inner.grid_columnconfigure(col, weight=w, minsize=min_w, uniform="prof_cols")
 
-        for col, (h, w) in enumerate(zip(headers, weights)):
-            hdr.grid_columnconfigure(col, weight=w)
-            ctk.CTkLabel(hdr, text=h, font=("Inter", 11, "bold"),
-                         text_color="white", anchor="center").grid(row=0, column=col, padx=8, pady=6, sticky="ew")
+        # Header Row
+        for col, text in enumerate(headers):
+            cell = ctk.CTkFrame(table_inner, fg_color="#1E4528", corner_radius=0)
+            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
+            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
+            lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
-        scroll = ctk.CTkScrollableFrame(
-            history_card, fg_color="transparent", height=150)
-        scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
-
-        self._load_profile_history(scroll, weights)
-
-    def _load_profile_history(self, scroll, weights):
         user_id = self.user_info.get("user_id")
         if not user_id:
             return
@@ -158,7 +168,6 @@ class ProfileView(ctk.CTkFrame):
         try:
             cursor = conn.cursor(dictionary=True)
             
-            # THE DATE BUG FIX: Removed double % and shortened to "May 17, 08:45 PM"
             cursor.execute("""
                 SELECT tr.transaction_id,
                        t.name as tool_name,
@@ -174,8 +183,7 @@ class ProfileView(ctk.CTkFrame):
             rows = cursor.fetchall()
 
             if not rows:
-                ctk.CTkLabel(scroll, text="No borrowing history found.",
-                             text_color="gray").pack(pady=15)
+                ctk.CTkLabel(table_inner, text="No borrowing history found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
                 return
 
             for i, row in enumerate(rows):
@@ -186,24 +194,33 @@ class ProfileView(ctk.CTkFrame):
                     row["return_date"],
                     row["status"],
                 ]
-                rf = ctk.CTkFrame(scroll,
-                                  fg_color="#F9FAFB" if i % 2 == 0 else "white",
-                                  height=32)
-                rf.pack(fill="x", pady=1)
-                rf.pack_propagate(False)
+                r_idx = i + 1
+                bg = "#F9FAFB" if i % 2 == 0 else "white"
 
-                for col, (val, w) in enumerate(zip(vals, weights)):
-                    rf.grid_columnconfigure(col, weight=w)
+                for col, val in enumerate(vals):
+                    cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
+                    cell.grid(row=r_idx, column=col, sticky="nsew")
+
                     color = "#1A1A1A"
                     if col == 4:
                         color = "#D8000C" if val == "Active" else "#2ECC71"
-                    ctk.CTkLabel(rf, text=val, font=("Inter", 11),
-                                 text_color=color).grid(
-                        row=0, column=col, padx=8, pady=5, sticky="w")
+                        
+                    font_w = "bold" if col == 4 else "normal"
+
+                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=color, justify="center", anchor="center")
+                    
+                    # Responsive text wrapping to ensure everything remains visible when minimizing
+                    def set_wrap(e, l=lbl, m=min_sizes[col]):
+                        target_wrap = max(m - 10, e.width - 10)
+                        if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
+                            l.configure(wraplength=target_wrap)
+                            l._last_wrap = target_wrap
+                    cell.bind("<Configure>", set_wrap)
+                    
+                    lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
         except Exception as e:
-            ctk.CTkLabel(
-                scroll, text=f"Error: {e}", text_color="red").pack(pady=10)
+            ctk.CTkLabel(table_inner, text=f"Error: {e}", text_color="red").grid(row=1, column=0, columnspan=len(headers), pady=10)
         finally:
             if conn.is_connected():
                 cursor.close()

@@ -84,7 +84,6 @@ class DashboardApp(ctk.CTkToplevel):
 
         is_admin = self.user_info.get("role", "Staff") == "Admin"
 
-        # --- FIX B: Removed "Project Management" from the baseline default list
         nav_items = [
             "Dashboard",
             "Products / Inventory",
@@ -92,7 +91,6 @@ class DashboardApp(ctk.CTkToplevel):
             "Tracking & Accountability",
         ]
         
-        # --- FIX B: Explicitly add admin-level modules here
         if is_admin:
             nav_items.insert(1, "Project Management")
             nav_items += ["Reports", "Maintenance", "Role Management"]
@@ -190,8 +188,8 @@ class DashboardApp(ctk.CTkToplevel):
         except Exception:
             self.profile_pic_label.configure(text="👤")
 
+    # Kept intact in case other parts of the original logic implicitly relied on them
     def _get_column_min_sizes(self, weights, base_width=650):
-        # Use 650 as base width to prevent the split-panel table from stretching awkwardly
         total = sum(weights) or 1
         return [max(60, int((w / total) * base_width)) for w in weights]
 
@@ -233,11 +231,9 @@ class DashboardApp(ctk.CTkToplevel):
             self.master.deiconify()
             self.master.pass_entry.delete(0, "end")
             
-            # --- FIX A: Reset password visibility back to default ---
             self.master.pass_entry.configure(show="•")
             self.master.eye_btn.configure(text="👁")
             self.master.show_pwd = False
-            # --------------------------------------------------------
             
             self.master.error_banner.configure(text="", fg_color="transparent")
             self.master.failed_attempts = 0
@@ -247,26 +243,21 @@ class DashboardApp(ctk.CTkToplevel):
     _WARNING_MS    = 30               # 30-second countdown in the warning dialog
 
     def _start_inactivity_timer(self):
-        """Schedule the inactivity warning after 5 minutes of no activity."""
         if self._inactivity_job:
             self.after_cancel(self._inactivity_job)
         self._inactivity_job = self.after(self._INACTIVITY_MS, self._show_inactivity_warning)
 
     def _reset_inactivity_timer(self, event=None):
-        """Called on any mouse/keyboard event — restarts the 5-minute countdown."""
-        # Ignore events that originate from the warning dialog itself
         if self._warning_dialog and self._warning_dialog.winfo_exists():
             return
         self._start_inactivity_timer()
 
     def _show_inactivity_warning(self):
-        """Show a 30-second countdown warning before auto-logout."""
-        # --- THE FIX 1: Stop the ghost timer if dashboard is closed ---
         if not self.winfo_exists():
             return
             
         if self._warning_dialog and self._warning_dialog.winfo_exists():
-            return  # Already showing
+            return
 
         dialog = ctk.CTkToplevel(self)
         dialog.title("Inactivity Warning")
@@ -274,7 +265,6 @@ class DashboardApp(ctk.CTkToplevel):
         dialog.grab_set()
         dialog.lift()
 
-        # Centre over the main window
         self.update_idletasks()
         dx = self.winfo_x() + (self.winfo_width()  - 360) // 2
         dy = self.winfo_y() + (self.winfo_height() - 200) // 2
@@ -301,8 +291,6 @@ class DashboardApp(ctk.CTkToplevel):
         self._tick_warning()
 
     def _tick_warning(self):
-        """Decrement the countdown every second; logout when it hits 0."""
-        # --- THE FIX 2: Kill the loop if the dashboard was closed ---
         if not self.winfo_exists():
             return
             
@@ -321,14 +309,12 @@ class DashboardApp(ctk.CTkToplevel):
         self._inactivity_job = self.after(1000, self._tick_warning)
 
     def _cancel_inactivity_logout(self, dialog):
-        """User clicked 'Stay Logged In' — dismiss warning and restart timer."""
         if dialog.winfo_exists():
             dialog.destroy()
         self._warning_dialog = None
         self._start_inactivity_timer()
 
     def _force_logout(self):
-        """Perform silent auto-logout after inactivity timeout."""
         if hasattr(self, "_clock_job"):
             self.after_cancel(self._clock_job)
         if hasattr(self, "dashboard_refresh_job") and self.dashboard_refresh_job:
@@ -340,18 +326,14 @@ class DashboardApp(ctk.CTkToplevel):
         self.master.deiconify()
         self.master.pass_entry.delete(0, "end")
         
-        # --- FIX A: Reset password visibility back to default ---
         self.master.pass_entry.configure(show="•")
         self.master.eye_btn.configure(text="👁")
         self.master.show_pwd = False
-        # --------------------------------------------------------
         
         self.master.error_banner.configure(text="", fg_color="transparent")
         self.master.failed_attempts = 0
-    # ── End Inactivity Auto-Logout ───────────────────────────────────────────
 
     def show_frame(self, page_name):
-        # --- FIX B: Hard validation against unauthorized routing attempts
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         restricted_modules = ["Project Management", "Reports", "Maintenance", "Role Management"]
         
@@ -361,7 +343,6 @@ class DashboardApp(ctk.CTkToplevel):
             
         self.current_page_name = page_name
         
-        # Stop auto-refresh if we navigate away from Dashboard
         if hasattr(self, 'dashboard_refresh_job') and self.dashboard_refresh_job:
             self.after_cancel(self.dashboard_refresh_job)
             self.dashboard_refresh_job = None
@@ -428,15 +409,12 @@ class DashboardApp(ctk.CTkToplevel):
         try:
             cursor = conn.cursor(dictionary=True)
             
-            # 1. Total Registered Employees
             cursor.execute("SELECT COUNT(*) as cnt FROM user")
             metrics["total_employees"] = int(cursor.fetchone()["cnt"] or 0)
 
-            # 2. Active Workforce
             cursor.execute("SELECT COUNT(DISTINCT user_id) as cnt FROM transaction WHERE status = 'Active'")
             metrics["active_workforce"] = int(cursor.fetchone()["cnt"] or 0)
 
-            # 3. Asset Utilization
             cursor.execute("SELECT IFNULL(SUM(quantity_available), 0) as qty FROM inventory")
             metrics["available_qty"] = int(cursor.fetchone()["qty"] or 0)
 
@@ -447,7 +425,6 @@ class DashboardApp(ctk.CTkToplevel):
             if metrics["total_physical"] > 0:
                 metrics["utilization_pct"] = int((metrics["borrowed_qty"] / metrics["total_physical"]) * 100)
 
-            # 4. Action Items (Tools needing maintenance)
             try:
                 cursor.execute("SELECT COUNT(*) as cnt FROM tool WHERE `condition` IN ('Needs Repair', 'Damaged', 'Lost') AND is_archived = 0")
                 metrics["pending_issues"] = int(cursor.fetchone()["cnt"] or 0)
@@ -456,14 +433,12 @@ class DashboardApp(ctk.CTkToplevel):
 
             metrics["action_items"] = metrics["pending_issues"]
 
-            # 5. Overdue Projects
             try:
                 cursor.execute("SELECT COUNT(*) as cnt FROM projects WHERE status NOT IN ('Completed', 'Cancelled') AND end_date < CURDATE()")
                 metrics["overdue_projects"] = int(cursor.fetchone()["cnt"] or 0)
             except:
                 pass
 
-            # 6. Recent Activity (Issued, Retrieved, Project Creation)
             cursor.execute("""
                 SELECT 
                     DATE_FORMAT(DATE_ADD(raw_date, INTERVAL 8 HOUR), '%Y-%m-%d %I:%M %p') as ts,
@@ -498,7 +473,6 @@ class DashboardApp(ctk.CTkToplevel):
             for row in cursor.fetchall():
                 activities.append((row["ts"], row["action"], row["item"], row["actor"]))
             
-            # 7. Chart Data
             cursor.execute("SELECT `condition`, COUNT(*) as cnt FROM tool WHERE is_archived = 0 GROUP BY `condition`")
             cond_map = {"Good": 0, "Needs Repair": 1, "Damaged": 2, "Lost": 3}
             for row in cursor.fetchall():
@@ -537,7 +511,6 @@ class DashboardApp(ctk.CTkToplevel):
         for i in range(num_cards):
             cards_frame.grid_columnconfigure(i, weight=1)
 
-        # 1. Asset Utilization Card (Stored reference for auto-update)
         c1 = ctk.CTkFrame(cards_frame, fg_color="#1E4528", corner_radius=10, height=130)
         c1.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
         c1.pack_propagate(False)
@@ -546,7 +519,6 @@ class DashboardApp(ctk.CTkToplevel):
         ctk.CTkLabel(c1, text="Asset Utilization", font=("Inter", 13, "bold"), text_color="white").pack(anchor="w", padx=20, pady=(5, 0))
         ctk.CTkLabel(c1, text="Deployed vs Warehouse", font=("Inter", 11), text_color="white").pack(anchor="w", padx=20)
 
-        # 2. Active Workforce Card
         c2 = ctk.CTkFrame(cards_frame, fg_color="#2980B9", corner_radius=10, height=130)
         c2.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
         c2.pack_propagate(False)
@@ -555,7 +527,6 @@ class DashboardApp(ctk.CTkToplevel):
         ctk.CTkLabel(c2, text="Active Workforce", font=("Inter", 13, "bold"), text_color="white").pack(anchor="w", padx=20, pady=(5, 0))
         ctk.CTkLabel(c2, text="Employees deployed", font=("Inter", 11), text_color="white").pack(anchor="w", padx=20)
 
-        # 3. Total Inventory Card
         c3 = ctk.CTkFrame(cards_frame, fg_color="#F1C40F", corner_radius=10, height=130)
         c3.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
         c3.pack_propagate(False)
@@ -602,7 +573,6 @@ class DashboardApp(ctk.CTkToplevel):
 
             self._bind_widget_tree(self.dash_overdue_card, lambda *_: self.show_frame("Project Management"))
 
-        # Bottom Split (Activity Feed & Chart)
         bottom_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
         bottom_frame.pack(fill="both", expand=True)
         bottom_frame.grid_columnconfigure(0, weight=2)
@@ -612,16 +582,13 @@ class DashboardApp(ctk.CTkToplevel):
         # Recent Activity Feed
         activity_card = ctk.CTkFrame(bottom_frame, fg_color="white", corner_radius=10)
         activity_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=10)
+        
         ctk.CTkLabel(activity_card, text="Recent Operations (Deployments & Projects)",
-                     font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=20)
-
-        self._make_header(activity_card,
-                          ["Date & Time", "Action Type", "Module / Item", "User"],
-                          [2, 1, 2, 1],
-                          pad_left=20, pad_right=36)
+                     font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 10))
 
         self.dash_activity_frame = ctk.CTkFrame(activity_card, fg_color="transparent")
-        self.dash_activity_frame.pack(fill="both", expand=True)
+        self.dash_activity_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
         self._render_activity_feed(activities)
 
         # Chart Frame
@@ -632,13 +599,11 @@ class DashboardApp(ctk.CTkToplevel):
         
         self.dash_fig, self.dash_ax, self.dash_canvas = self.embed_chart(analytics_card, chart_data)
         
-        # Start Auto Update Loop (15 seconds to reduce visual flicker)
         self.dashboard_refresh_job = self.after(15000, self._auto_refresh_dashboard)
         
         return frame
 
     def _bind_widget_tree(self, widget, callback):
-        """Recursively set cursor and bind <Button-1> on a widget and all its children."""
         try:
             widget.configure(cursor="hand2")
             widget.bind("<Button-1>", callback)
@@ -662,7 +627,6 @@ class DashboardApp(ctk.CTkToplevel):
             if metrics['pending_issues'] > 0:
                 ctk.CTkLabel(self.dash_action_top, text=f"⚠ {metrics['pending_issues']} Tool(s)", fg_color="#D8000C", text_color="white", font=("Inter", 10, "bold"), corner_radius=6, padx=8, pady=3).pack(side="left", padx=(10, 0), pady=(5,0))
 
-        # --- FIX B: Re-apply click binding after badge content is rebuilt ONLY for Admins
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         if hasattr(self, "dash_action_card") and is_admin:
             self._bind_widget_tree(self.dash_action_top, lambda *_: self.show_frame("Maintenance"))
@@ -681,7 +645,6 @@ class DashboardApp(ctk.CTkToplevel):
 
             ctk.CTkLabel(self.dash_overdue_top, text=f"⚠ {metrics['overdue_projects']} Overdue", fg_color="#D8000C", text_color="white", font=("Inter", 10, "bold"), corner_radius=6, padx=8, pady=3).pack(side="left", padx=(10, 0), pady=(5,0))
 
-        # --- FIX B: Re-apply click binding after badge content is rebuilt ONLY for Admins
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         if hasattr(self, "dash_overdue_card") and is_admin:
             self._bind_widget_tree(self.dash_overdue_top, lambda *_: self.show_frame("Project Management"))
@@ -689,15 +652,39 @@ class DashboardApp(ctk.CTkToplevel):
     def _render_activity_feed(self, activities):
         for w in self.dash_activity_frame.winfo_children(): w.destroy()
         
+        headers = ["Date & Time", "Action Type", "Module / Item", "User"]
+        # Inayos ang weights para mas malaki ang space ng Module/Item
+        weights = [2, 1, 3, 1]
+        
+        # MALIIT NA MIN_SIZES: Pinipilit ang table na mag-shrink para magkasya sa screen
+        min_sizes = [100, 80, 150, 80] 
+
+        # Inner frame para sa table
+        grid_frame = ctk.CTkFrame(self.dash_activity_frame, fg_color="transparent")
+        grid_frame.pack(fill="x", expand=True)
+
+        for col, (w, m) in enumerate(zip(weights, min_sizes)):
+            grid_frame.grid_columnconfigure(col, weight=w, minsize=m, uniform="act_cols")
+
+        # Compact Header Row (Pinaliit ang font at padding, anchor="w" para pantay sa data rows)
+        for col, text in enumerate(headers):
+            cell = ctk.CTkFrame(grid_frame, fg_color="#1E4528", corner_radius=0)
+            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 1))
+            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 10, "bold"), text_color="white", anchor="w", justify="left")
+            lbl.pack(fill="both", expand=True, padx=5, pady=6)
+
         if not activities:
             activities = [("-", "No recent activity recorded.", "-", "-")]
 
+        # Compact Data Rows
         for i, row_data in enumerate(activities):
-            row_frame = self._make_row(self.dash_activity_frame,
-                                      row_data,
-                                      [2, 1, 2, 1],
-                                      "#F9FAFB" if i % 2 == 0 else "white")
+            r_idx = i + 1
+            bg = "#F9FAFB" if i % 2 == 0 else "white"
+
             for col, text in enumerate(row_data):
+                cell = ctk.CTkFrame(grid_frame, fg_color=bg, corner_radius=0)
+                cell.grid(row=r_idx, column=col, sticky="nsew")
+
                 font_weight = "normal"
                 color = "#1A1A1A"
                 if col == 1:
@@ -711,27 +698,33 @@ class DashboardApp(ctk.CTkToplevel):
                         color = "#2ECC71"
                         font_weight = "bold"
 
-                ctk.CTkLabel(row_frame, text=text, font=("Inter", 11, font_weight),
-                             text_color=color).grid(row=0, column=col, padx=10, pady=5, sticky="w")
+                # Pinaliit ang font sa 10
+                lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 10, font_weight), text_color=color, anchor="w", justify="left")
+                
+                # Dynamic text wrapping
+                def set_wrap(e, l=lbl, m=min_sizes[col]):
+                    target_wrap = max(m - 10, e.width - 10)
+                    if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
+                        l.configure(wraplength=target_wrap)
+                        l._last_wrap = target_wrap
+                cell.bind("<Configure>", set_wrap)
+                
+                # Pinaliit ang padding para numipis ang row height
+                lbl.pack(fill="both", expand=True, padx=5, pady=6)
 
     def _auto_refresh_dashboard(self):
-        # Stop looping if user navigated away
         if self.current_page_name != "Dashboard":
             return
             
         metrics, activities, chart_data = self.get_live_metrics()
         
-        # 1. Live Update Metric Labels (only these change frequently)
         self.dash_util_lbl.configure(text=f"{metrics['utilization_pct']}%")
         self.dash_wf_lbl.configure(text=f"{metrics['active_workforce']} / {metrics['total_employees']}")
         self.dash_inv_lbl.configure(text=str(metrics['total_physical']))
         
-        # 2. Only refresh badges/activity if data significantly changed (avoid constant redraws)
-        # Skip full widget recreation — just update values
         self._render_action_badges(metrics)
         self._render_overdue_badges(metrics)
         
-        # 3. Only redraw chart if chart_data has changed
         self.dash_ax.clear()
         categories = ["Good", "Repair", "Damaged", "Lost"]
         colors = ["#2ECC71", "#F1C40F", "#E67E22", "#95A5A6"]
@@ -750,7 +743,6 @@ class DashboardApp(ctk.CTkToplevel):
 
         self.dash_canvas.draw()
         
-        # Re-trigger background loop (15 seconds to minimize twitching)
         self.dashboard_refresh_job = self.after(15000, self._auto_refresh_dashboard)
 
     def embed_chart(self, parent_frame, chart_data):
