@@ -394,6 +394,22 @@ class RoleManagementView(ctk.CTkFrame):
                 cursor.close()
                 conn.close()
 
+    def delete_user(self, row):
+        if messagebox.askyesno("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
+            conn = get_connection()
+            if not conn: return
+            try:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE user SET status = 'Archived' WHERE user_id = %s", (row['user_id'],))
+                conn.commit()
+                log_action(self.user_info['user_id'], "Archived", "Role Management", f"Archived user {row['full_name']}")
+                messagebox.showinfo("Archived", f"User '{row['full_name']}' has been deactivated.\n\nThey have been moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel())
+                self.load_user_table()
+            except Exception as e:
+                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
+            finally:
+                if conn.is_connected(): cursor.close(); conn.close()
+
     def open_edit_modal(self, row):
         modal = ctk.CTkToplevel(self)
         modal.title(f"Edit User — {row['full_name']}")
@@ -454,9 +470,26 @@ class RoleManagementView(ctk.CTkFrame):
                 ctk.CTkLabel(pass_section,
                              text="New Password (leave blank to keep current)",
                              font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
-                e = ctk.CTkEntry(pass_section, placeholder_text="Optional new password",
+                pass_row = ctk.CTkFrame(pass_section, fg_color="transparent")
+                pass_row.pack(fill="x", pady=(4, 15))
+                
+                e = ctk.CTkEntry(pass_row, placeholder_text="Optional new password",
                                  show="•", height=35)
-                e.pack(fill="x", pady=(4, 15))
+                e.pack(side="left", fill="x", expand=True, padx=(0, 5))
+                
+                show_pwd_state = [False]
+                eye_btn = ctk.CTkButton(pass_row, text="👁", width=38, height=35,
+                                        fg_color="#F3F4F6", text_color="#4B5563",
+                                        hover_color="#E5E7EB", corner_radius=6,
+                                        font=("Inter", 14))
+                eye_btn.pack(side="left")
+                
+                def _toggle_edit_pass():
+                    show_pwd_state[0] = not show_pwd_state[0]
+                    e.configure(show="" if show_pwd_state[0] else "•")
+                    eye_btn.configure(text="✕" if show_pwd_state[0] else "👁")
+                eye_btn.configure(command=_toggle_edit_pass)
+                
                 pass_e_holder[0] = e
 
         role_menu.configure(command=lambda r: build_pass_section(r))
@@ -535,43 +568,60 @@ class RoleManagementView(ctk.CTkFrame):
                       command=save_edit).pack(side="left", padx=(0, 10), fill="x", expand=True)
         ctk.CTkButton(btn_row, text="Cancel", height=38,
                       fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
-                      command=modal.destroy).pack(side="right", fill="x", expand=True)
+                      command=modal.destroy).pack(side="right", padx=(10, 0), fill="x", expand=True)
 
     def print_user_badge(self, row):
         try:
-            emp_id = row["employee_id"]
-            emp_name = row["full_name"]
-            emp_role = row["role"]
-
-            file_path = generate_id_badge(emp_id, emp_name, emp_role)
-            os.startfile(file_path)
-
-        except Exception as e:
-            messagebox.showerror("Badge Error", f"Could not generate badge:\n{e}",
-                                 parent=self.winfo_toplevel())
-
-    def delete_user(self, row):
-        if messagebox.askyesno(
-            "Confirm Archive",
-            f"Permanently archive the account for '{row['full_name']}' ({row['employee_id']})?\n"
-            "Their transaction history will remain in the system.",
-            parent=self.winfo_toplevel()
-        ):
-            conn = get_connection()
-            if not conn:
-                return
+            qr_payload = f"Employee ID: {row['employee_id']}\nName: {row['full_name']}\nRole: {row['role']}"
+            qr = qrcode.QRCode(version=1, box_size=10, border=2)
+            qr.add_data(qr_payload)
+            qr.make(fit=True)
+            qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+            
+            canvas_width, canvas_height = 400, 600
+            canvas = Image.new('RGB', (canvas_width, canvas_height), 'white')
+            draw = ImageDraw.Draw(canvas)
+            
+            draw.rectangle([(0, 0), (canvas_width, 80)], fill="#1E4528")
             try:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "UPDATE user SET status = 'Archived', archived_at = NOW() WHERE user_id = %s", (row["user_id"],))
-                conn.commit()
-                messagebox.showinfo("Archived", "User account archived.",
-                                    parent=self.winfo_toplevel())
-                self.load_user_table()
-            except Exception as e:
-                messagebox.showerror("Error", str(
-                    e), parent=self.winfo_toplevel())
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
+                font_title = ImageFont.truetype("arialbd.ttf", 22)
+                font_name = ImageFont.truetype("arialbd.ttf", 24)
+                font_role = ImageFont.truetype("arial.ttf", 18)
+                font_id = ImageFont.truetype("arial.ttf", 16)
+            except IOError:
+                font_title = font_name = font_role = font_id = ImageFont.load_default()
+                
+            title_text = "CHAMPION FINE TOOLING"
+            bbox = draw.textbbox((0, 0), title_text, font=font_title)
+            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, 25), title_text, fill="white", font=font_title)
+            
+            qr_x = (canvas_width - qr_img.width) // 2
+            qr_y = 120
+            canvas.paste(qr_img, (qr_x, qr_y))
+            
+            y_offset = qr_y + qr_img.height + 30
+            
+            name_text = row['full_name']
+            bbox = draw.textbbox((0, 0), name_text, font=font_name)
+            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, y_offset), name_text, fill="black", font=font_name)
+            
+            y_offset += 40
+            role_text = f"Role: {row['role']}"
+            bbox = draw.textbbox((0, 0), role_text, font=font_role)
+            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, y_offset), role_text, fill="#555555", font=font_role)
+            
+            y_offset += 30
+            id_text = f"ID: {row['employee_id']}"
+            bbox = draw.textbbox((0, 0), id_text, font=font_id)
+            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, y_offset), id_text, fill="#555555", font=font_id)
+            
+            temp_dir = tempfile.gettempdir()
+            file_path = os.path.join(temp_dir, f"Badge_{row['employee_id']}.pdf")
+            canvas.save(file_path, "PDF", resolution=100.0)
+            
+            import time
+            time.sleep(0.5)
+            os.startfile(file_path)
+            
+        except Exception as e:
+            messagebox.showerror("Print Error", f"Failed to generate badge.\n{e}", parent=self.winfo_toplevel())

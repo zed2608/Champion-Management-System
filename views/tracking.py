@@ -227,6 +227,8 @@ class TrackingView(ctk.CTkFrame):
                             txt_color = "#C0392B"
                         elif val == "Active":
                             txt_color = "#D8000C"
+                        elif val == "Consumed":
+                            txt_color = "#8E44AD"
                         else:
                             txt_color = "#2ECC71"
                         font_w = "bold"
@@ -277,7 +279,7 @@ class TrackingView(ctk.CTkFrame):
         ctk.CTkLabel(filter_row, text="Filter by Status:",
                      font=("Inter", 12), text_color="gray").pack(side="left")
         self.audit_filter = ctk.CTkOptionMenu(
-            filter_row, values=["All", "Active", "Returned"],
+            filter_row, values=["All", "Active", "Returned", "Consumed"],
             width=120, fg_color="#F9FAFB", text_color="black"
         )
         self.audit_filter.pack(side="left", padx=8)
@@ -370,8 +372,9 @@ class TrackingView(ctk.CTkFrame):
             total = len(rows)
             active = sum(1 for r in rows if r["status"] == "Active")
             returned = sum(1 for r in rows if r["status"] == "Returned")
+            consumed = sum(1 for r in rows if r["status"] == "Consumed")
             overdue = sum(1 for r in rows if r.get("is_overdue", 0))
-            summary_text = f"  Total: {total}   |   Active: {active}   |   Returned: {returned}"
+            summary_text = f"  Total: {total}   |   Active: {active}   |   Returned: {returned}   |   Consumed: {consumed}"
             if overdue:
                 summary_text += f"   |   ⚠ Overdue: {overdue}"
             self.audit_summary.configure(text=summary_text)
@@ -404,6 +407,8 @@ class TrackingView(ctk.CTkFrame):
                             txt_color = "#C0392B"
                         elif val == "Active":
                             txt_color = "#D8000C"
+                        elif val == "Consumed":
+                            txt_color = "#8E44AD"
                         else:
                             txt_color = "#2ECC71"
                         font_w = "bold"
@@ -762,7 +767,12 @@ class TrackingView(ctk.CTkFrame):
                     txt_color = "#1A1A1A"
                     font_w = "normal"
                     if col == 6:
-                        txt_color = "#D8000C" if val == "Active" else "#2ECC71"
+                        if val == "Active":
+                            txt_color = "#D8000C"
+                        elif val == "Consumed":
+                            txt_color = "#8E44AD"
+                        else:
+                            txt_color = "#2ECC71"
                         font_w = "bold"
                     elif col == 2 and val == "Unassigned":
                         txt_color = "#D8000C"

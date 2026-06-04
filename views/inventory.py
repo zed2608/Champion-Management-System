@@ -7,10 +7,11 @@ import qrcode
 from PIL import Image, ImageDraw, ImageFont
 
 class InventoryView(ctk.CTkFrame):
-    def __init__(self, parent, user_info=None):
+    def __init__(self, parent, user_info=None, navigate_to=None):
         super().__init__(parent, fg_color="transparent")
 
         self.user_info = user_info or {}
+        self.navigate_to = navigate_to
 
         # 1. Main Wrapper Expansion
         self.grid_columnconfigure(0, weight=1)
@@ -489,6 +490,81 @@ class InventoryView(ctk.CTkFrame):
         status_menu.pack(side="left", fill="x", expand=True)
         status_menu.set(data['status'])
 
+        # Fetch active deployments
+        conn = get_connection()
+        active_deployments = []
+        if conn:
+            try:
+                c = conn.cursor(dictionary=True)
+                c.execute("""
+                    SELECT p.project_id, p.name, p.end_date, COUNT(tr.transaction_id) as qty,
+                           (p.end_date < CURDATE() AND t.item_type = 'Equipment') as is_overdue
+                    FROM transaction tr
+                    JOIN projects p ON tr.project_id = p.project_id
+                    JOIN tool t ON tr.tool_id = t.tool_id
+                    WHERE tr.tool_id = %s AND tr.status = 'Active'
+                    GROUP BY p.project_id, p.name, p.end_date, t.item_type
+                """, (lookup_id,))
+                active_deployments = c.fetchall()
+            except Exception:
+                pass
+            finally:
+                if conn.is_connected(): c.close(); conn.close()
+
+        if active_deployments:
+            deploy_frame = ctk.CTkFrame(form_scroll, fg_color="transparent")
+            deploy_frame.pack(fill="x", pady=4)
+            ctk.CTkLabel(deploy_frame, text="Deployments", width=90, anchor="w", font=("Inter", 11, "bold"), text_color="gray").pack(side="left")
+            
+            overdue_count = sum(1 for d in active_deployments if d['is_overdue'])
+            btn_text = f"View Deployments ({overdue_count} Overdue)" if overdue_count > 0 else f"View Deployments ({len(active_deployments)} Active)"
+            btn_color = "#C0392B" if overdue_count > 0 else "#2980B9"
+            btn_hover = "#922B21" if overdue_count > 0 else "#1F618D"
+            
+            def open_deployments_dialog():
+                dep_dialog = ctk.CTkToplevel(modal)
+                dep_dialog.title(f"Active Deployments: {data['name']}")
+                dep_dialog.geometry("450x350")
+                dep_dialog.configure(fg_color="white")
+                dep_dialog.attributes("-topmost", True)
+                dep_dialog.grab_set()
+                
+                dep_dialog.update_idletasks()
+                dx = (dep_dialog.winfo_screenwidth() // 2) - (450 // 2)
+                dy = (dep_dialog.winfo_screenheight() // 2) - (350 // 2)
+                dep_dialog.geometry(f"+{dx}+{dy}")
+                
+                ctk.CTkLabel(dep_dialog, text="Current Deployments", font=("Inter", 14, "bold"), text_color="black").pack(pady=(15, 5))
+                
+                scroll = ctk.CTkScrollableFrame(dep_dialog, fg_color="transparent")
+                scroll.pack(fill="both", expand=True, padx=15, pady=10)
+                
+                for dep in active_deployments:
+                    row = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=6, border_width=1, border_color="#E0E0E0")
+                    row.pack(fill="x", pady=4)
+                    
+                    status_text = "⚠ OVERDUE" if dep['is_overdue'] else "Active"
+                    status_color = "#C0392B" if dep['is_overdue'] else "#2ECC71"
+                    
+                    info_frame = ctk.CTkFrame(row, fg_color="transparent")
+                    info_frame.pack(side="left", padx=10, pady=10, fill="x", expand=True)
+                    
+                    ctk.CTkLabel(info_frame, text=dep['name'], font=("Inter", 12, "bold"), text_color="#1A1A1A", anchor="w").pack(fill="x")
+                    
+                    detail_row = ctk.CTkFrame(info_frame, fg_color="transparent")
+                    detail_row.pack(fill="x", pady=(2, 0))
+                    
+                    ctk.CTkLabel(detail_row, text=f"Qty: {dep['qty']:g}  |  ", font=("Inter", 11), text_color="gray").pack(side="left")
+                    ctk.CTkLabel(detail_row, text=status_text, font=("Inter", 11, "bold"), text_color=status_color).pack(side="left")
+                    
+                    if getattr(self, "navigate_to", None):
+                        ctk.CTkButton(row, text="Go to Project ➔", width=90, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), 
+                                      command=lambda pid=dep['project_id']: [modal.destroy(), dep_dialog.destroy(), self.navigate_to(pid)]).pack(side="right", padx=10)
+                
+                ctk.CTkButton(dep_dialog, text="Close", fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=dep_dialog.destroy).pack(pady=(5, 15))
+
+            ctk.CTkButton(deploy_frame, text=btn_text, fg_color=btn_color, hover_color=btn_hover, font=("Inter", 11, "bold"), command=open_deployments_dialog).pack(side="left", fill="x", expand=True)
+
         # --- TAGGING SECTION ---
         ctk.CTkFrame(form_scroll, height=2, fg_color="#E0E0E0").pack(fill="x", pady=15)
         ctk.CTkLabel(form_scroll, text="QR Tag Management", font=("Inter", 13, "bold"), text_color="#1E4528").pack(anchor="w", pady=(0, 10))
@@ -701,6 +777,7 @@ class InventoryView(ctk.CTkFrame):
                         cursor.close(); conn.close()
                         uid = self.user_info.get("user_id")
                         if uid: log_action(uid, "Archived", "Inventory", f"Archived item '{data['name']}'")
+                        messagebox.showinfo("Archived", f"Item '{data['name']}' archived successfully.\n\nIt has been moved to the Maintenance > Archived Tools vault.", parent=self.winfo_toplevel())
                         modal.destroy()
                         self.load_inventory_data()
                 return
@@ -749,13 +826,16 @@ class InventoryView(ctk.CTkFrame):
                         cursor.execute("UPDATE tool SET is_archived=1, archived_at=NOW() WHERE tool_id=%s", (lookup_id,))
                         cursor.execute("UPDATE inventory SET quantity_total=0, quantity_available=0 WHERE tool_id=%s", (lookup_id,))
                         action_msg = f"Archived all remaining units of '{data['name']}'"
+                        ui_msg = f"All remaining units of '{data['name']}' have been archived.\n\nThey are now in the Maintenance > Archived Tools vault."
                     else:
                         cursor.execute("UPDATE inventory SET quantity_total=%s, quantity_available=%s WHERE tool_id=%s",
                                        (new_tot, new_avail, lookup_id))
                         action_msg = f"Partially archived {n:g} unit(s) from '{data['name']}' (PID: {lookup_id})"
+                        ui_msg = f"Partially archived {n:g} unit(s) from '{data['name']}'.\n\nThese units are now in the Maintenance > Archived Tools vault."
                     conn.commit()
                     uid = self.user_info.get("user_id")
                     if uid: log_action(uid, "Archived", "Inventory", action_msg)
+                    messagebox.showinfo("Archived", ui_msg, parent=self.winfo_toplevel())
                     modal.destroy()
                     self.load_inventory_data()
                 except Exception as e:

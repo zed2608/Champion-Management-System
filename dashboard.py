@@ -98,15 +98,24 @@ class DashboardApp(ctk.CTkToplevel):
         nav_items.append("Help")
 
         self.nav_buttons = {}
+        self.nav_badges = {}
         for item in nav_items:
+            container = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+            container.pack(fill="x", pady=2, padx=10)
+            
             btn = ctk.CTkButton(
-                self.sidebar_frame, text=item, anchor="w",
+                container, text=item, anchor="w",
                 fg_color="transparent", hover_color="#2A6038",
                 text_color="white", font=("Inter", 13, "bold"),
                 command=lambda m=item: self.show_frame(m)
             )
-            btn.pack(fill="x", pady=2, padx=10)
+            btn.pack(side="left", fill="x", expand=True)
+            
+            badge = ctk.CTkLabel(container, text="", width=24, height=24, corner_radius=12, fg_color="transparent", text_color="white", font=("Inter", 11, "bold"))
+            badge.pack(side="right", padx=(5, 0))
+            
             self.nav_buttons[item] = btn
+            self.nav_badges[item] = badge
 
         ctk.CTkButton(
             self.sidebar_frame, text="Exit", anchor="w",
@@ -365,7 +374,7 @@ class DashboardApp(ctk.CTkToplevel):
         elif page_name == "Project Management":
             self.current_frame = ProjectsView(self.main_container, self.user_info)
         elif page_name == "Products / Inventory":
-            self.current_frame = InventoryView(self.main_container, self.user_info)
+            self.current_frame = InventoryView(self.main_container, self.user_info, navigate_to=self.navigate_to_project)
         elif page_name == "Issuance & Retrieval":
             self.current_frame = BorrowingView(self.main_container, self.user_info, navigate_to=self.navigate_to_project)
         elif page_name == "Tracking & Accountability":
@@ -443,6 +452,12 @@ class DashboardApp(ctk.CTkToplevel):
                 metrics["overdue_projects"] = int(cursor.fetchone()["cnt"] or 0)
             except:
                 pass
+                
+            try:
+                cursor.execute("SELECT COUNT(*) as cnt FROM projects WHERE status = 'Pending'")
+                metrics["pending_projects"] = int(cursor.fetchone()["cnt"] or 0)
+            except:
+                metrics["pending_projects"] = 0
 
             cursor.execute("""
                 SELECT 
@@ -507,6 +522,7 @@ class DashboardApp(ctk.CTkToplevel):
                      font=("Inter", 13), text_color="gray").pack(anchor="w", pady=(0, 20))
 
         metrics, activities, chart_data = self.get_live_metrics()
+        self._update_sidebar_badges(metrics)
 
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         num_cards = 5 if is_admin else 3
@@ -717,12 +733,33 @@ class DashboardApp(ctk.CTkToplevel):
                 # Pinaliit ang padding para numipis ang row height
                 lbl.pack(fill="both", expand=True, padx=5, pady=6)
 
+    def _update_sidebar_badges(self, metrics):
+        is_admin = self.user_info.get("role", "Staff") == "Admin"
+        if not is_admin: return
+        
+        if "Maintenance" in self.nav_badges:
+            issues = metrics.get("action_items", 0)
+            if issues > 0:
+                self.nav_badges["Maintenance"].configure(text=str(issues), fg_color="#C0392B")
+            else:
+                self.nav_badges["Maintenance"].configure(text="", fg_color="transparent")
+        
+        if "Project Management" in self.nav_badges:
+            pending = metrics.get("pending_projects", 0)
+            if pending > 0:
+                self.nav_badges["Project Management"].configure(text=str(pending), fg_color="#D35400")
+            else:
+                self.nav_badges["Project Management"].configure(text="", fg_color="transparent")
+
     def _auto_refresh_dashboard(self):
-        if self.current_page_name != "Dashboard":
-            return
-            
         metrics, activities, chart_data = self.get_live_metrics()
         
+        self._update_sidebar_badges(metrics)
+        
+        if self.current_page_name != "Dashboard" or not hasattr(self, 'dash_util_lbl') or not self.dash_util_lbl.winfo_exists():
+            self.dashboard_refresh_job = self.after(15000, self._auto_refresh_dashboard)
+            return
+            
         self.dash_util_lbl.configure(text=f"{metrics['utilization_pct']}%")
         self.dash_wf_lbl.configure(text=f"{metrics['active_workforce']} / {metrics['total_employees']}")
         self.dash_inv_lbl.configure(text=str(metrics['total_physical']))

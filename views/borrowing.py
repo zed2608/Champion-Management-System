@@ -587,7 +587,12 @@ class BorrowingView(ctk.CTkFrame):
                     txt_color = "#1A1A1A"
                     font_w = "normal"
                     if col == 6:
-                        txt_color = "#D8000C" if val == "Active" else "#2ECC71"
+                        if val == "Active":
+                            txt_color = "#D8000C"
+                        elif val == "Consumed":
+                            txt_color = "#8E44AD"
+                        else:
+                            txt_color = "#2ECC71"
                         font_w = "bold"
                     elif col == 2 and val == "Unassigned":
                         txt_color = "#D8000C"
@@ -1279,10 +1284,23 @@ class BorrowingView(ctk.CTkFrame):
                     WHERE transaction_id = %s
                 """, (new_cond, condition_notes or None, trans['transaction_id']))
             
-            cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
+            if new_cond == "Lost":
+                cursor.execute("UPDATE inventory SET quantity_total = quantity_total - %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
+            else:
+                cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
+                
             cursor.execute("UPDATE tool SET `condition` = %s WHERE tool_id = %s", (new_cond, self.active_return_tool_id))
             conn.commit()
-            messagebox.showinfo("Success", f"Successfully retrieved {return_qty} item(s) and restocked inventory!", parent=self.retrieval_modal)
+            
+            msg = f"Successfully retrieved {return_qty:g} item(s)!"
+            if new_cond == "Lost":
+                msg += f"\n\nMarked as 'Lost'. Deducted from Total Inventory.\nAn action item has been created in Maintenance > Issues & Repairs."
+            elif new_cond != "Good":
+                msg += f"\n\nMarked as '{new_cond}'. Restocked but flagged in Maintenance > Issues & Repairs for resolution."
+            else:
+                msg += "\n\nRestocked successfully!"
+                
+            messagebox.showinfo("Success", msg, parent=self.retrieval_modal)
             
             self.retrieval_modal.destroy()
             self.load_transaction_history()
