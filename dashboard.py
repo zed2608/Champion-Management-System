@@ -111,8 +111,8 @@ class DashboardApp(ctk.CTkToplevel):
             )
             btn.pack(side="left", fill="x", expand=True)
             
-            badge = ctk.CTkLabel(container, text="", width=24, height=24, corner_radius=12, fg_color="transparent", text_color="white", font=("Inter", 11, "bold"))
-            badge.pack(side="right", padx=(5, 0))
+            badge = ctk.CTkLabel(container, text="", width=8, height=8, corner_radius=4, fg_color="transparent")
+            badge.pack(side="right", padx=(10, 10))
             
             self.nav_buttons[item] = btn
             self.nav_badges[item] = badge
@@ -740,16 +740,16 @@ class DashboardApp(ctk.CTkToplevel):
         if "Maintenance" in self.nav_badges:
             issues = metrics.get("action_items", 0)
             if issues > 0:
-                self.nav_badges["Maintenance"].configure(text=str(issues), fg_color="#C0392B")
+                self.nav_badges["Maintenance"].configure(fg_color="#F1C40F", text="")
             else:
-                self.nav_badges["Maintenance"].configure(text="", fg_color="transparent")
+                self.nav_badges["Maintenance"].configure(fg_color="transparent", text="")
         
         if "Project Management" in self.nav_badges:
             pending = metrics.get("pending_projects", 0)
             if pending > 0:
-                self.nav_badges["Project Management"].configure(text=str(pending), fg_color="#D35400")
+                self.nav_badges["Project Management"].configure(fg_color="#DB8534", text="")
             else:
-                self.nav_badges["Project Management"].configure(text="", fg_color="transparent")
+                self.nav_badges["Project Management"].configure(fg_color="transparent", text="")
 
     def _auto_refresh_dashboard(self):
         metrics, activities, chart_data = self.get_live_metrics()
@@ -795,7 +795,8 @@ class DashboardApp(ctk.CTkToplevel):
         categories = ["Good", "Repair", "Damaged", "Lost"]
         colors = ["#2ECC71", "#F1C40F", "#E67E22", "#95A5A6"]
 
-        bars = ax.bar(categories, chart_data, color=colors, width=0.5)
+        bars = ax.bar(categories, chart_data, color=colors, width=0.6)
+        
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         ax.spines["left"].set_visible(False)
@@ -808,9 +809,36 @@ class DashboardApp(ctk.CTkToplevel):
                     int(yval), ha="center", va="bottom",
                     fontdict={"family": "sans-serif", "weight": "bold", "color": "#333333"})
 
-        fig.subplots_adjust(left=0.05, right=0.95, top=0.85, bottom=0.15)
+        plt.tight_layout()
         canvas = FigureCanvasTkAgg(fig, master=parent_frame)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0, 10))
         
         return fig, ax, canvas
+
+    def show_toast(self, message, is_error=False):
+        color = "#E74C3C" if is_error else "#27AE60"
+        
+        toast = ctk.CTkFrame(self, fg_color=color, corner_radius=8)
+        lbl = ctk.CTkLabel(toast, text=message, text_color="white", font=("Inter", 13, "bold"))
+        lbl.pack(padx=20, pady=12)
+        
+        toast.place(relx=0.95, rely=1.1, anchor="se")
+        
+        def slide_in(rely_val):
+            if not toast.winfo_exists(): return
+            if rely_val > 0.95:
+                toast.place(relx=0.95, rely=rely_val, anchor="se")
+                self.after(15, lambda: slide_in(rely_val - 0.01))
+            else:
+                self.after(3000, lambda: slide_out(0.95))
+                
+        def slide_out(rely_val):
+            if not toast.winfo_exists(): return
+            if rely_val < 1.1:
+                toast.place(relx=0.95, rely=rely_val, anchor="se")
+                self.after(15, lambda: slide_out(rely_val + 0.01))
+            else:
+                toast.destroy()
+                
+        slide_in(1.1)

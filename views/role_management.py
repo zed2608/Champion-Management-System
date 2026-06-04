@@ -8,6 +8,7 @@ import tempfile
 import qrcode
 from PIL import Image, ImageDraw, ImageFont
 import re
+import difflib
 
 
 class RoleManagementView(ctk.CTkFrame):
@@ -42,7 +43,7 @@ class RoleManagementView(ctk.CTkFrame):
         self.reg_modal.update_idletasks()
         x = (self.reg_modal.winfo_screenwidth() // 2) - (450 // 2)
         y = (self.reg_modal.winfo_screenheight() // 2) - (650 // 2)
-        self.reg_modal.geometry(f"+{x}+{y}")
+        self.reg_modal.geometry(f"450x650+{x}+{y}")
 
         self._form_card = ctk.CTkScrollableFrame(
             self.reg_modal, fg_color="white", corner_radius=0)
@@ -200,11 +201,30 @@ class RoleManagementView(ctk.CTkFrame):
         try:
             cursor = conn.cursor(dictionary=True)
             
-            cursor.execute("SELECT user_id FROM user WHERE full_name = %s", (name,))
-            if cursor.fetchone():
-                messagebox.showerror("Duplicate User", "A user with this full name already exists.", parent=self.reg_modal)
+            # --- DUPLICATE & TYPO CHECK ---
+            cursor.execute("SELECT full_name FROM user WHERE status != 'Archived'")
+            existing_names = [r['full_name'] for r in cursor.fetchall()]
+            exact_match = False
+            similar_names = []
+            
+            for en in existing_names:
+                if en.lower() == name.lower():
+                    exact_match = True
+                    break
+                if difflib.SequenceMatcher(None, name.lower(), en.lower()).ratio() > 0.85:
+                    similar_names.append(en)
+                    
+            if exact_match:
+                messagebox.showerror("Duplicate User", f"A user named '{name}' already exists.", parent=self.reg_modal)
                 return
                 
+            if similar_names:
+                sim_list = "\n".join([f"• {sn}" for sn in similar_names[:3]])
+                msg = f"Wait! Similar names already exist:\n\n{sim_list}\n\nAre you sure you want to register '{name}' as a new distinct user?"
+                if not messagebox.askyesno("Similar Name Detected", msg, parent=self.reg_modal):
+                    return
+            # -----------------------------
+            
             if email:
                 cursor.execute("SELECT user_id FROM user WHERE email = %s", (email,))
                 if cursor.fetchone():
@@ -403,8 +423,11 @@ class RoleManagementView(ctk.CTkFrame):
                 cursor.execute("UPDATE user SET status = 'Archived' WHERE user_id = %s", (row['user_id'],))
                 conn.commit()
                 log_action(self.user_info['user_id'], "Archived", "Role Management", f"Archived user {row['full_name']}")
-                messagebox.showinfo("Archived", f"User '{row['full_name']}' has been deactivated.\n\nThey have been moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel())
                 self.load_user_table()
+                
+                dashboard = self.winfo_toplevel()
+                if hasattr(dashboard, "show_toast"):
+                    dashboard.show_toast(f"✓ User '{row['full_name']}' deactivated and archived.")
             except Exception as e:
                 messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
             finally:
@@ -421,7 +444,7 @@ class RoleManagementView(ctk.CTkFrame):
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - 250
         y = (modal.winfo_screenheight() // 2) - 250
-        modal.geometry(f"+{x}+{y}")
+        modal.geometry(f"500x500+{x}+{y}")
 
         ctk.CTkLabel(modal, text=f"Edit: {row['full_name']}",
                      font=("Inter", 15, "bold"), text_color="black").pack(pady=(20, 3))
@@ -524,6 +547,32 @@ class RoleManagementView(ctk.CTkFrame):
                 return
             try:
                 cursor = conn.cursor()
+                
+                # --- DUPLICATE & TYPO CHECK FOR EDITS ---
+                cursor.execute("SELECT user_id, full_name FROM user WHERE status != 'Archived' AND user_id != %s", (row["user_id"],))
+                existing_users = cursor.fetchall()
+                exact_match = False
+                similar_names = []
+                
+                for eu in existing_users:
+                    eu_name = eu[1]
+                    if eu_name.lower() == new_name.lower():
+                        exact_match = True
+                        break
+                    if difflib.SequenceMatcher(None, new_name.lower(), eu_name.lower()).ratio() > 0.85:
+                        similar_names.append(eu_name)
+                        
+                if exact_match:
+                    messagebox.showerror("Duplicate Name", f"Another active user named '{new_name}' already exists.", parent=modal)
+                    return
+                    
+                if similar_names and new_name.lower() != row['full_name'].lower():
+                    sim_list = "\n".join([f"• {sn}" for sn in similar_names[:3]])
+                    msg = f"Similar user names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this user to '{new_name}'?"
+                    if not messagebox.askyesno("Similar Name Detected", msg, parent=modal):
+                        return
+                # -----------------------------
+                
                 if new_role == "Worker":
                     # Keep existing hash or store placeholder — Workers never log in
                     cursor.execute("""

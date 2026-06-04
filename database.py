@@ -1,5 +1,6 @@
 import os
 import mysql.connector
+from mysql.connector import pooling
 from dotenv import load_dotenv
 import qrcode
 import tempfile
@@ -10,16 +11,23 @@ from PIL import Image, ImageDraw, ImageFont
 # Using a LAN host preserves the app logic and only changes which database server is targeted.
 load_dotenv()
 
+_db_pool = None
+
 def get_connection():
+    global _db_pool
     try:
-        conn = mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASS"),
-            database=os.getenv("DB_NAME")
-        )
-        return conn
+        if _db_pool is None:
+            _db_pool = pooling.MySQLConnectionPool(
+                pool_name="champion_pool",
+                pool_size=10,
+                pool_reset_session=True,
+                host=os.getenv("DB_HOST"),
+                port=os.getenv("DB_PORT"),
+                user=os.getenv("DB_USER"),
+                password=os.getenv("DB_PASS"),
+                database=os.getenv("DB_NAME")
+            )
+        return _db_pool.get_connection()
     except mysql.connector.Error as err:
         print(f"Database Connection Error: {err}")
         return None

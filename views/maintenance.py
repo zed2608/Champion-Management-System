@@ -422,10 +422,14 @@ class MaintenanceView(ctk.CTkFrame):
     def open_issue_modal(self, row):
         modal = ctk.CTkToplevel(self)
         modal.title(f"Issue #{row['issue_id']} — {row['tool_name']}")
-        modal.geometry("480x400")
         modal.configure(fg_color="white")
         modal.attributes("-topmost", True)
         modal.grab_set()
+        
+        modal.update_idletasks()
+        x = (modal.winfo_screenwidth() // 2) - (480 // 2)
+        y = (modal.winfo_screenheight() // 2) - (400 // 2)
+        modal.geometry(f"480x400+{x}+{y}")
 
         status_color = "#2ECC71" if row["is_resolved"] else "#D8000C"
         status_text = "✓ RESOLVED" if row["is_resolved"] else "⚠ PENDING"

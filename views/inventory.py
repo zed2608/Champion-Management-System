@@ -5,10 +5,12 @@ import os
 import tempfile
 import qrcode
 from PIL import Image, ImageDraw, ImageFont
+import difflib
+import threading
 
 class InventoryView(ctk.CTkFrame):
-    def __init__(self, parent, user_info=None, navigate_to=None):
-        super().__init__(parent, fg_color="transparent")
+    def __init__(self, parent, user_info=None, navigate_to=None, *args, **kwargs):
+        super().__init__(parent, fg_color="transparent", *args, **kwargs)
 
         self.user_info = user_info or {}
         self.navigate_to = navigate_to
@@ -54,7 +56,7 @@ class InventoryView(ctk.CTkFrame):
         self.add_modal.update_idletasks()
         x = (self.add_modal.winfo_screenwidth() // 2) - (500 // 2)
         y = (self.add_modal.winfo_screenheight() // 2) - (700 // 2)
-        self.add_modal.geometry(f"+{x}+{y}")
+        self.add_modal.geometry(f"500x700+{x}+{y}")
         
         form_card = ctk.CTkScrollableFrame(self.add_modal, fg_color="white", corner_radius=0)
         form_card.pack(fill="both", expand=True)
@@ -211,124 +213,134 @@ class InventoryView(ctk.CTkFrame):
             lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 13, "bold"), text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=4, pady=14)
 
-        is_archived = 0
-        conn = get_connection()
-        if not conn:
-            return
+        loading_lbl = ctk.CTkLabel(table_inner, text="Fetching data from database, please wait...", text_color="gray", font=("Inter", 12, "italic"))
+        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
 
-        try:
-            cursor = conn.cursor(dictionary=True)
-            base_query = """
-                SELECT t.tool_id, IFNULL(t.item_type, 'Equipment') as item_type,
-                       IFNULL(t.unit_of_measure, 'pcs') as uom,
-                       t.name, IFNULL(t.description, '') as description, t.price,
-                       IFNULL(i.quantity_available, 0) as qty_avail,
-                       IFNULL(i.quantity_total, 0) as qty_tot,
-                       IFNULL(t.location, 'N/A') as base_location, t.`condition` as status,
-                       IFNULL(t.category, 'Uncategorized') as category,
-                       IFNULL(t.supplier, 'N/A') as supplier,
-                       t.tag_id,
-                       (SELECT p.name FROM transaction tr
-                        JOIN projects p ON tr.project_id = p.project_id
-                        WHERE tr.tool_id = t.tool_id AND tr.status = 'Active'
-                        LIMIT 1) as active_project,
-                       (SELECT p.end_date < CURDATE() FROM transaction tr
-                        JOIN projects p ON tr.project_id = p.project_id
-                        WHERE tr.tool_id = t.tool_id AND tr.status = 'Active'
-                        LIMIT 1) as is_overdue
-                FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id
-                WHERE t.is_archived = %s
-            """
-            params = [is_archived]
-            
-            if query:
-                base_query += " AND (t.name LIKE %s OR t.tool_id LIKE %s OR t.category LIKE %s OR t.item_type LIKE %s OR t.supplier LIKE %s OR IFNULL(t.tag_id,'') LIKE %s)"
-                params.extend([f"%{query}%"] * 6)
-
-            if sort_type == "Oldest":
-                base_query += " ORDER BY t.tool_id ASC"
-            elif sort_type == "A-Z (Name)":
-                base_query += " ORDER BY t.name ASC"
-            elif sort_type == "Z-A (Name)":
-                base_query += " ORDER BY t.name DESC"
-            elif sort_type == "PID (Low-High)":
-                base_query += " ORDER BY t.tool_id ASC"
-            else:
-                base_query += " ORDER BY t.tool_id DESC"
-
-            base_query += " LIMIT 100"
-            cursor.execute(base_query, tuple(params))
-            results = cursor.fetchall()
-
-            if not results:
-                ctk.CTkLabel(table_inner, text="No inventory found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+        def fetch_data():
+            is_archived = 0
+            conn = get_connection()
+            if not conn:
+                self.after(0, lambda: self._render_inventory_data(None, table_inner, loading_lbl, headers, min_sizes, query, sort_type))
                 return
 
-            for i, row in enumerate(results):
-                pid = str(row['tool_id'])
-                row['location'] = row['base_location'] 
-                self.tool_hash_table[pid] = row
-
-                avail = f"{row['qty_avail']:g}" if row['qty_avail'] else "0"
-                tot = f"{row['qty_tot']:g}" if row['qty_tot'] else "0"
+            try:
+                cursor = conn.cursor(dictionary=True)
+                base_query = """
+                    SELECT t.tool_id, IFNULL(t.item_type, 'Equipment') as item_type,
+                           IFNULL(t.unit_of_measure, 'pcs') as uom,
+                           t.name, IFNULL(t.description, '') as description, t.price,
+                           IFNULL(i.quantity_available, 0) as qty_avail,
+                           IFNULL(i.quantity_total, 0) as qty_tot,
+                           IFNULL(t.location, 'N/A') as base_location, t.`condition` as status,
+                           IFNULL(t.category, 'Uncategorized') as category,
+                           IFNULL(t.supplier, 'N/A') as supplier,
+                           t.tag_id,
+                           (SELECT p.name FROM transaction tr 
+                            JOIN projects p ON tr.project_id = p.project_id 
+                            WHERE tr.tool_id = t.tool_id AND tr.status = 'Active' 
+                            LIMIT 1) as active_project
+                    FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id
+                    WHERE t.is_archived = %s
+                """
+                params = [is_archived]
                 
-                display_loc = row['base_location']
-                if row.get('active_project') and float(row['qty_avail']) < float(row['qty_tot']):
-                    is_overdue_inv = bool(row.get('is_overdue', 0)) and row.get('item_type') == 'Equipment'
-                    if is_overdue_inv:
-                        display_loc = f"⚠ OVERDUE"
-                    else:
-                        display_loc = f"Deployed: {row['active_project']}"
+                if query:
+                    base_query += " AND (t.name LIKE %s OR t.tool_id LIKE %s OR t.category LIKE %s OR t.item_type LIKE %s OR t.supplier LIKE %s OR IFNULL(t.tag_id,'') LIKE %s)"
+                    params.extend([f"%{query}%"] * 6)
 
-                tag_display = row['tag_id'] if row['tag_id'] else "Unassigned"
-                vals = [
-                    pid,
-                    row['item_type'],
-                    row['name'],
-                    tag_display,
-                    f"{avail}/{tot}",
-                    row['uom'],
-                    display_loc,
-                    row['status']
-                ]
+                if sort_type == "Oldest":
+                    base_query += " ORDER BY t.tool_id ASC"
+                elif sort_type == "A-Z (Name)":
+                    base_query += " ORDER BY t.name ASC"
+                elif sort_type == "Z-A (Name)":
+                    base_query += " ORDER BY t.name DESC"
+                elif sort_type == "PID (Low-High)":
+                    base_query += " ORDER BY t.tool_id ASC"
+                else:
+                    base_query += " ORDER BY t.tool_id DESC"
 
-                r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+                base_query += " LIMIT 100"
+                cursor.execute(base_query, tuple(params))
+                results = cursor.fetchall()
+                
+                self.after(0, lambda: self._render_inventory_data(results, table_inner, loading_lbl, headers, min_sizes, query, sort_type))
+            except Exception as e:
+                print(f"Fetch Error: {e}")
+                self.after(0, lambda: self._render_inventory_data(None, table_inner, loading_lbl, headers, min_sizes, query, sort_type))
+            finally:
+                if conn.is_connected():
+                    cursor.close()
+                    conn.close()
 
-                for col, val in enumerate(vals):
-                    cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
-                    cell.grid(row=r_idx, column=col, sticky="nsew")
+        threading.Thread(target=fetch_data, daemon=True).start()
 
-                    txt_col = "#1A1A1A"
-                    if col == 6 and "⚠ OVERDUE" in val:
-                        txt_col = "#C0392B"
-                    elif col == 6 and "Deployed:" in val:
-                        txt_col = "#2980B9"
-                    elif col == 1 and val == "Consumable":
-                        txt_col = "#D37F00"
-                    elif col == 3 and val == "Unassigned":
-                        txt_col = "#D8000C"
+    def _render_inventory_data(self, results, table_inner, loading_lbl, headers, min_sizes, query, sort_type):
+        if not self.winfo_exists() or not table_inner.winfo_exists():
+            return
+            
+        loading_lbl.destroy()
+        
+        if results is None:
+            ctk.CTkLabel(table_inner, text="Failed to fetch inventory data.", text_color="red").grid(row=1, column=0, columnspan=len(headers), pady=20)
+            return
 
-                    font_w = "bold" if col == 1 or col == 3 or (col == 6 and ("Deployed:" in val or "OVERDUE" in val)) else "normal"
+        if not results:
+            ctk.CTkLabel(table_inner, text="No inventory found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+            return
 
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
+        for i, row in enumerate(results):
+            pid = str(row['tool_id'])
+            row['location'] = row['base_location'] 
+            self.tool_hash_table[pid] = row
+
+            avail = f"{row['qty_avail']:g}" if row['qty_avail'] else "0"
+            tot = f"{row['qty_tot']:g}" if row['qty_tot'] else "0"
+            
+            display_loc = row['base_location']
+            if row.get('active_project') and float(row['qty_avail']) < float(row['qty_tot']):
+                display_loc = f"Deployed: {row['active_project']}"
+
+            tag_display = row['tag_id'] if row['tag_id'] else "Unassigned"
+            vals = [
+                pid,
+                row['item_type'],
+                row['name'],
+                tag_display,
+                f"{avail}/{tot}",
+                row['uom'],
+                display_loc,
+                row['status']
+            ]
+
+            r_idx = i + 1
+            bg = "#F9FAFB" if i % 2 == 0 else "white"
+
+            for col, val in enumerate(vals):
+                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
+                cell.grid(row=r_idx, column=col, sticky="nsew")
+
+                txt_col = "#1A1A1A"
+                if col == 6 and "Deployed:" in val: 
+                    txt_col = "#2980B9"
+                elif col == 1 and val == "Consumable": 
+                    txt_col = "#D37F00"
+                elif col == 3 and val == "Unassigned":
+                    txt_col = "#D8000C"
                     
-                    # High-performance static wrapping
-                    lbl.configure(wraplength=min_sizes[col] - 10)
+                font_w = "bold" if col == 1 or col == 3 or (col == 6 and "Deployed:" in val) else "normal"
 
-                    lbl.pack(fill="both", expand=True, padx=4, pady=12)
+                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
+                
+                lbl.configure(wraplength=min_sizes[col] - 10)
 
-                    cell.bind("<Button-1>", lambda e, lookup_id=pid: self.open_tool_modal(lookup_id))
-                    lbl.bind("<Button-1>", lambda e, lookup_id=pid: self.open_tool_modal(lookup_id))
+                lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
-            uid = self.user_info.get("user_id")
-            if uid and query:
-                log_action(uid, "Searched", "Inventory", f"Searched inventory: '{query}' (Sort: {sort_type})")
+                cell.bind("<Button-1>", lambda e, lookup_id=pid: self.open_tool_modal(lookup_id))
+                lbl.bind("<Button-1>", lambda e, lookup_id=pid: self.open_tool_modal(lookup_id))
 
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+        uid = self.user_info.get("user_id")
+        if uid and query:
+            log_action(uid, "Searched", "Inventory", f"Searched inventory: '{query}' (Sort: {sort_type})")
 
     def perform_search(self):
         self.load_inventory_data(self.search_entry.get().strip(), self.sort_menu.get())
@@ -378,6 +390,31 @@ class InventoryView(ctk.CTkFrame):
             return
         try:
             cursor = conn.cursor()
+            
+            # --- DUPLICATE & TYPO CHECK ---
+            cursor.execute("SELECT name FROM tool WHERE is_archived = 0")
+            existing_names = [r[0] for r in cursor.fetchall()]
+            exact_match = False
+            similar_names = []
+            
+            for en in existing_names:
+                if en.lower() == name.lower():
+                    exact_match = True
+                    break
+                if difflib.SequenceMatcher(None, name.lower(), en.lower()).ratio() > 0.85:
+                    similar_names.append(en)
+                    
+            if exact_match:
+                messagebox.showerror("Duplicate Name", f"A product named '{name}' already exists in active inventory.", parent=self.add_modal)
+                return
+                
+            if similar_names:
+                sim_list = "\n".join([f"• {sn}" for sn in similar_names[:3]])
+                msg = f"Wait! Similar product names already exist:\n\n{sim_list}\n\nAre you sure you want to add '{name}' as a new distinct item?"
+                if not messagebox.askyesno("Similar Name Detected", msg, parent=self.add_modal):
+                    return
+            # -----------------------------
+            
             cursor.execute("""
                 INSERT INTO tool (category, supplier, name, description, price, location,
                                   item_type, unit_of_measure, `condition`, date_acquired, is_archived)
@@ -419,7 +456,7 @@ class InventoryView(ctk.CTkFrame):
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - (550 // 2)
         y = (modal.winfo_screenheight() // 2) - (750 // 2)
-        modal.geometry(f"+{x}+{y}")
+        modal.geometry(f"550x750+{x}+{y}")
         modal.grab_set()
 
         ctk.CTkLabel(modal, text=f"Item Details — PID: {lookup_id}", font=("Inter", 16, "bold"), text_color="black").pack(pady=(20, 3))
@@ -446,25 +483,7 @@ class InventoryView(ctk.CTkFrame):
 
         name_entry = create_modal_row(form_scroll, "Name", data['name'])
         desc_entry = create_modal_row(form_scroll, "Description", data['description'])
-        cat_frame = ctk.CTkFrame(form_scroll, fg_color="transparent")
-        cat_frame.pack(fill="x", pady=4)
-        ctk.CTkLabel(cat_frame, text="Category", width=90, anchor="w", font=("Inter", 11, "bold"), text_color="gray").pack(side="left")
-        _cat_conn = get_connection()
-        _cat_vals = ["Tools", "Measuring", "Power Tools", "Consumables"]
-        if _cat_conn:
-            try:
-                _c = _cat_conn.cursor()
-                _c.execute("SELECT DISTINCT category FROM tool WHERE category IS NOT NULL AND category != 'Uncategorized' AND category != ''")
-                _fetched = [row[0] for row in _c.fetchall()]
-                if _fetched:
-                    _cat_vals = _fetched
-            except Exception:
-                pass
-            finally:
-                if _cat_conn.is_connected(): _c.close(); _cat_conn.close()
-        cat_entry = ctk.CTkComboBox(cat_frame, values=_cat_vals, fg_color="#F9FAFB", text_color="black")
-        cat_entry.pack(side="left", fill="x", expand=True)
-        cat_entry.set(data['category'] or "")
+        cat_entry = create_modal_row(form_scroll, "Category", data['category'])
         sup_entry = create_modal_row(form_scroll, "Supplier", data['supplier'])
         
         # --- FIX C: Added Missing Price Field ---
@@ -489,81 +508,6 @@ class InventoryView(ctk.CTkFrame):
         status_menu = ctk.CTkOptionMenu(status_frame, values=["Good", "Needs Repair", "Damaged", "Lost"], fg_color="#F9FAFB", text_color="black")
         status_menu.pack(side="left", fill="x", expand=True)
         status_menu.set(data['status'])
-
-        # Fetch active deployments
-        conn = get_connection()
-        active_deployments = []
-        if conn:
-            try:
-                c = conn.cursor(dictionary=True)
-                c.execute("""
-                    SELECT p.project_id, p.name, p.end_date, COUNT(tr.transaction_id) as qty,
-                           (p.end_date < CURDATE() AND t.item_type = 'Equipment') as is_overdue
-                    FROM transaction tr
-                    JOIN projects p ON tr.project_id = p.project_id
-                    JOIN tool t ON tr.tool_id = t.tool_id
-                    WHERE tr.tool_id = %s AND tr.status = 'Active'
-                    GROUP BY p.project_id, p.name, p.end_date, t.item_type
-                """, (lookup_id,))
-                active_deployments = c.fetchall()
-            except Exception:
-                pass
-            finally:
-                if conn.is_connected(): c.close(); conn.close()
-
-        if active_deployments:
-            deploy_frame = ctk.CTkFrame(form_scroll, fg_color="transparent")
-            deploy_frame.pack(fill="x", pady=4)
-            ctk.CTkLabel(deploy_frame, text="Deployments", width=90, anchor="w", font=("Inter", 11, "bold"), text_color="gray").pack(side="left")
-            
-            overdue_count = sum(1 for d in active_deployments if d['is_overdue'])
-            btn_text = f"View Deployments ({overdue_count} Overdue)" if overdue_count > 0 else f"View Deployments ({len(active_deployments)} Active)"
-            btn_color = "#C0392B" if overdue_count > 0 else "#2980B9"
-            btn_hover = "#922B21" if overdue_count > 0 else "#1F618D"
-            
-            def open_deployments_dialog():
-                dep_dialog = ctk.CTkToplevel(modal)
-                dep_dialog.title(f"Active Deployments: {data['name']}")
-                dep_dialog.geometry("450x350")
-                dep_dialog.configure(fg_color="white")
-                dep_dialog.attributes("-topmost", True)
-                dep_dialog.grab_set()
-                
-                dep_dialog.update_idletasks()
-                dx = (dep_dialog.winfo_screenwidth() // 2) - (450 // 2)
-                dy = (dep_dialog.winfo_screenheight() // 2) - (350 // 2)
-                dep_dialog.geometry(f"+{dx}+{dy}")
-                
-                ctk.CTkLabel(dep_dialog, text="Current Deployments", font=("Inter", 14, "bold"), text_color="black").pack(pady=(15, 5))
-                
-                scroll = ctk.CTkScrollableFrame(dep_dialog, fg_color="transparent")
-                scroll.pack(fill="both", expand=True, padx=15, pady=10)
-                
-                for dep in active_deployments:
-                    row = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=6, border_width=1, border_color="#E0E0E0")
-                    row.pack(fill="x", pady=4)
-                    
-                    status_text = "⚠ OVERDUE" if dep['is_overdue'] else "Active"
-                    status_color = "#C0392B" if dep['is_overdue'] else "#2ECC71"
-                    
-                    info_frame = ctk.CTkFrame(row, fg_color="transparent")
-                    info_frame.pack(side="left", padx=10, pady=10, fill="x", expand=True)
-                    
-                    ctk.CTkLabel(info_frame, text=dep['name'], font=("Inter", 12, "bold"), text_color="#1A1A1A", anchor="w").pack(fill="x")
-                    
-                    detail_row = ctk.CTkFrame(info_frame, fg_color="transparent")
-                    detail_row.pack(fill="x", pady=(2, 0))
-                    
-                    ctk.CTkLabel(detail_row, text=f"Qty: {dep['qty']:g}  |  ", font=("Inter", 11), text_color="gray").pack(side="left")
-                    ctk.CTkLabel(detail_row, text=status_text, font=("Inter", 11, "bold"), text_color=status_color).pack(side="left")
-                    
-                    if getattr(self, "navigate_to", None):
-                        ctk.CTkButton(row, text="Go to Project ➔", width=90, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), 
-                                      command=lambda pid=dep['project_id']: [modal.destroy(), dep_dialog.destroy(), self.navigate_to(pid)]).pack(side="right", padx=10)
-                
-                ctk.CTkButton(dep_dialog, text="Close", fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=dep_dialog.destroy).pack(pady=(5, 15))
-
-            ctk.CTkButton(deploy_frame, text=btn_text, fg_color=btn_color, hover_color=btn_hover, font=("Inter", 11, "bold"), command=open_deployments_dialog).pack(side="left", fill="x", expand=True)
 
         # --- TAGGING SECTION ---
         ctk.CTkFrame(form_scroll, height=2, fg_color="#E0E0E0").pack(fill="x", pady=15)
@@ -721,6 +665,31 @@ class InventoryView(ctk.CTkFrame):
                 try:
                     cursor = conn.cursor()
                     
+                    # --- DUPLICATE & TYPO CHECK FOR EDITS ---
+                    new_name = name_entry.get().strip()
+                    cursor.execute("SELECT tool_id, name FROM tool WHERE is_archived = 0 AND tool_id != %s", (lookup_id,))
+                    existing_tools = cursor.fetchall()
+                    exact_match = False
+                    similar_names = []
+                    
+                    for et in existing_tools:
+                        en_name = et[1]
+                        if en_name.lower() == new_name.lower():
+                            exact_match = True
+                            break
+                        if difflib.SequenceMatcher(None, new_name.lower(), en_name.lower()).ratio() > 0.85:
+                            similar_names.append(en_name)
+                            
+                    if exact_match:
+                        return messagebox.showerror("Duplicate Name", f"Another product named '{new_name}' already exists.", parent=modal)
+                        
+                    if similar_names and new_name.lower() != data['name'].lower():
+                        sim_list = "\n".join([f"• {sn}" for sn in similar_names[:3]])
+                        msg = f"Similar product names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this to '{new_name}'?"
+                        if not messagebox.askyesno("Similar Name Detected", msg, parent=modal):
+                            return
+                    # -----------------------------
+                    
                     new_tag = tag_entry.get().strip() or None
                     if new_tag:
                         cursor.execute("SELECT tool_id FROM tool WHERE tag_id = %s AND tool_id != %s", (new_tag, lookup_id))
@@ -750,107 +719,31 @@ class InventoryView(ctk.CTkFrame):
 
         def execute_archive():
             if is_arch:
-                if messagebox.askyesno("Confirm Restore", "Restore this item to active inventory?", parent=modal):
-                    conn = get_connection()
-                    if conn:
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE tool SET is_archived=0, archived_at=NULL WHERE tool_id=%s", (lookup_id,))
-                        conn.commit()
-                        cursor.close(); conn.close()
-                        uid = self.user_info.get("user_id")
-                        if uid: log_action(uid, "Restored", "Inventory", f"Restored item '{data['name']}'")
-                        modal.destroy()
-                        self.load_inventory_data()
-                return
-
-            qty_avail = float(data['qty_avail'])
-            qty_tot   = float(data['qty_tot'])
-
-            if qty_tot <= 1:
-                # Single unit — archive the whole record
-                if messagebox.askyesno("Confirm Archive", "Archive this item? It will be hidden from active inventory.", parent=modal):
-                    conn = get_connection()
-                    if conn:
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE tool SET is_archived=1, archived_at=NOW() WHERE tool_id=%s", (lookup_id,))
-                        conn.commit()
-                        cursor.close(); conn.close()
-                        uid = self.user_info.get("user_id")
-                        if uid: log_action(uid, "Archived", "Inventory", f"Archived item '{data['name']}'")
-                        messagebox.showinfo("Archived", f"Item '{data['name']}' archived successfully.\n\nIt has been moved to the Maintenance > Archived Tools vault.", parent=self.winfo_toplevel())
-                        modal.destroy()
-                        self.load_inventory_data()
-                return
-
-            # Multi-unit — ask how many to archive
-            arch_dialog = ctk.CTkToplevel(modal)
-            arch_dialog.title("Partial Archive")
-            arch_dialog.geometry("360x220")
-            arch_dialog.configure(fg_color="white")
-            arch_dialog.attributes("-topmost", True)
-            arch_dialog.grab_set()
-            arch_dialog.update_idletasks()
-            ax = (arch_dialog.winfo_screenwidth() // 2) - 180
-            ay = (arch_dialog.winfo_screenheight() // 2) - 110
-            arch_dialog.geometry(f"+{ax}+{ay}")
-
-            ctk.CTkLabel(arch_dialog, text="How many units to archive?",
-                         font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(pady=(20, 5))
-            ctk.CTkLabel(arch_dialog,
-                         text=f"Available (not deployed): {qty_avail:g}  |  Total: {qty_tot:g}",
-                         font=("Inter", 11), text_color="gray").pack()
-
-            arch_qty_entry = ctk.CTkEntry(arch_dialog, placeholder_text="Enter quantity", width=160, height=36)
-            arch_qty_entry.pack(pady=12)
-            arch_qty_entry.insert(0, "1")
-
-            def confirm_partial_archive():
-                try:
-                    n = float(arch_qty_entry.get())
-                    if n <= 0 or n > qty_avail:
-                        messagebox.showerror("Invalid", f"Enter a value between 1 and {qty_avail:g} (only available units can be archived).", parent=arch_dialog)
-                        return
-                except ValueError:
-                    messagebox.showerror("Invalid", "Please enter a valid number.", parent=arch_dialog)
-                    return
-
-                arch_dialog.destroy()
+                msg = "Restore this item to active inventory?"
+                new_state = 0
+            else:
+                msg = "Archive this item? It will be hidden from active inventory."
+                new_state = 1
+                
+            if messagebox.askyesno("Confirm", msg, parent=modal):
                 conn = get_connection()
-                if not conn:
-                    return
-                try:
+                if conn:
                     cursor = conn.cursor()
-                    new_tot = qty_tot - n
-                    new_avail = qty_avail - n
-                    if new_tot <= 0:
-                        cursor.execute("UPDATE tool SET is_archived=1, archived_at=NOW() WHERE tool_id=%s", (lookup_id,))
-                        cursor.execute("UPDATE inventory SET quantity_total=0, quantity_available=0 WHERE tool_id=%s", (lookup_id,))
-                        action_msg = f"Archived all remaining units of '{data['name']}'"
-                        ui_msg = f"All remaining units of '{data['name']}' have been archived.\n\nThey are now in the Maintenance > Archived Tools vault."
-                    else:
-                        cursor.execute("UPDATE inventory SET quantity_total=%s, quantity_available=%s WHERE tool_id=%s",
-                                       (new_tot, new_avail, lookup_id))
-                        action_msg = f"Partially archived {n:g} unit(s) from '{data['name']}' (PID: {lookup_id})"
-                        ui_msg = f"Partially archived {n:g} unit(s) from '{data['name']}'.\n\nThese units are now in the Maintenance > Archived Tools vault."
+                    cursor.execute("UPDATE tool SET is_archived=%s, archived_at=NOW() WHERE tool_id=%s", (new_state, lookup_id))
                     conn.commit()
+                    cursor.close(); conn.close()
+                    
                     uid = self.user_info.get("user_id")
-                    if uid: log_action(uid, "Archived", "Inventory", action_msg)
-                    messagebox.showinfo("Archived", ui_msg, parent=self.winfo_toplevel())
+                    action_str = "Restored" if new_state == 0 else "Archived"
+                    if uid: log_action(uid, action_str, "Inventory", f"{action_str} item '{data['name']}'")
+                    
                     modal.destroy()
                     self.load_inventory_data()
-                except Exception as e:
-                    messagebox.showerror("Database Error", str(e), parent=modal)
-                finally:
-                    if conn.is_connected(): cursor.close(); conn.close()
-
-            btn_row_a = ctk.CTkFrame(arch_dialog, fg_color="transparent")
-            btn_row_a.pack(fill="x", padx=20)
-            ctk.CTkButton(btn_row_a, text="Archive", fg_color="#D3B8A7", text_color="black",
-                          hover_color="#BFA595", font=("Inter", 12, "bold"),
-                          command=confirm_partial_archive).pack(side="left", expand=True, fill="x", padx=(0, 5))
-            ctk.CTkButton(btn_row_a, text="Cancel", fg_color="#E0E0E0", text_color="black",
-                          hover_color="#CCCCCC", font=("Inter", 12, "bold"),
-                          command=arch_dialog.destroy).pack(side="right", expand=True, fill="x", padx=(5, 0))
+                    
+                    dashboard = self.winfo_toplevel()
+                    if hasattr(dashboard, "show_toast"):
+                        msg_str = "✓ Tool archived and passed to Maintenance." if new_state == 1 else "✓ Tool restored successfully."
+                        dashboard.show_toast(msg_str)
 
         # Modal Focus Traversal
         name_entry.bind("<Return>", lambda e: desc_entry.focus_set())

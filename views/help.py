@@ -279,19 +279,8 @@ class HelpView(ctk.CTkFrame):
                     message TEXT,
                     admin_reply TEXT,
                     status VARCHAR(50) DEFAULT 'Open',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    resolved_at TIMESTAMP NULL DEFAULT NULL,
-                    is_archived TINYINT(1) NOT NULL DEFAULT 0
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )''')
-                # Add new columns to existing help_tickets tables (safe migration)
-                for col_sql in [
-                    "ALTER TABLE help_tickets ADD COLUMN resolved_at TIMESTAMP NULL DEFAULT NULL",
-                    "ALTER TABLE help_tickets ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0",
-                ]:
-                    try:
-                        c.execute(col_sql)
-                    except Exception:
-                        pass
                 conn.commit()
             except Exception as e:
                 print(f"help tables init error: {e}")
@@ -304,6 +293,13 @@ class HelpView(ctk.CTkFrame):
 
         ctk.CTkLabel(top_bar, text="Help & Support Hub", font=("Inter", 20, "bold"), text_color="#1A1A1A").pack(side="left", padx=20)
         ctk.CTkLabel(top_bar, text="Looking to export data? Use the 'Reports' module for PDF generation.", font=("Inter", 11, "italic"), text_color="#3498DB").pack(side="left", padx=10)
+
+        def goto_reports():
+            dash = self.winfo_toplevel()
+            if hasattr(dash, "show_frame"):
+                dash.show_frame("Reports")
+                
+        ctk.CTkButton(top_bar, text="Open Reports ↗", width=110, height=28, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 11, "bold"), command=goto_reports).pack(side="left", padx=10)
 
         tabs = ["Help Guide", "FAQs", "System Requirements", "Support Tickets"]
         self.tab_var = ctk.StringVar(value=tabs[0])
@@ -443,10 +439,14 @@ class HelpView(ctk.CTkFrame):
     def open_guide_modal(self, existing_row=None):
         modal = ctk.CTkToplevel(self)
         modal.title("Edit Guide" if existing_row else "Add Guide")
-        modal.geometry("500x600")
         modal.configure(fg_color="white")
         modal.attributes("-topmost", True)
         modal.grab_set()
+        
+        modal.update_idletasks()
+        x = (modal.winfo_screenwidth() // 2) - (500 // 2)
+        y = (modal.winfo_screenheight() // 2) - (600 // 2)
+        modal.geometry(f"500x600+{x}+{y}")
 
         ctk.CTkLabel(modal, text="Guide Title:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(20, 5))
         title_entry = ctk.CTkEntry(modal, placeholder_text="e.g., How to Issue Tools")
@@ -606,10 +606,14 @@ class HelpView(ctk.CTkFrame):
     def open_faq_modal(self, existing_row=None):
         modal = ctk.CTkToplevel(self)
         modal.title("Edit FAQ" if existing_row else "Add FAQ")
-        modal.geometry("450x450")
         modal.configure(fg_color="white")
         modal.attributes("-topmost", True)
         modal.grab_set()
+        
+        modal.update_idletasks()
+        x = (modal.winfo_screenwidth() // 2) - (450 // 2)
+        y = (modal.winfo_screenheight() // 2) - (450 // 2)
+        modal.geometry(f"450x450+{x}+{y}")
 
         ctk.CTkLabel(modal, text="Question:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(20, 5))
         q_entry = ctk.CTkEntry(modal)
@@ -748,10 +752,14 @@ class HelpView(ctk.CTkFrame):
     def open_sysreq_modal(self, existing_row=None):
         dialog = ctk.CTkToplevel(self.winfo_toplevel())
         dialog.title("Edit Requirement" if existing_row else "Add Requirement")
-        dialog.geometry("450x450")
         dialog.configure(fg_color="white")
         dialog.attributes("-topmost", True)
         dialog.grab_set()
+        
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (450 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (450 // 2)
+        dialog.geometry(f"450x450+{x}+{y}")
 
         ctk.CTkLabel(dialog, text="Requirement Type:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(20, 5))
         type_var = ctk.StringVar(value="Hardware")
@@ -856,21 +864,10 @@ class HelpView(ctk.CTkFrame):
             if not db: return
             try:
                 c = db.cursor(dictionary=True)
-                # Auto-archive resolved tickets older than 30 days
-                try:
-                    c.execute("""
-                        UPDATE help_tickets SET is_archived = 1
-                        WHERE status = 'Resolved' AND resolved_at IS NOT NULL
-                          AND resolved_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
-                          AND is_archived = 0
-                    """)
-                    db.commit()
-                except Exception:
-                    pass
                 if self.is_admin:
-                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id WHERE h.is_archived = 0 ORDER BY h.status ASC, h.created_at DESC")
+                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id ORDER BY h.status ASC, h.created_at DESC")
                 else:
-                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id WHERE h.user_id = %s AND h.is_archived = 0 ORDER BY h.created_at DESC", (self.user_info['user_id'],))
+                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id WHERE h.user_id = %s ORDER BY h.created_at DESC", (self.user_info['user_id'],))
 
                 for t in c.fetchall():
                     card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
@@ -900,7 +897,7 @@ class HelpView(ctk.CTkFrame):
                             if not rep: return
                             cx = get_connection()
                             cur = cx.cursor()
-                            cur.execute("UPDATE help_tickets SET admin_reply = %s, status = 'Resolved', resolved_at = NOW() WHERE ticket_id = %s", (rep, tid))
+                            cur.execute("UPDATE help_tickets SET admin_reply = %s, status = 'Resolved' WHERE ticket_id = %s", (rep, tid))
                             cx.commit(); cur.close(); cx.close()
                             load_ticket_list()
 

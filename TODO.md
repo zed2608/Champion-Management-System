@@ -3,13 +3,13 @@
 ## Implementation Plan (Confirmed per User)
 
 ### Phase 1: Help Module Admin Content Management
-- [ ] **views/help.py** - Add admin content-management mode with "+" action buttons per tab
-  - Add "＋" button on each Help tab header (Guide, FAQs, System Requirements)
-  - For admin only: open modal to add entries (title + bullet lines + admin_only flag for Guide, question + answer for FAQ, category + label + value for System Requirement)
-  - Add admin inline edit/delete controls per rendered guide/faq/spec card
-  - Persist custom additions/edits in DB tables while keeping built-in defaults as fallback
-  - Clarify export behavior: Add note stating PDF export is in Reports module
-  - Optional: Add "Open Reports" shortcut button
+- [x] **views/help.py** - Add admin content-management mode with "+" action buttons per tab
+  - [x] Add "＋" button on each Help tab header (Guide, FAQs, System Requirements)
+  - [x] For admin only: open modal to add entries (title + bullet lines + admin_only flag for Guide, question + answer for FAQ, category + label + value for System Requirement)
+  - [x] Add admin inline edit/delete controls per rendered guide/faq/spec card
+  - [x] Persist custom additions/edits in DB tables while keeping built-in defaults as fallback
+  - [x] Clarify export behavior: Add note stating PDF export is in Reports module
+  - [x] Add "Open Reports" shortcut button
 
 ### Phase 2: Borrow/Return Logs & Validation Hardening  
 - [x] **views/borrowing.py** - Borrow/Return logs modal:
@@ -55,14 +55,14 @@
 
 ### Phase 6: Testing Follow-up
 - [x] Runtime checks on affected modules:
-  - Table clipping and alignment screenshots across modules
-  - Deployment Schedule calendar month-to-month uniformity
-  - Borrow/return validation flows
-  - Help admin add/edit/delete flow and tab "+" controls
-  - Confirm no regressions in Reports export "⎙ Export Now"
+  - [x] Table clipping and alignment screenshots across modules
+  - [x] Deployment Schedule calendar month-to-month uniformity
+  - [x] Borrow/return validation flows
+  - [x] Help admin add/edit/delete flow and tab "+" controls
+  - [x] Confirm no regressions in Reports export "⎙ Export Now"
 
 ## Progress Tracking
-- [ ] Create/update task checklist and mark progress while implementing each item
+- [x] Create/update task checklist and mark progress while implementing each item
 
 ## Already Implemented (From Previous Sessions)
 - [x] Quick Actions row removed from dashboard
@@ -73,5 +73,5 @@
 - [x] Dashboard min window size set to 1350x750
 
 ## Final Validation
-- [ ] Run syntax validation on edited files
-- [ ] Summarize all completed changes
+- [x] Run syntax validation on edited files
+- [x] Summarize all completed changes

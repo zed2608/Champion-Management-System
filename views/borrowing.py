@@ -7,6 +7,7 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta, date as _date
 import calendar as _cal
+import threading
 
 class BorrowingView(ctk.CTkFrame):
     def __init__(self, parent, user_info=None, navigate_to=None, *args, **kwargs):
@@ -502,6 +503,9 @@ class BorrowingView(ctk.CTkFrame):
                       hover_color="#CCCCCC", font=("Inter", 11, "bold"),
                       command=self.load_transaction_history).pack(side="right")
                       
+        self.history_filter = ctk.CTkOptionMenu(top_bar, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Returned", "Overdue", "A-Z (Item)"], width=160, fg_color="#F9FAFB", text_color="black", command=lambda e: self.load_transaction_history())
+        self.history_filter.pack(side="right", padx=(10, 5))
+
         ctk.CTkButton(top_bar, text="📥 Retrieve Tools", width=120, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.open_retrieval_modal).pack(side="right", padx=(5, 10))
         ctk.CTkButton(top_bar, text="📤 Issue Tools", width=110, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 12, "bold"), command=self.open_issuance_modal).pack(side="right", padx=(10, 0))
 
@@ -517,11 +521,10 @@ class BorrowingView(ctk.CTkFrame):
         table_inner = ctk.CTkFrame(self.data_scroll, fg_color="transparent")
         table_inner.pack(fill="x", expand=True)
 
-        headers = ["Type", "Item Name", "Tag ID", "Qty", "Assignee", "Date & Time", "Status"]
+        headers = ["Type", "Item Name", "Tag ID", "Qty", "Assignee", "Date Issued", "Due / Returned", "Status"]
         
-        # Dynamic Proportions to ensure important columns (Name, Assignee, Date) don't get squished
-        weights = [1, 3, 2, 1, 2, 3, 1]
-        min_sizes = [60, 160, 100, 50, 120, 160, 80]
+        weights = [1, 2, 1, 1, 2, 2, 2, 1]
+        min_sizes = [60, 140, 80, 50, 100, 130, 140, 80]
 
         # Enforce exact column alignment and boundaries
         for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
@@ -534,83 +537,147 @@ class BorrowingView(ctk.CTkFrame):
             lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
+        loading_lbl = ctk.CTkLabel(table_inner, text="Fetching transaction history, please wait...", text_color="gray", font=("Inter", 12, "italic"))
+        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
+
         search_q = self.search_entry.get().strip()
-        conn = get_connection()
-        if not conn: return
+        filter_val = self.history_filter.get() if hasattr(self, "history_filter") else "Latest"
         
-        try:
-            cursor = conn.cursor(dictionary=True)
-            query = """
-                SELECT tr.type, t.name as tool_name, t.tag_id, COUNT(tr.transaction_id) as grouped_qty,
-                       u.full_name, tr.status,
-                       DATE_FORMAT(DATE_ADD(MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as b_date,
-                       MIN(tr.transaction_id) as first_trn,
-                       MAX(tr.transaction_id) as last_trn,
-                       IFNULL(MAX(tr.purpose), '—') as purpose,
-                       MAX(tr.project_id) as project_id,
-                       u.user_id as uid
-                FROM transaction tr
-                JOIN tool t ON tr.tool_id = t.tool_id
-                JOIN user u ON tr.user_id = u.user_id
-            """
-            group_by = " GROUP BY tr.type, t.name, t.tag_id, u.full_name, u.user_id, tr.status"
-            order_by = " ORDER BY MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)) DESC LIMIT 50"
-            
-            if search_q:
-                query += " WHERE u.full_name LIKE %s OR t.tag_id LIKE %s OR t.name LIKE %s"
-                query += group_by + order_by
-                cursor.execute(query, (f"%{search_q}%", f"%{search_q}%", f"%{search_q}%"))
-            else:
-                query += group_by + order_by
-                cursor.execute(query)
-
-            results = cursor.fetchall()
-            
-            if not results:
-                ctk.CTkLabel(table_inner, text="No transactions found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+        def fetch_data():
+            conn = get_connection()
+            if not conn:
+                self.after(0, lambda: self._render_transaction_history(None, table_inner, loading_lbl, headers, min_sizes))
                 return
-
-            for i, row in enumerate(results):
-                display_data = [
-                    row['type'], row['tool_name'],
-                    row['tag_id'] if row['tag_id'] else "Unassigned",
-                    str(row['grouped_qty']), row['full_name'], row['b_date'], row['status']
-                ]
+            
+            try:
+                cursor = conn.cursor(dictionary=True)
+                query = """
+                    SELECT tr.type, t.name as tool_name, t.tag_id, COUNT(tr.transaction_id) as grouped_qty,
+                           u.full_name, tr.status,
+                           DATE_FORMAT(DATE_ADD(MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as b_date,
+                           DATE_FORMAT(DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as borrow_date_full,
+                           DATE_FORMAT(DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR), '%b %d, %Y') as borrow_date_short,
+                           DATE_FORMAT(DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as return_date_full,
+                           DATE_FORMAT(DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR), '%b %d, %Y') as return_date_short,
+                           MIN(tr.transaction_id) as first_trn,
+                           MAX(tr.transaction_id) as last_trn,
+                           IFNULL(MAX(tr.purpose), '—') as purpose,
+                           MAX(tr.project_id) as project_id,
+                           u.user_id as uid,
+                           MAX(p.end_date) as due_date
+                    FROM transaction tr
+                    JOIN tool t ON tr.tool_id = t.tool_id
+                    JOIN user u ON tr.user_id = u.user_id
+                    LEFT JOIN projects p ON tr.project_id = p.project_id
+                """
+                group_by = " GROUP BY tr.type, t.name, t.tag_id, u.full_name, u.user_id, tr.status"
+                where_clauses = []
+                params = []
                 
-                r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
-
-                for col, val in enumerate(display_data):
-                    cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
-                    cell.grid(row=r_idx, column=col, sticky="nsew")
-
-                    txt_color = "#1A1A1A"
-                    font_w = "normal"
-                    if col == 6:
-                        if val == "Active":
-                            txt_color = "#D8000C"
-                        elif val == "Consumed":
-                            txt_color = "#8E44AD"
-                        else:
-                            txt_color = "#2ECC71"
-                        font_w = "bold"
-                    elif col == 2 and val == "Unassigned":
-                        txt_color = "#D8000C"
-                        font_w = "bold"
+                if search_q:
+                    where_clauses.append("(u.full_name LIKE %s OR t.tag_id LIKE %s OR t.name LIKE %s)")
+                    params.extend([f"%{search_q}%", f"%{search_q}%", f"%{search_q}%"])
                     
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
-                    
-                    # High-performance static wrapping
-                    lbl.configure(wraplength=min_sizes[col] - 10)
+                if filter_val == "All Active":
+                    where_clauses.append("tr.status = 'Active'")
+                elif filter_val == "All Returned":
+                    where_clauses.append("tr.status = 'Returned'")
+                elif filter_val == "Overdue":
+                    where_clauses.append("tr.status = 'Active' AND p.end_date < CURDATE()")
+                elif filter_val == "Issue (Type)":
+                    where_clauses.append("tr.type = 'Issue'")
+                elif filter_val == "Retrieval (Type)":
+                    where_clauses.append("tr.type = 'Retrieval'")
 
-                    lbl.pack(fill="both", expand=True, padx=4, pady=12)
-
-                    # Binds whole cell & text to open the modal
-                    cell.bind("<Button-1>", lambda e, r=row: self.open_transaction_modal(r))
-                    lbl.bind("<Button-1>", lambda e, r=row: self.open_transaction_modal(r))
+                if where_clauses:
+                    query += " WHERE " + " AND ".join(where_clauses)
                     
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
+                query += group_by
+                
+                if filter_val == "A-Z (Item)":
+                    query += " ORDER BY t.name ASC LIMIT 50"
+                else:
+                    query += " ORDER BY MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)) DESC LIMIT 50"
+
+                cursor.execute(query, tuple(params))
+                results = cursor.fetchall()
+                
+                self.after(0, lambda: self._render_transaction_history(results, table_inner, loading_lbl, headers, min_sizes))
+            except Exception as e:
+                print(f"Transaction Fetch Error: {e}")
+                self.after(0, lambda: self._render_transaction_history(None, table_inner, loading_lbl, headers, min_sizes))
+            finally:
+                if conn.is_connected(): cursor.close(); conn.close()
+                
+        threading.Thread(target=fetch_data, daemon=True).start()
+
+    def _render_transaction_history(self, results, table_inner, loading_lbl, headers, min_sizes):
+        if not self.winfo_exists() or not table_inner.winfo_exists():
+            return
+            
+        loading_lbl.destroy()
+        
+        if results is None:
+            ctk.CTkLabel(table_inner, text="Failed to load transactions.", text_color="red").grid(row=1, column=0, columnspan=len(headers), pady=20)
+            return
+            
+        if not results:
+            ctk.CTkLabel(table_inner, text="No transactions found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+            return
+
+        for i, row in enumerate(results):
+            due_ret_text = "—"
+            due_ret_color = "#1A1A1A"
+            due_font_w = "normal"
+
+            if row['status'] == 'Active':
+                if row['due_date']:
+                    due_date = row['due_date']
+                    due_ret_text = f"Due: {due_date.strftime('%b %d, %Y')}"
+                    if due_date < _date.today():
+                        due_ret_text = f"Overdue: {due_date.strftime('%b %d, %Y')}"
+                        due_ret_color = "#D8000C"
+                        due_font_w = "bold"
+                else:
+                    due_ret_text = "No Due Date"
+            else: 
+                due_ret_text = f"Ret: {row['return_date_short']}" if row['return_date_short'] else "Returned"
+                due_ret_color = "#2ECC71"
+
+            display_data = [
+                row['type'], row['tool_name'],
+                row['tag_id'] if row['tag_id'] else "Unassigned",
+                str(row['grouped_qty']), row['full_name'], 
+                row['borrow_date_short'], due_ret_text, row['status']
+            ]
+            
+            r_idx = i + 1
+            bg = "#F9FAFB" if i % 2 == 0 else "white"
+
+            for col, val in enumerate(display_data):
+                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
+                cell.grid(row=r_idx, column=col, sticky="nsew")
+
+                txt_color = "#1A1A1A"
+                font_w = "normal"
+                if col == 7: # Status
+                    txt_color = "#D8000C" if val == "Active" else "#2ECC71"
+                    font_w = "bold"
+                elif col == 6: # Due/Returned
+                    txt_color = due_ret_color
+                    font_w = due_font_w
+                elif col == 2 and val == "Unassigned":
+                    txt_color = "#D8000C"
+                    font_w = "bold"
+                
+                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
+                
+                lbl.configure(wraplength=min_sizes[col] - 10)
+
+                lbl.pack(fill="both", expand=True, padx=4, pady=12)
+
+                cell.bind("<Button-1>", lambda e, r=row: self.open_transaction_modal(r))
+                lbl.bind("<Button-1>", lambda e, r=row: self.open_transaction_modal(r))
 
     def open_transaction_modal(self, row):
         trn_label = (f"TRN-{row['first_trn']}–{row['last_trn']}"
@@ -651,6 +718,11 @@ class BorrowingView(ctk.CTkFrame):
         status_color = "#D8000C" if row['status'] == "Active" else "#2ECC71"
         detail_row("Type:",       row['type'])
         detail_row("Date/Time:",  row['b_date'])
+        detail_row("Issued On:",  row['borrow_date_full'])
+        if row['status'] == 'Active':
+            detail_row("Due Date:", row['due_date'].strftime('%b %d, %Y') if row.get('due_date') else "No Due Date")
+        else:
+            detail_row("Retrieved On:", row['return_date_full'] if row.get('return_date_full') else "—")
         detail_row("Assignee:",   row['full_name'])
         detail_row("Purpose:",    row['purpose'])
         detail_row("Status:",     row['status'], val_color=status_color)
@@ -1289,8 +1361,10 @@ class BorrowingView(ctk.CTkFrame):
             else:
                 cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
                 
+            cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
             cursor.execute("UPDATE tool SET `condition` = %s WHERE tool_id = %s", (new_cond, self.active_return_tool_id))
             conn.commit()
+            messagebox.showinfo("Success", f"Successfully retrieved {return_qty} item(s) and restocked inventory!", parent=self.retrieval_modal)
             
             msg = f"Successfully retrieved {return_qty:g} item(s)!"
             if new_cond == "Lost":

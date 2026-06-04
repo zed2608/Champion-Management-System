@@ -4,6 +4,7 @@ from database import get_connection, log_action
 from datetime import datetime
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
+import difflib
 
 class ProjectsView(ctk.CTkFrame):
     def __init__(self, parent, user_info):
@@ -67,7 +68,7 @@ class ProjectsView(ctk.CTkFrame):
         self.draft_modal.update_idletasks()
         x = (self.draft_modal.winfo_screenwidth() // 2) - (500 // 2)
         y = (self.draft_modal.winfo_screenheight() // 2) - (750 // 2)
-        self.draft_modal.geometry(f"+{x}+{y}")
+        self.draft_modal.geometry(f"500x750+{x}+{y}")
         
         form_card = ctk.CTkScrollableFrame(self.draft_modal, fg_color="white", corner_radius=0)
         form_card.pack(fill="both", expand=True)
@@ -228,7 +229,7 @@ class ProjectsView(ctk.CTkFrame):
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - (900 // 2)
         y = (modal.winfo_screenheight() // 2) - (600 // 2)
-        modal.geometry(f"+{x}+{y}")
+        modal.geometry(f"900x600+{x}+{y}")
 
         ctk.CTkLabel(modal, text="Select Items for Project Requisition", font=("Inter", 16, "bold"), text_color="black").pack(pady=(20, 5))
         ctk.CTkLabel(modal, text="Search by Name or PID, then set quantity and click + Add.", font=("Inter", 11), text_color="gray").pack(pady=(0, 10))
@@ -455,6 +456,34 @@ class ProjectsView(ctk.CTkFrame):
             cursor = conn.cursor()
             editing_id = getattr(self, "editing_project_id", None)
             
+            # --- DUPLICATE & TYPO CHECK ---
+            cursor.execute("SELECT project_id, name FROM projects WHERE archived_at IS NULL")
+            existing_projects = cursor.fetchall()
+            exact_match = False
+            similar_names = []
+            
+            for ep in existing_projects:
+                ep_id, ep_name = ep[0], ep[1]
+                if editing_id and ep_id == editing_id:
+                    continue
+                    
+                if ep_name.lower() == name.lower():
+                    exact_match = True
+                    break
+                if difflib.SequenceMatcher(None, name.lower(), ep_name.lower()).ratio() > 0.85:
+                    similar_names.append(ep_name)
+                    
+            if exact_match:
+                messagebox.showerror("Duplicate Name", f"An active project named '{name}' already exists.", parent=self.draft_modal)
+                return
+                
+            if similar_names:
+                sim_list = "\n".join([f"• {sn}" for sn in similar_names[:3]])
+                msg = f"Similar active project names already exist:\n\n{sim_list}\n\nAre you sure you want to save '{name}'?"
+                if not messagebox.askyesno("Similar Name Detected", msg, parent=self.draft_modal):
+                    return
+            # -----------------------------
+
             if editing_id:
                 old_status = getattr(self, "editing_project_status", "Pending")
                 new_status = old_status.replace(' (OVERDUE)', '')
@@ -490,11 +519,7 @@ class ProjectsView(ctk.CTkFrame):
             conn.commit()
             if self.user_info.get("user_id"): log_action(self.user_info['user_id'], action_text, "Projects", f"{action_text} project '{name}' (ID: {project_id}).")
 
-            if action_text == "Submitted":
-                msg = f"Project '{name}' successfully submitted!\n\nIt has been routed to Project Management for Admin approval."
-            else:
-                msg = f"Project '{name}' successfully updated!"
-            messagebox.showinfo("Success", msg, parent=self.draft_modal)
+            messagebox.showinfo("Success", f"Project successfully {action_text.lower()}!", parent=self.draft_modal)
 
             self.p_name.delete(0, 'end'); self.p_desc.delete("1.0", "end")
             self.p_head.delete(0, 'end'); self.p_client.delete(0, 'end')
@@ -629,31 +654,6 @@ class ProjectsView(ctk.CTkFrame):
         finally:
             if conn.is_connected(): cursor.close(); conn.close()
 
-    def open_project_by_id(self, project_id):
-        conn = get_connection()
-        if not conn: return
-        try:
-            cursor = conn.cursor(dictionary=True)
-            sql = '''
-                SELECT p.*, a.full_name as admin_approver,
-                       CASE
-                           WHEN p.status IN ('Approved', 'Ongoing') AND p.end_date < CURDATE() THEN CONCAT(p.status, ' (OVERDUE)')
-                           ELSE p.status
-                       END as display_status
-                FROM projects p
-                LEFT JOIN user a ON p.approved_by = a.user_id
-                WHERE p.archived_at IS NULL AND p.project_id = %s
-            '''
-            cursor.execute(sql, (project_id,))
-            row = cursor.fetchone()
-            if row:
-                row["status"] = row["display_status"]
-                self.open_project_modal(row)
-            else:
-                messagebox.showerror("Not Found", "Project not found or has been archived.", parent=self.winfo_toplevel())
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
-
     def open_project_modal(self, row):
         modal = ctk.CTkToplevel(self)
         modal.title(f"Project Overview: {row['name']}")
@@ -664,7 +664,7 @@ class ProjectsView(ctk.CTkFrame):
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - (650 // 2)
         y = (modal.winfo_screenheight() // 2) - (750 // 2)
-        modal.geometry(f"+{x}+{y}")
+        modal.geometry(f"650x750+{x}+{y}")
 
         ctk.CTkLabel(modal, text=row['name'], font=("Inter", 18, "bold"), text_color="black").pack(pady=(20, 3))
         status_color = "#D35400" if row['status'] == "Pending" else "#2ECC71"
@@ -731,26 +731,6 @@ class ProjectsView(ctk.CTkFrame):
             if new_status == 'Approved' and has_warnings:
                 msg = "⚠️ WARNING: Tools are deployed elsewhere. Approve anyway?"
                 
-            if new_status == 'Completed':
-                conn = get_connection()
-                unreturned_count = 0
-                if conn:
-                    try:
-                        c = conn.cursor()
-                        c.execute("""
-                            SELECT COUNT(*) 
-                            FROM transaction tr
-                            JOIN tool t ON tr.tool_id = t.tool_id
-                            WHERE tr.project_id = %s AND tr.status = 'Active' AND t.item_type = 'Equipment'
-                        """, (row['project_id'],))
-                        unreturned_count = c.fetchone()[0]
-                    except Exception:
-                        pass
-                    finally:
-                        c.close(); conn.close()
-                if unreturned_count > 0:
-                    return messagebox.showerror("Action Blocked", f"Cannot complete project.\n\nThere are still {unreturned_count} equipment tool(s) actively deployed to this project.\nAll tools must be retrieved or reported as Lost/Damaged first.", parent=modal)
-
             if messagebox.askyesno("Confirm Status", msg, parent=modal):
                 conn = get_connection()
                 if conn:
@@ -759,16 +739,6 @@ class ProjectsView(ctk.CTkFrame):
                         c.execute("UPDATE projects SET status=%s, approved_by=%s WHERE project_id=%s", (new_status, self.user_info['user_id'], row['project_id']))
                     else:
                         c.execute("UPDATE projects SET status=%s WHERE project_id=%s", (new_status, row['project_id']))
-                    
-                    if new_status == 'Completed':
-                        # Auto-consume all remaining active consumables tied to this project
-                        c.execute("""
-                            UPDATE transaction tr
-                            INNER JOIN tool t ON tr.tool_id = t.tool_id
-                            SET tr.status = 'Consumed', tr.return_date = NOW(), tr.condition_at_return = 'Consumed'
-                            WHERE tr.project_id = %s AND tr.status = 'Active' AND t.item_type = 'Consumable'
-                        """, (row['project_id'],))
-                        
                     conn.commit()
                     c.close(); conn.close()
                     if self.user_info.get("user_id"): log_action(self.user_info['user_id'], "Updated", "Projects", f"Project '{row['name']}' status changed to {new_status}.")
@@ -814,27 +784,15 @@ class ProjectsView(ctk.CTkFrame):
         ctk.CTkButton(btn_frame, text="Close", width=70, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=modal.destroy).pack(side="right", padx=5)
 
     def archive_project(self, project_id, project_name, modal):
+        if not messagebox.askyesno("Confirm Archive", f"Archive project '{project_name}' to the archive vault?\n\nIt will be moved to Maintenance > Archived Projects.", parent=modal):
+            return
+        
         conn = get_connection()
         if not conn:
             return
         
         try:
             cursor = conn.cursor()
-            
-            # Prevent archiving if there are actively deployed tools
-            cursor.execute("""
-                SELECT COUNT(*) 
-                FROM transaction tr
-                JOIN tool t ON tr.tool_id = t.tool_id
-                WHERE tr.project_id = %s AND tr.status = 'Active' AND t.item_type = 'Equipment'
-            """, (project_id,))
-            unreturned_count = cursor.fetchone()[0]
-            if unreturned_count > 0:
-                return messagebox.showerror("Action Blocked", f"Cannot archive project.\n\nThere are still {unreturned_count} equipment tool(s) actively deployed to this project.\nAll tools must be retrieved or reported as Lost/Damaged first.", parent=modal)
-                
-            if not messagebox.askyesno("Confirm Archive", f"Archive project '{project_name}' to the archive vault?\n\nIt will be moved to Maintenance > Archived Projects.", parent=modal):
-                return
-            
             cursor.execute("""UPDATE projects SET archived_at = NOW() WHERE project_id = %s""", (project_id,))
             conn.commit()
             
@@ -842,9 +800,12 @@ class ProjectsView(ctk.CTkFrame):
             if uid:
                 log_action(uid, "Archived", "Projects", f"Archived project '{project_name}' (PID: {project_id})")
             
-            messagebox.showinfo("Archived", f"Project '{project_name}' has been archived and moved to the Maintenance module.", parent=modal)
             modal.destroy()
             self.load_projects()
+            
+            dashboard = self.winfo_toplevel()
+            if hasattr(dashboard, "show_toast"):
+                dashboard.show_toast(f"✓ Project '{project_name}' archived.")
         except Exception as e:
             messagebox.showerror("Database Error", str(e), parent=modal)
         finally:
