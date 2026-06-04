@@ -8,11 +8,12 @@ from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta, date as _date
 import calendar as _cal
 
-class BorrowingView(ctk.CTkFrame): 
-    def __init__(self, parent, user_info=None, *args, **kwargs):
+class BorrowingView(ctk.CTkFrame):
+    def __init__(self, parent, user_info=None, navigate_to=None, *args, **kwargs):
         super().__init__(parent, fg_color="transparent")
-        
+
         self.user_info = user_info or {}
+        self.navigate_to = navigate_to
         
         self.grid_columnconfigure(0, weight=1) 
         self.grid_rowconfigure(0, weight=0) # Top Bar
@@ -301,7 +302,13 @@ class BorrowingView(ctk.CTkFrame):
             ctk.CTkLabel(pcard, text=dates_txt,
                          font=("Inter", 9), text_color="#AAAAAA").pack(anchor="w", padx=10)
             ctk.CTkLabel(pcard, text=p["status"],
-                         font=("Inter", 10, "bold"), text_color=color).pack(anchor="w", padx=10, pady=(2, 8))
+                         font=("Inter", 10, "bold"), text_color=color).pack(anchor="w", padx=10, pady=(2, 4))
+            if self.navigate_to:
+                ctk.CTkButton(pcard, text="→ View Project", width=120, height=26,
+                              fg_color="#1E4528", hover_color="#14301C",
+                              font=("Inter", 10, "bold"),
+                              command=lambda pid=p["project_id"]: self.navigate_to(pid)
+                              ).pack(anchor="w", padx=10, pady=(0, 8))
 
     # ── Navigation callbacks ───────────────────────────────────
     def _cal_prev(self):

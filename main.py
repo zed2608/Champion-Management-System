@@ -79,7 +79,7 @@ class LoginApp(ctk.CTk):
         
         # Intercept scanner carriage return to drop focus instantly to password
         self.user_entry.bind("<Return>", lambda e: self.pass_entry.focus_set())
-        self.user_entry.bind("<KeyRelease>", lambda e: self.format_emp_id(e, self.user_entry))
+        self.user_entry.bind("<KeyRelease>", lambda e: (self.format_emp_id(e, self.user_entry), self.login_button.configure(state="normal", text="Login")))
         
         # Set window focus to this entry field immediately upon application startup
         self.user_entry.focus_set()
@@ -248,7 +248,7 @@ class LoginApp(ctk.CTk):
 
             if user.get("status") == "Locked":
                 self.show_error("Account Locked. Please contact Admin.")
-                self.login_button.configure(state="normal", text="Login")
+                self.login_button.configure(state="disabled", text="Locked")
                 return
 
             if bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
@@ -265,12 +265,13 @@ class LoginApp(ctk.CTk):
                 conn.commit()
                 self.show_error("Account Locked: Maximum attempts reached.")
                 messagebox.showwarning("Account Locked", "Too many failed attempts. Your account has been locked. Please request a password reset.", parent=self)
+                self.login_button.configure(state="disabled", text="Locked")
             else:
                 cursor.execute("UPDATE user SET failed_attempts = %s WHERE user_id = %s", (failed_attempts, user['user_id']))
                 conn.commit()
                 self.show_error(
                     f"Invalid Credentials. {3 - failed_attempts} attempt(s) left.")
-            self.login_button.configure(state="normal", text="Login")
+                self.login_button.configure(state="normal", text="Login")
         except Exception as e:
             self.show_error(f"System Error: {e}")
             self.login_button.configure(state="normal", text="Login")

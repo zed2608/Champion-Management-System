@@ -98,9 +98,22 @@ class RoleManagementView(ctk.CTkFrame):
         else:
             ctk.CTkLabel(self._reg_bottom, text="Password *",
                          font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
-            self.reg_pass = ctk.CTkEntry(self._reg_bottom,
-                                         placeholder_text="Min. 8 characters", show="•")
-            self.reg_pass.pack(fill="x", padx=20, pady=(5, 4))
+            pass_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
+            pass_row.pack(fill="x", padx=20, pady=(5, 4))
+            self.reg_pass = ctk.CTkEntry(pass_row, placeholder_text="Min. 8 characters", show="•")
+            self.reg_pass.pack(side="left", fill="x", expand=True, padx=(0, 5))
+            self._show_pass = False
+            eye_pass = ctk.CTkButton(pass_row, text="👁", width=38, height=38,
+                                     fg_color="#F3F4F6", text_color="#4B5563",
+                                     hover_color="#E5E7EB", corner_radius=6,
+                                     font=("Inter", 14))
+            eye_pass.pack(side="left")
+
+            def _toggle_pass():
+                self._show_pass = not self._show_pass
+                self.reg_pass.configure(show="" if self._show_pass else "•")
+                eye_pass.configure(text="✕" if self._show_pass else "👁")
+            eye_pass.configure(command=_toggle_pass)
 
             # ── Password strength criteria ──────────────────────
             strength_frame = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
@@ -129,9 +142,22 @@ class RoleManagementView(ctk.CTkFrame):
 
             ctk.CTkLabel(self._reg_bottom, text="Confirm Password *",
                          font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
-            self.reg_confirm = ctk.CTkEntry(self._reg_bottom,
-                                            placeholder_text="Re-enter password", show="•")
-            self.reg_confirm.pack(fill="x", padx=20, pady=(5, 10))
+            confirm_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
+            confirm_row.pack(fill="x", padx=20, pady=(5, 10))
+            self.reg_confirm = ctk.CTkEntry(confirm_row, placeholder_text="Re-enter password", show="•")
+            self.reg_confirm.pack(side="left", fill="x", expand=True, padx=(0, 5))
+            self._show_confirm = False
+            eye_confirm = ctk.CTkButton(confirm_row, text="👁", width=38, height=38,
+                                        fg_color="#F3F4F6", text_color="#4B5563",
+                                        hover_color="#E5E7EB", corner_radius=6,
+                                        font=("Inter", 14))
+            eye_confirm.pack(side="left")
+
+            def _toggle_confirm():
+                self._show_confirm = not self._show_confirm
+                self.reg_confirm.configure(show="" if self._show_confirm else "•")
+                eye_confirm.configure(text="✕" if self._show_confirm else "👁")
+            eye_confirm.configure(command=_toggle_confirm)
 
         btn_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(15, 20))

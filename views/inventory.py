@@ -227,10 +227,14 @@ class InventoryView(ctk.CTkFrame):
                        IFNULL(t.category, 'Uncategorized') as category,
                        IFNULL(t.supplier, 'N/A') as supplier,
                        t.tag_id,
-                       (SELECT p.name FROM transaction tr 
-                        JOIN projects p ON tr.project_id = p.project_id 
-                        WHERE tr.tool_id = t.tool_id AND tr.status = 'Active' 
-                        LIMIT 1) as active_project
+                       (SELECT p.name FROM transaction tr
+                        JOIN projects p ON tr.project_id = p.project_id
+                        WHERE tr.tool_id = t.tool_id AND tr.status = 'Active'
+                        LIMIT 1) as active_project,
+                       (SELECT p.end_date < CURDATE() FROM transaction tr
+                        JOIN projects p ON tr.project_id = p.project_id
+                        WHERE tr.tool_id = t.tool_id AND tr.status = 'Active'
+                        LIMIT 1) as is_overdue
                 FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id
                 WHERE t.is_archived = %s
             """
@@ -269,7 +273,11 @@ class InventoryView(ctk.CTkFrame):
                 
                 display_loc = row['base_location']
                 if row.get('active_project') and float(row['qty_avail']) < float(row['qty_tot']):
-                    display_loc = f"Deployed: {row['active_project']}"
+                    is_overdue_inv = bool(row.get('is_overdue', 0)) and row.get('item_type') == 'Equipment'
+                    if is_overdue_inv:
+                        display_loc = f"⚠ OVERDUE"
+                    else:
+                        display_loc = f"Deployed: {row['active_project']}"
 
                 tag_display = row['tag_id'] if row['tag_id'] else "Unassigned"
                 vals = [
@@ -291,14 +299,16 @@ class InventoryView(ctk.CTkFrame):
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
                     txt_col = "#1A1A1A"
-                    if col == 6 and "Deployed:" in val: 
+                    if col == 6 and "⚠ OVERDUE" in val:
+                        txt_col = "#C0392B"
+                    elif col == 6 and "Deployed:" in val:
                         txt_col = "#2980B9"
-                    elif col == 1 and val == "Consumable": 
+                    elif col == 1 and val == "Consumable":
                         txt_col = "#D37F00"
                     elif col == 3 and val == "Unassigned":
                         txt_col = "#D8000C"
-                        
-                    font_w = "bold" if col == 1 or col == 3 or (col == 6 and "Deployed:" in val) else "normal"
+
+                    font_w = "bold" if col == 1 or col == 3 or (col == 6 and ("Deployed:" in val or "OVERDUE" in val)) else "normal"
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
                     
@@ -435,7 +445,25 @@ class InventoryView(ctk.CTkFrame):
 
         name_entry = create_modal_row(form_scroll, "Name", data['name'])
         desc_entry = create_modal_row(form_scroll, "Description", data['description'])
-        cat_entry = create_modal_row(form_scroll, "Category", data['category'])
+        cat_frame = ctk.CTkFrame(form_scroll, fg_color="transparent")
+        cat_frame.pack(fill="x", pady=4)
+        ctk.CTkLabel(cat_frame, text="Category", width=90, anchor="w", font=("Inter", 11, "bold"), text_color="gray").pack(side="left")
+        _cat_conn = get_connection()
+        _cat_vals = ["Tools", "Measuring", "Power Tools", "Consumables"]
+        if _cat_conn:
+            try:
+                _c = _cat_conn.cursor()
+                _c.execute("SELECT DISTINCT category FROM tool WHERE category IS NOT NULL AND category != 'Uncategorized' AND category != ''")
+                _fetched = [row[0] for row in _c.fetchall()]
+                if _fetched:
+                    _cat_vals = _fetched
+            except Exception:
+                pass
+            finally:
+                if _cat_conn.is_connected(): _c.close(); _cat_conn.close()
+        cat_entry = ctk.CTkComboBox(cat_frame, values=_cat_vals, fg_color="#F9FAFB", text_color="black")
+        cat_entry.pack(side="left", fill="x", expand=True)
+        cat_entry.set(data['category'] or "")
         sup_entry = create_modal_row(form_scroll, "Supplier", data['supplier'])
         
         # --- FIX C: Added Missing Price Field ---
@@ -646,26 +674,103 @@ class InventoryView(ctk.CTkFrame):
 
         def execute_archive():
             if is_arch:
-                msg = "Restore this item to active inventory?"
-                new_state = 0
-            else:
-                msg = "Archive this item? It will be hidden from active inventory."
-                new_state = 1
-                
-            if messagebox.askyesno("Confirm", msg, parent=modal):
+                if messagebox.askyesno("Confirm Restore", "Restore this item to active inventory?", parent=modal):
+                    conn = get_connection()
+                    if conn:
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE tool SET is_archived=0, archived_at=NULL WHERE tool_id=%s", (lookup_id,))
+                        conn.commit()
+                        cursor.close(); conn.close()
+                        uid = self.user_info.get("user_id")
+                        if uid: log_action(uid, "Restored", "Inventory", f"Restored item '{data['name']}'")
+                        modal.destroy()
+                        self.load_inventory_data()
+                return
+
+            qty_avail = float(data['qty_avail'])
+            qty_tot   = float(data['qty_tot'])
+
+            if qty_tot <= 1:
+                # Single unit — archive the whole record
+                if messagebox.askyesno("Confirm Archive", "Archive this item? It will be hidden from active inventory.", parent=modal):
+                    conn = get_connection()
+                    if conn:
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE tool SET is_archived=1, archived_at=NOW() WHERE tool_id=%s", (lookup_id,))
+                        conn.commit()
+                        cursor.close(); conn.close()
+                        uid = self.user_info.get("user_id")
+                        if uid: log_action(uid, "Archived", "Inventory", f"Archived item '{data['name']}'")
+                        modal.destroy()
+                        self.load_inventory_data()
+                return
+
+            # Multi-unit — ask how many to archive
+            arch_dialog = ctk.CTkToplevel(modal)
+            arch_dialog.title("Partial Archive")
+            arch_dialog.geometry("360x220")
+            arch_dialog.configure(fg_color="white")
+            arch_dialog.attributes("-topmost", True)
+            arch_dialog.grab_set()
+            arch_dialog.update_idletasks()
+            ax = (arch_dialog.winfo_screenwidth() // 2) - 180
+            ay = (arch_dialog.winfo_screenheight() // 2) - 110
+            arch_dialog.geometry(f"+{ax}+{ay}")
+
+            ctk.CTkLabel(arch_dialog, text="How many units to archive?",
+                         font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(pady=(20, 5))
+            ctk.CTkLabel(arch_dialog,
+                         text=f"Available (not deployed): {qty_avail:g}  |  Total: {qty_tot:g}",
+                         font=("Inter", 11), text_color="gray").pack()
+
+            arch_qty_entry = ctk.CTkEntry(arch_dialog, placeholder_text="Enter quantity", width=160, height=36)
+            arch_qty_entry.pack(pady=12)
+            arch_qty_entry.insert(0, "1")
+
+            def confirm_partial_archive():
+                try:
+                    n = float(arch_qty_entry.get())
+                    if n <= 0 or n > qty_avail:
+                        messagebox.showerror("Invalid", f"Enter a value between 1 and {qty_avail:g} (only available units can be archived).", parent=arch_dialog)
+                        return
+                except ValueError:
+                    messagebox.showerror("Invalid", "Please enter a valid number.", parent=arch_dialog)
+                    return
+
+                arch_dialog.destroy()
                 conn = get_connection()
-                if conn:
+                if not conn:
+                    return
+                try:
                     cursor = conn.cursor()
-                    cursor.execute("UPDATE tool SET is_archived=%s, archived_at=NOW() WHERE tool_id=%s", (new_state, lookup_id))
+                    new_tot = qty_tot - n
+                    new_avail = qty_avail - n
+                    if new_tot <= 0:
+                        cursor.execute("UPDATE tool SET is_archived=1, archived_at=NOW() WHERE tool_id=%s", (lookup_id,))
+                        cursor.execute("UPDATE inventory SET quantity_total=0, quantity_available=0 WHERE tool_id=%s", (lookup_id,))
+                        action_msg = f"Archived all remaining units of '{data['name']}'"
+                    else:
+                        cursor.execute("UPDATE inventory SET quantity_total=%s, quantity_available=%s WHERE tool_id=%s",
+                                       (new_tot, new_avail, lookup_id))
+                        action_msg = f"Partially archived {n:g} unit(s) from '{data['name']}' (PID: {lookup_id})"
                     conn.commit()
-                    cursor.close(); conn.close()
-                    
                     uid = self.user_info.get("user_id")
-                    action_str = "Restored" if new_state == 0 else "Archived"
-                    if uid: log_action(uid, action_str, "Inventory", f"{action_str} item '{data['name']}'")
-                    
+                    if uid: log_action(uid, "Archived", "Inventory", action_msg)
                     modal.destroy()
                     self.load_inventory_data()
+                except Exception as e:
+                    messagebox.showerror("Database Error", str(e), parent=modal)
+                finally:
+                    if conn.is_connected(): cursor.close(); conn.close()
+
+            btn_row_a = ctk.CTkFrame(arch_dialog, fg_color="transparent")
+            btn_row_a.pack(fill="x", padx=20)
+            ctk.CTkButton(btn_row_a, text="Archive", fg_color="#D3B8A7", text_color="black",
+                          hover_color="#BFA595", font=("Inter", 12, "bold"),
+                          command=confirm_partial_archive).pack(side="left", expand=True, fill="x", padx=(0, 5))
+            ctk.CTkButton(btn_row_a, text="Cancel", fg_color="#E0E0E0", text_color="black",
+                          hover_color="#CCCCCC", font=("Inter", 12, "bold"),
+                          command=arch_dialog.destroy).pack(side="right", expand=True, fill="x", padx=(5, 0))
 
         # Modal Focus Traversal
         name_entry.bind("<Return>", lambda e: desc_entry.focus_set())

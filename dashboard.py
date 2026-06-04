@@ -367,7 +367,7 @@ class DashboardApp(ctk.CTkToplevel):
         elif page_name == "Products / Inventory":
             self.current_frame = InventoryView(self.main_container, self.user_info)
         elif page_name == "Issuance & Retrieval":
-            self.current_frame = BorrowingView(self.main_container, self.user_info)
+            self.current_frame = BorrowingView(self.main_container, self.user_info, navigate_to=self.navigate_to_project)
         elif page_name == "Tracking & Accountability":
             self.current_frame = TrackingView(self.main_container, self.user_info)
         elif page_name == "Reports":
@@ -386,6 +386,11 @@ class DashboardApp(ctk.CTkToplevel):
                          font=("Inter", 20), text_color="gray").pack(expand=True)
 
         self.current_frame.place(relx=0.5, rely=0.5, anchor="center", relwidth=1.0, relheight=1.0)
+
+    def navigate_to_project(self, project_id):
+        self.show_frame("Project Management")
+        if hasattr(self.current_frame, 'open_project_by_id'):
+            self.current_frame.open_project_by_id(project_id)
 
     def get_live_metrics(self):
         metrics = {

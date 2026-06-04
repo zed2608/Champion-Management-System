@@ -116,7 +116,7 @@ class ReportsView(ctk.CTkFrame):
             cursor.execute("""
                 SELECT t.tool_id, t.name, COUNT(tr.transaction_id) as usage_count
                 FROM tool t
-                LEFT JOIN transaction tr ON t.tool_id = tr.tool_id AND tr.type = 'Borrow'
+                LEFT JOIN transaction tr ON t.tool_id = tr.tool_id AND tr.type = 'Issue'
                 WHERE t.is_archived = 0
                 GROUP BY t.tool_id, t.name
                 ORDER BY usage_count DESC
@@ -238,7 +238,7 @@ class ReportsView(ctk.CTkFrame):
                        IFNULL(i.quantity_available,0) as qty_avail,
                        t.`condition`
                 FROM tool t
-                LEFT JOIN transaction tr ON t.tool_id = tr.tool_id AND tr.type='Borrow'
+                LEFT JOIN transaction tr ON t.tool_id = tr.tool_id AND tr.type='Issue'
                 LEFT JOIN inventory i ON t.tool_id = i.tool_id
                 WHERE t.is_archived = 0
                 GROUP BY t.tool_id, t.name, t.tag_id, i.quantity_available, t.`condition`
@@ -268,11 +268,10 @@ class ReportsView(ctk.CTkFrame):
                     txt_col = "#1A1A1A"
                     if col == 6:
                         txt_col = "#2ECC71" if val == "Good" else "#D8000C"
-                        
-                    font_w = "bold" if col == 6 else "normal"
-                if col == 2 and val == "Unassigned":
-                    txt_col = "#D8000C"
-                    font_w = "bold"
+                    elif col == 2 and val == "Unassigned":
+                        txt_col = "#D8000C"
+
+                    font_w = "bold" if (col == 6 or (col == 2 and val == "Unassigned")) else "normal"
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center")
                     
@@ -350,7 +349,7 @@ class ReportsView(ctk.CTkFrame):
                        SUM(CASE WHEN tr.status='Active' THEN 1 ELSE 0 END) as active_borrows,
                        SUM(CASE WHEN tr.status='Returned' THEN 1 ELSE 0 END) as total_returned
                 FROM user u
-                LEFT JOIN transaction tr ON u.user_id = tr.user_id AND tr.type = 'Borrow'
+                LEFT JOIN transaction tr ON u.user_id = tr.user_id AND tr.type = 'Issue'
                 GROUP BY u.user_id, u.employee_id, u.full_name, u.role
                 ORDER BY total_borrows DESC
             """)
@@ -535,7 +534,7 @@ class ReportsView(ctk.CTkFrame):
                         cursor.execute(f"""
                             SELECT t.tool_id, t.name, COUNT(tr.transaction_id) as usage_count
                             FROM tool t
-                            LEFT JOIN transaction tr ON t.tool_id = tr.tool_id AND tr.type = 'Borrow' {date_filter}
+                            LEFT JOIN transaction tr ON t.tool_id = tr.tool_id AND tr.type = 'Issue' {date_filter}
                             WHERE t.is_archived = 0
                             GROUP BY t.tool_id, t.name
                             ORDER BY usage_count DESC
@@ -585,7 +584,7 @@ class ReportsView(ctk.CTkFrame):
                                    t.`condition`
                             FROM tool t
                             LEFT JOIN inventory i ON t.tool_id = i.tool_id
-                            LEFT JOIN transaction tr ON t.tool_id = tr.tool_id AND tr.type='Borrow' {date_filter}
+                            LEFT JOIN transaction tr ON t.tool_id = tr.tool_id AND tr.type='Issue' {date_filter}
                             WHERE t.is_archived = 0
                             GROUP BY t.tool_id, t.name, t.tag_id, i.quantity_available, t.`condition`
                             ORDER BY total_borrowed DESC
@@ -620,7 +619,7 @@ class ReportsView(ctk.CTkFrame):
                                    SUM(IF(tr.status='Active',1,0)) as active_borrows,
                                    SUM(IF(tr.status='Returned',1,0)) as returned_borrows
                             FROM user u
-                            LEFT JOIN transaction tr ON u.user_id = tr.user_id AND tr.type='Borrow' {date_filter}
+                            LEFT JOIN transaction tr ON u.user_id = tr.user_id AND tr.type='Issue' {date_filter}
                             GROUP BY u.user_id, u.employee_id, u.full_name, u.role
                             ORDER BY total_borrows DESC
                         """, params)

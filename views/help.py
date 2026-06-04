@@ -279,8 +279,19 @@ class HelpView(ctk.CTkFrame):
                     message TEXT,
                     admin_reply TEXT,
                     status VARCHAR(50) DEFAULT 'Open',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    resolved_at TIMESTAMP NULL DEFAULT NULL,
+                    is_archived TINYINT(1) NOT NULL DEFAULT 0
                 )''')
+                # Add new columns to existing help_tickets tables (safe migration)
+                for col_sql in [
+                    "ALTER TABLE help_tickets ADD COLUMN resolved_at TIMESTAMP NULL DEFAULT NULL",
+                    "ALTER TABLE help_tickets ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0",
+                ]:
+                    try:
+                        c.execute(col_sql)
+                    except Exception:
+                        pass
                 conn.commit()
             except Exception as e:
                 print(f"help tables init error: {e}")
@@ -845,10 +856,21 @@ class HelpView(ctk.CTkFrame):
             if not db: return
             try:
                 c = db.cursor(dictionary=True)
+                # Auto-archive resolved tickets older than 30 days
+                try:
+                    c.execute("""
+                        UPDATE help_tickets SET is_archived = 1
+                        WHERE status = 'Resolved' AND resolved_at IS NOT NULL
+                          AND resolved_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
+                          AND is_archived = 0
+                    """)
+                    db.commit()
+                except Exception:
+                    pass
                 if self.is_admin:
-                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id ORDER BY h.status ASC, h.created_at DESC")
+                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id WHERE h.is_archived = 0 ORDER BY h.status ASC, h.created_at DESC")
                 else:
-                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id WHERE h.user_id = %s ORDER BY h.created_at DESC", (self.user_info['user_id'],))
+                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id WHERE h.user_id = %s AND h.is_archived = 0 ORDER BY h.created_at DESC", (self.user_info['user_id'],))
 
                 for t in c.fetchall():
                     card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
@@ -878,7 +900,7 @@ class HelpView(ctk.CTkFrame):
                             if not rep: return
                             cx = get_connection()
                             cur = cx.cursor()
-                            cur.execute("UPDATE help_tickets SET admin_reply = %s, status = 'Resolved' WHERE ticket_id = %s", (rep, tid))
+                            cur.execute("UPDATE help_tickets SET admin_reply = %s, status = 'Resolved', resolved_at = NOW() WHERE ticket_id = %s", (rep, tid))
                             cx.commit(); cur.close(); cx.close()
                             load_ticket_list()
 

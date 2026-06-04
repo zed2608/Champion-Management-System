@@ -780,3 +780,30 @@ class ProjectsView(ctk.CTkFrame):
             if conn.is_connected():
                 cursor.close()
                 conn.close()
+
+    def open_project_by_id(self, project_id):
+        conn = get_connection()
+        if not conn:
+            return
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT p.*, a.full_name as admin_approver,
+                       CASE
+                           WHEN p.status IN ('Approved', 'Ongoing') AND p.end_date < CURDATE() THEN CONCAT(p.status, ' (OVERDUE)')
+                           ELSE p.status
+                       END as display_status
+                FROM projects p
+                LEFT JOIN user a ON p.approved_by = a.user_id
+                WHERE p.project_id = %s
+            """, (project_id,))
+            row = cursor.fetchone()
+            if row:
+                row["status"] = row["display_status"]
+                self.open_project_modal(row)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+        finally:
+            if conn.is_connected():
+                cursor.close()
+                conn.close()

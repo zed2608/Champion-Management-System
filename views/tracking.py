@@ -182,10 +182,14 @@ class TrackingView(ctk.CTkFrame):
                        IF(tr.return_date IS NOT NULL,
                            DATE_FORMAT(DATE_ADD(tr.return_date, INTERVAL 8 HOUR),
                                '%b %d, %Y %I:%i %p'), '—') as return_date,
-                       tr.status
+                       tr.status,
+                       CASE WHEN tr.status = 'Active' AND t.item_type = 'Equipment'
+                                 AND p.end_date IS NOT NULL AND p.end_date < CURDATE()
+                            THEN 1 ELSE 0 END as is_overdue
                 FROM transaction tr
                 JOIN tool t ON tr.tool_id = t.tool_id
                 JOIN user u ON tr.user_id = u.user_id
+                LEFT JOIN projects p ON tr.project_id = p.project_id
             """
             params = []
             if q:
@@ -202,14 +206,16 @@ class TrackingView(ctk.CTkFrame):
 
             for i, row in enumerate(rows):
                 r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+                is_overdue = bool(row.get("is_overdue", 0))
+                bg = "#FFF0F0" if is_overdue else ("#F9FAFB" if i % 2 == 0 else "white")
 
+                status_display = "⚠ OVERDUE" if is_overdue else row["status"]
                 vals = [
                     str(row["transaction_id"]), row["type"], row["tool_name"],
                     row["tag_id"], row["full_name"],
-                    row["borrow_date"], row["return_date"], row["status"],
+                    row["borrow_date"], row["return_date"], status_display,
                 ]
-                
+
                 for col, val in enumerate(vals):
                     cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
                     cell.grid(row=r_idx, column=col, sticky="nsew")
@@ -217,14 +223,19 @@ class TrackingView(ctk.CTkFrame):
                     txt_color = "#1A1A1A"
                     font_w = "normal"
                     if col == 7:
-                        txt_color = "#D8000C" if val == "Active" else "#2ECC71"
+                        if is_overdue:
+                            txt_color = "#C0392B"
+                        elif val == "Active":
+                            txt_color = "#D8000C"
+                        else:
+                            txt_color = "#2ECC71"
                         font_w = "bold"
                     elif col == 3 and val == "Unassigned":
                         txt_color = "#D8000C"
                         font_w = "bold"
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
-                    
+
                     # High-performance static wrapping
                     lbl.configure(wraplength=min_sizes[col] - 10)
 
@@ -335,10 +346,14 @@ class TrackingView(ctk.CTkFrame):
                                '%b %d, %Y %I:%i %p'), '—') as return_date,
                        IFNULL(tr.condition_at_borrow,'N/A') as cond_borrow,
                        IFNULL(tr.condition_at_return,'N/A')  as cond_return,
-                       tr.status
+                       tr.status,
+                       CASE WHEN tr.status = 'Active' AND t.item_type = 'Equipment'
+                                 AND p.end_date IS NOT NULL AND p.end_date < CURDATE()
+                            THEN 1 ELSE 0 END as is_overdue
                 FROM transaction tr
                 JOIN tool t ON tr.tool_id = t.tool_id
                 JOIN user u ON tr.user_id = u.user_id
+                LEFT JOIN projects p ON tr.project_id = p.project_id
                 WHERE 1=1
             """
             params = []
@@ -355,9 +370,11 @@ class TrackingView(ctk.CTkFrame):
             total = len(rows)
             active = sum(1 for r in rows if r["status"] == "Active")
             returned = sum(1 for r in rows if r["status"] == "Returned")
-            self.audit_summary.configure(
-                text=f"  Total: {total}   |   Active: {active}   |   Returned: {returned}"
-            )
+            overdue = sum(1 for r in rows if r.get("is_overdue", 0))
+            summary_text = f"  Total: {total}   |   Active: {active}   |   Returned: {returned}"
+            if overdue:
+                summary_text += f"   |   ⚠ Overdue: {overdue}"
+            self.audit_summary.configure(text=summary_text)
 
             if not rows:
                 ctk.CTkLabel(
@@ -366,14 +383,16 @@ class TrackingView(ctk.CTkFrame):
 
             for i, row in enumerate(rows):
                 r_idx = i + 1
-                bg = "#FFF8F0" if row["status"] == "Active" else ("#F9FAFB" if i % 2 == 0 else "white")
-                
+                is_overdue = bool(row.get("is_overdue", 0))
+                bg = "#FFF0F0" if is_overdue else ("#FFF8F0" if row["status"] == "Active" else ("#F9FAFB" if i % 2 == 0 else "white"))
+
+                status_display = "⚠ OVERDUE" if is_overdue else row["status"]
                 vals = [
                     str(row["transaction_id"]), row["full_name"], row["tool_name"],
                     row["tag_id"], row["borrow_date"], row["return_date"],
-                    row["cond_borrow"], row["cond_return"], row["status"],
+                    row["cond_borrow"], row["cond_return"], status_display,
                 ]
-                
+
                 for col, val in enumerate(vals):
                     cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
                     cell.grid(row=r_idx, column=col, sticky="nsew")
@@ -381,14 +400,19 @@ class TrackingView(ctk.CTkFrame):
                     txt_color = "#1A1A1A"
                     font_w = "normal"
                     if col == 8:
-                        txt_color = "#D8000C" if val == "Active" else "#2ECC71"
+                        if is_overdue:
+                            txt_color = "#C0392B"
+                        elif val == "Active":
+                            txt_color = "#D8000C"
+                        else:
+                            txt_color = "#2ECC71"
                         font_w = "bold"
                     elif col == 3 and val == "Unassigned":
                         txt_color = "#D8000C"
                         font_w = "bold"
 
                     lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center")
-                    
+
                     # High-performance static wrapping
                     lbl.configure(wraplength=min_sizes[col] - 10)
 
