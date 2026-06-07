@@ -9,11 +9,13 @@ import difflib
 import threading
 
 class InventoryView(ctk.CTkFrame):
-    def __init__(self, parent, user_info=None, navigate_to=None, *args, **kwargs):
+    def __init__(self, parent, user_info=None, navigate_to=None, highlight_low_stock=False, highlight_tool_id=None, *args, **kwargs):
         super().__init__(parent, fg_color="transparent", *args, **kwargs)
 
         self.user_info = user_info or {}
         self.navigate_to = navigate_to
+        self.highlight_low_stock = highlight_low_stock
+        self.highlight_tool_id = highlight_tool_id
 
         # 1. Main Wrapper Expansion
         self.grid_columnconfigure(0, weight=1)
@@ -22,7 +24,21 @@ class InventoryView(ctk.CTkFrame):
 
         self.tool_hash_table = {}
 
+        self._ensure_inventory_floats()
         self.build_top_tabs()
+
+    def _ensure_inventory_floats(self):
+        """Ensures that the database can actually store fractional quantities for consumables."""
+        conn = get_connection()
+        if conn:
+            try:
+                c = conn.cursor()
+                c.execute("ALTER TABLE inventory MODIFY quantity_total FLOAT, MODIFY quantity_available FLOAT, MODIFY minimum_stock FLOAT")
+                conn.commit()
+            except Exception:
+                pass
+            finally:
+                if conn.is_connected(): c.close(); conn.close()
 
     def build_top_tabs(self):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
@@ -167,14 +183,14 @@ class InventoryView(ctk.CTkFrame):
         search_frame = ctk.CTkFrame(table_card, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=(20, 10))
 
-        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Universal search (Name, Tag, ID, Supplier)...", width=320, height=38)
+        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Universal search (Name, Tag, ID, Supplier, Loc, Desc)...", width=350, height=38)
         self.search_entry.pack(side="left", padx=(0, 10))
         self.search_entry.bind("<Return>", lambda e: self.perform_search())
 
         self.sort_menu = ctk.CTkOptionMenu(search_frame, values=["Most Recent", "Oldest", "A-Z (Name)", "Z-A (Name)", "PID (Low-High)"], width=140, height=38, fg_color="#F9FAFB", text_color="black", command=lambda e: self.perform_search())
         self.sort_menu.pack(side="left", padx=(0, 10))
 
-        self.search_btn = ctk.CTkButton(search_frame, text="Search", width=90, height=38, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.perform_search)
+        self.search_btn = ctk.CTkButton(search_frame, text="Search", width=90, height=38, fg_color="#3498DB", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.perform_search)
         self.search_btn.pack(side="left", padx=10)
 
         self.reset_btn = ctk.CTkButton(search_frame, text="↻ Reset", width=80, height=38, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=self.reset_search)
@@ -231,6 +247,7 @@ class InventoryView(ctk.CTkFrame):
                            t.name, IFNULL(t.description, '') as description, t.price,
                            IFNULL(i.quantity_available, 0) as qty_avail,
                            IFNULL(i.quantity_total, 0) as qty_tot,
+                           IFNULL(i.minimum_stock, 0) as min_stock,
                            IFNULL(t.location, 'N/A') as base_location, t.`condition` as status,
                            IFNULL(t.category, 'Uncategorized') as category,
                            IFNULL(t.supplier, 'N/A') as supplier,
@@ -244,9 +261,12 @@ class InventoryView(ctk.CTkFrame):
                 """
                 params = [is_archived]
                 
+                if getattr(self, 'highlight_low_stock', False):
+                    base_query += " AND i.minimum_stock > 0 AND i.quantity_available < i.minimum_stock"
+
                 if query:
-                    base_query += " AND (t.name LIKE %s OR t.tool_id LIKE %s OR t.category LIKE %s OR t.item_type LIKE %s OR t.supplier LIKE %s OR IFNULL(t.tag_id,'') LIKE %s)"
-                    params.extend([f"%{query}%"] * 6)
+                    base_query += " AND (t.name LIKE %s OR CAST(t.tool_id AS CHAR) LIKE %s OR t.category LIKE %s OR t.item_type LIKE %s OR t.supplier LIKE %s OR IFNULL(t.tag_id,'') LIKE %s OR t.location LIKE %s OR t.description LIKE %s)"
+                    params.extend([f"%{query}%"] * 8)
 
                 if sort_type == "Oldest":
                     base_query += " ORDER BY t.tool_id ASC"
@@ -301,19 +321,26 @@ class InventoryView(ctk.CTkFrame):
                 display_loc = f"Deployed: {row['active_project']}"
 
             tag_display = row['tag_id'] if row['tag_id'] else "Unassigned"
+            
+            is_low_stock = row.get('min_stock', 0) > 0 and row['qty_avail'] < row['min_stock']
+            qty_display = f"⚠ {avail}/{tot}" if is_low_stock else f"{avail}/{tot}"
+            
             vals = [
                 pid,
                 row['item_type'],
                 row['name'],
                 tag_display,
-                f"{avail}/{tot}",
+                qty_display,
                 row['uom'],
                 display_loc,
                 row['status']
             ]
 
             r_idx = i + 1
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
+            if is_low_stock:
+                bg = "#FFF3F3" if i % 2 == 0 else "#FFEBEB"
+            else:
+                bg = "#F9FAFB" if i % 2 == 0 else "white"
 
             for col, val in enumerate(vals):
                 cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
@@ -326,8 +353,10 @@ class InventoryView(ctk.CTkFrame):
                     txt_col = "#D37F00"
                 elif col == 3 and val == "Unassigned":
                     txt_col = "#D8000C"
+                elif col == 4 and is_low_stock:
+                    txt_col = "#D8000C"
                     
-                font_w = "bold" if col == 1 or col == 3 or (col == 6 and "Deployed:" in val) else "normal"
+                font_w = "bold" if col == 1 or col == 3 or (col == 4 and is_low_stock) or (col == 6 and "Deployed:" in val) else "normal"
 
                 lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
                 
@@ -337,6 +366,10 @@ class InventoryView(ctk.CTkFrame):
 
                 cell.bind("<Button-1>", lambda e, lookup_id=pid: self.open_tool_modal(lookup_id))
                 lbl.bind("<Button-1>", lambda e, lookup_id=pid: self.open_tool_modal(lookup_id))
+
+        if getattr(self, 'highlight_tool_id', None):
+            self.after(100, lambda t=self.highlight_tool_id: self.open_tool_modal(str(t)))
+            self.highlight_tool_id = None
 
         uid = self.user_info.get("user_id")
         if uid and query:
@@ -348,6 +381,7 @@ class InventoryView(ctk.CTkFrame):
     def reset_search(self):
         self.search_entry.delete(0, 'end')
         self.sort_menu.set("Most Recent")
+        self.highlight_low_stock = False
         self.load_inventory_data()
 
     def validate_and_save(self):
@@ -443,10 +477,35 @@ class InventoryView(ctk.CTkFrame):
                 conn.close()
 
     def open_tool_modal(self, lookup_id):
-        data = self.tool_hash_table.get(lookup_id)
-        if not data: return
+        data = self.tool_hash_table.get(str(lookup_id))
+        if not data:
+            conn = get_connection()
+            if conn:
+                try:
+                    cursor = conn.cursor(dictionary=True)
+                    cursor.execute("""
+                        SELECT t.tool_id, IFNULL(t.item_type, 'Equipment') as item_type,
+                               IFNULL(t.unit_of_measure, 'pcs') as uom,
+                               t.name, IFNULL(t.description, '') as description, t.price,
+                               IFNULL(i.quantity_available, 0) as qty_avail,
+                               IFNULL(i.quantity_total, 0) as qty_tot,
+                               IFNULL(i.minimum_stock, 0) as min_stock,
+                               IFNULL(t.location, 'N/A') as location, t.`condition` as status,
+                               IFNULL(t.category, 'Uncategorized') as category,
+                               IFNULL(t.supplier, 'N/A') as supplier,
+                               t.tag_id, t.is_archived
+                        FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id
+                        WHERE t.tool_id = %s
+                    """, (lookup_id,))
+                    data = cursor.fetchone()
+                finally:
+                    if conn.is_connected():
+                        cursor.close()
+                        conn.close()
+            if not data:
+                return
         
-        is_arch = 0
+        is_arch = data.get('is_archived', 0)
 
         modal = ctk.CTkToplevel(self)
         modal.title(f"Manage Item: {lookup_id}")
@@ -490,6 +549,7 @@ class InventoryView(ctk.CTkFrame):
         price_entry = create_modal_row(form_scroll, "Price", data['price'])
         
         qty_entry = create_modal_row(form_scroll, "Total Qty", f"{data['qty_tot']:g}")
+        min_stock_entry = create_modal_row(form_scroll, "Min Stock", f"{data.get('min_stock', 0):g}")
 
         uom_frame = ctk.CTkFrame(form_scroll, fg_color="transparent")
         uom_frame.pack(fill="x", pady=4)
@@ -645,12 +705,13 @@ class InventoryView(ctk.CTkFrame):
         def execute_update():
             try:
                 new_qty = float(qty_entry.get())
+                new_min_stock = float(min_stock_entry.get()) if min_stock_entry.get().strip() else 0.0
                 # --- FIX C: Capture and Validate Price Update ---
                 new_price = float(price_entry.get()) if price_entry.get().strip() else 0.00
-                if new_qty < 0 or new_price < 0:
-                    return messagebox.showerror("Error", "Quantity and Price cannot be negative.", parent=modal)
+                if new_qty < 0 or new_price < 0 or new_min_stock < 0:
+                    return messagebox.showerror("Error", "Quantity, Min Stock, and Price cannot be negative.", parent=modal)
             except ValueError:
-                return messagebox.showerror("Error", "Quantity and Price must be valid numbers.", parent=modal)
+                return messagebox.showerror("Error", "Quantity, Min Stock, and Price must be valid numbers.", parent=modal)
 
             qty_diff = new_qty - float(data['qty_tot'])
             new_avail = float(data['qty_avail']) + qty_diff
@@ -702,8 +763,8 @@ class InventoryView(ctk.CTkFrame):
                     """, (name_entry.get(), desc_entry.get(), cat_entry.get(), sup_entry.get(), loc_entry.get(), type_menu.get(), uom_menu.get(), status_menu.get(), new_tag, lookup_id))
 
                     cursor.execute("""
-                        UPDATE inventory SET quantity_total=%s, quantity_available=quantity_available + %s WHERE tool_id=%s
-                    """, (new_qty, qty_diff, lookup_id))
+                        UPDATE inventory SET quantity_total=%s, quantity_available=quantity_available + %s, minimum_stock=%s WHERE tool_id=%s
+                    """, (new_qty, qty_diff, new_min_stock, lookup_id))
                     conn.commit()
 
                     uid = self.user_info.get("user_id")
@@ -752,7 +813,8 @@ class InventoryView(ctk.CTkFrame):
         # --- FIX C: Adjusted bindings to include Price Field ---
         sup_entry.bind("<Return>", lambda e: price_entry.focus_set())
         price_entry.bind("<Return>", lambda e: qty_entry.focus_set())
-        qty_entry.bind("<Return>", lambda e: loc_entry.focus_set())
+        qty_entry.bind("<Return>", lambda e: min_stock_entry.focus_set())
+        min_stock_entry.bind("<Return>", lambda e: loc_entry.focus_set())
         loc_entry.bind("<Return>", lambda e: execute_update())
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")

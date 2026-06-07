@@ -342,7 +342,7 @@ class DashboardApp(ctk.CTkToplevel):
         self.master.error_banner.configure(text="", fg_color="transparent")
         self.master.failed_attempts = 0
 
-    def show_frame(self, page_name):
+    def show_frame(self, page_name, highlight_low_stock=False, highlight_tool_id=None):
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         restricted_modules = ["Project Management", "Reports", "Maintenance", "Role Management"]
         
@@ -374,13 +374,18 @@ class DashboardApp(ctk.CTkToplevel):
         elif page_name == "Project Management":
             self.current_frame = ProjectsView(self.main_container, self.user_info)
         elif page_name == "Products / Inventory":
-            self.current_frame = InventoryView(self.main_container, self.user_info, navigate_to=self.navigate_to_project)
+            self.current_frame = InventoryView(
+                self.main_container, self.user_info,
+                navigate_to=self.navigate_to_project,
+                highlight_low_stock=highlight_low_stock,
+                highlight_tool_id=highlight_tool_id,
+            )
         elif page_name == "Issuance & Retrieval":
             self.current_frame = BorrowingView(self.main_container, self.user_info, navigate_to=self.navigate_to_project)
         elif page_name == "Tracking & Accountability":
             self.current_frame = TrackingView(self.main_container, self.user_info)
         elif page_name == "Reports":
-            self.current_frame = ReportsView(self.main_container)
+            self.current_frame = ReportsView(self.main_container, navigate_to_tool=self.navigate_to_tool)
         elif page_name == "Maintenance":
             self.current_frame = MaintenanceView(self.main_container, self.user_info)
         elif page_name == "Role Management":
@@ -396,6 +401,9 @@ class DashboardApp(ctk.CTkToplevel):
 
         self.current_frame.place(relx=0.5, rely=0.5, anchor="center", relwidth=1.0, relheight=1.0)
 
+    def navigate_to_tool(self, tool_id):
+        self.show_frame("Products / Inventory", highlight_tool_id=tool_id)
+
     def navigate_to_project(self, project_id):
         self.show_frame("Project Management")
         if hasattr(self.current_frame, 'open_project_by_id'):
@@ -405,28 +413,41 @@ class DashboardApp(ctk.CTkToplevel):
         metrics = {
             "total_employees": 0,
             "active_workforce": 0,
-            "available_qty": 0, 
-            "borrowed_qty": 0, 
+            "available_qty": 0,
+            "borrowed_qty": 0,
             "total_physical": 0,
             "utilization_pct": 0,
             "pending_issues": 0,
             "overdue_projects": 0,
-            "action_items": 0
+            "action_items": 0,
+            "low_stock": 0,
+            "proj_active": 0,
+            "proj_pending": 0,
+            "proj_completed_month": 0,
         }
         activities = []
-        chart_data = [0, 0, 0, 0]
+        # chart_data: 7 days of (issues, retrievals) — [(day_label, issued, retrieved), ...]
+        chart_data = []
+        # deployed_rows: [(project_name, tool_count), ...] top 5
+        deployed_rows = []
+        # my_issuances: [(tool_name, issued_date, project_name), ...] for current user
+        my_issuances = []
 
         conn = get_connection()
         if not conn:
-            return metrics, activities, chart_data
+            return metrics, activities, chart_data, deployed_rows, my_issuances
 
         try:
             cursor = conn.cursor(dictionary=True)
-            
+
             cursor.execute("SELECT COUNT(*) as cnt FROM user")
             metrics["total_employees"] = int(cursor.fetchone()["cnt"] or 0)
 
-            cursor.execute("SELECT COUNT(DISTINCT user_id) as cnt FROM transaction WHERE status = 'Active'")
+            # Fix: only count users with activity in last 30 days
+            cursor.execute("""
+                SELECT COUNT(DISTINCT user_id) as cnt FROM transaction
+                WHERE status = 'Active' AND borrow_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            """)
             metrics["active_workforce"] = int(cursor.fetchone()["cnt"] or 0)
 
             cursor.execute("SELECT IFNULL(SUM(quantity_available), 0) as qty FROM inventory")
@@ -442,62 +463,141 @@ class DashboardApp(ctk.CTkToplevel):
             try:
                 cursor.execute("SELECT COUNT(*) as cnt FROM tool WHERE `condition` IN ('Needs Repair', 'Damaged', 'Lost') AND is_archived = 0")
                 metrics["pending_issues"] = int(cursor.fetchone()["cnt"] or 0)
-            except Exception as e:
-                pass 
+            except Exception:
+                pass
 
             metrics["action_items"] = metrics["pending_issues"]
 
             try:
                 cursor.execute("SELECT COUNT(*) as cnt FROM projects WHERE status NOT IN ('Completed', 'Cancelled') AND end_date < CURDATE()")
                 metrics["overdue_projects"] = int(cursor.fetchone()["cnt"] or 0)
-            except:
+            except Exception:
                 pass
-                
+
             try:
                 cursor.execute("SELECT COUNT(*) as cnt FROM projects WHERE status = 'Pending'")
                 metrics["pending_projects"] = int(cursor.fetchone()["cnt"] or 0)
-            except:
+            except Exception:
                 metrics["pending_projects"] = 0
 
+            # Low stock: items where quantity_available < minimum_stock
+            try:
+                cursor.execute("""
+                    SELECT COUNT(*) as cnt FROM inventory i
+                    WHERE i.minimum_stock > 0 AND i.quantity_available < i.minimum_stock
+                """)
+                metrics["low_stock"] = int(cursor.fetchone()["cnt"] or 0)
+            except Exception:
+                pass
+
+            # Project status counts
+            try:
+                cursor.execute("SELECT COUNT(*) as cnt FROM projects WHERE status = 'Active'")
+                metrics["proj_active"] = int(cursor.fetchone()["cnt"] or 0)
+                cursor.execute("SELECT COUNT(*) as cnt FROM projects WHERE status = 'Pending'")
+                metrics["proj_pending"] = int(cursor.fetchone()["cnt"] or 0)
+                cursor.execute("""
+                    SELECT COUNT(*) as cnt FROM projects
+                    WHERE status = 'Completed' AND MONTH(end_date) = MONTH(CURDATE()) AND YEAR(end_date) = YEAR(CURDATE())
+                """)
+                metrics["proj_completed_month"] = int(cursor.fetchone()["cnt"] or 0)
+            except Exception:
+                pass
+
+            # Activity feed
             cursor.execute("""
-                SELECT 
-                    DATE_FORMAT(DATE_ADD(raw_date, INTERVAL 8 HOUR), '%Y-%m-%d %I:%M %p') as ts,
-                    action,
-                    item,
-                    actor
+                SELECT
+                    DATE_FORMAT(DATE_ADD(raw_date, INTERVAL 8 HOUR), '%Y-%m-%d %I:%i %p') as ts,
+                    action, item, actor
                 FROM (
                     SELECT borrow_date as raw_date, 'Issued' as action, t.name as item, u.full_name as actor
                     FROM transaction tr
                     JOIN tool t ON tr.tool_id = t.tool_id
                     JOIN user u ON tr.user_id = u.user_id
                     WHERE tr.type = 'Issue'
-                    
+
                     UNION ALL
-                    
+
                     SELECT return_date as raw_date, 'Retrieved' as action, t.name as item, u.full_name as actor
                     FROM transaction tr
                     JOIN tool t ON tr.tool_id = t.tool_id
                     JOIN user u ON tr.user_id = u.user_id
                     WHERE tr.type = 'Retrieval' AND tr.return_date IS NOT NULL
-                    
+
                     UNION ALL
-                    
+
                     SELECT sl.timestamp as raw_date, 'Project Created' as action, sl.details as item, IFNULL(u.full_name, 'System') as actor
                     FROM system_logs sl
                     LEFT JOIN user u ON sl.user_id = u.user_id
                     WHERE sl.action_type = 'Submitted' AND sl.module = 'Projects'
                 ) as combined_log
-                ORDER BY raw_date DESC 
+                ORDER BY raw_date DESC
                 LIMIT 8
             """)
             for row in cursor.fetchall():
                 activities.append((row["ts"], row["action"], row["item"], row["actor"]))
-            
-            cursor.execute("SELECT `condition`, COUNT(*) as cnt FROM tool WHERE is_archived = 0 GROUP BY `condition`")
-            cond_map = {"Good": 0, "Needs Repair": 1, "Damaged": 2, "Lost": 3}
-            for row in cursor.fetchall():
-                c = row["condition"]
-                if c in cond_map: chart_data[cond_map[c]] = row["cnt"]
+
+            # 7-day deployment trend
+            try:
+                cursor.execute("""
+                    SELECT
+                        d.day_label,
+                        IFNULL(i.issued, 0)    AS issued,
+                        IFNULL(r.retrieved, 0) AS retrieved
+                    FROM (
+                        SELECT DATE_SUB(CURDATE(), INTERVAL n DAY) AS day_date,
+                               DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL n DAY), '%a') AS day_label
+                        FROM (SELECT 6 n UNION SELECT 5 UNION SELECT 4 UNION SELECT 3
+                              UNION SELECT 2 UNION SELECT 1 UNION SELECT 0) nums
+                    ) d
+                    LEFT JOIN (
+                        SELECT DATE(borrow_date) as dd, COUNT(*) as issued
+                        FROM transaction WHERE type='Issue' AND borrow_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                        GROUP BY dd
+                    ) i ON i.dd = d.day_date
+                    LEFT JOIN (
+                        SELECT DATE(return_date) as dd, COUNT(*) as retrieved
+                        FROM transaction WHERE type='Retrieval' AND return_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                        GROUP BY dd
+                    ) r ON r.dd = d.day_date
+                    ORDER BY d.day_date
+                """)
+                chart_data = [(row["day_label"], int(row["issued"]), int(row["retrieved"])) for row in cursor.fetchall()]
+            except Exception:
+                pass
+
+            # Currently deployed: top 5 projects by active tool count
+            try:
+                cursor.execute("""
+                    SELECT p.name as project_name, COUNT(tr.transaction_id) as tool_count
+                    FROM transaction tr
+                    JOIN projects p ON tr.project_id = p.project_id
+                    WHERE tr.status = 'Active'
+                    GROUP BY p.project_id, p.name
+                    ORDER BY tool_count DESC
+                    LIMIT 5
+                """)
+                deployed_rows = [(row["project_name"], int(row["tool_count"])) for row in cursor.fetchall()]
+            except Exception:
+                pass
+
+            # My active issuances for current user
+            try:
+                uid = self.user_info.get("user_id")
+                cursor.execute("""
+                    SELECT t.name as tool_name,
+                           DATE_FORMAT(DATE_ADD(tr.borrow_date, INTERVAL 8 HOUR), '%b %d, %Y') as issued_date,
+                           IFNULL(p.name, '—') as project_name
+                    FROM transaction tr
+                    JOIN tool t ON tr.tool_id = t.tool_id
+                    LEFT JOIN projects p ON tr.project_id = p.project_id
+                    WHERE tr.user_id = %s AND tr.status = 'Active'
+                    ORDER BY tr.borrow_date DESC
+                    LIMIT 8
+                """, (uid,))
+                my_issuances = [(row["tool_name"], row["issued_date"], row["project_name"]) for row in cursor.fetchall()]
+            except Exception:
+                pass
 
         except Exception as e:
             print(f"Dashboard Sync Error: {e}")
@@ -506,13 +606,12 @@ class DashboardApp(ctk.CTkToplevel):
                 cursor.close()
                 conn.close()
 
-        return metrics, activities, chart_data
+        return metrics, activities, chart_data, deployed_rows, my_issuances
 
     def create_home_dashboard(self):
         is_admin = self.user_info.get("role", "Staff") == "Admin"
-        
-        frame = ctk.CTkScrollableFrame(self.main_container, fg_color="transparent", orientation="vertical")
 
+        frame = ctk.CTkScrollableFrame(self.main_container, fg_color="transparent", orientation="vertical")
         inner_frame = ctk.CTkFrame(frame, fg_color="transparent")
         inner_frame.pack(fill="both", expand=True)
 
@@ -521,108 +620,236 @@ class DashboardApp(ctk.CTkToplevel):
         ctk.CTkLabel(inner_frame, text="High-level overview of system health and asset utilization. Auto-updates live.",
                      font=("Inter", 13), text_color="gray").pack(anchor="w", pady=(0, 20))
 
-        metrics, activities, chart_data = self.get_live_metrics()
-        self._update_sidebar_badges(metrics)
+        metrics = {
+            "total_employees": 0, "active_workforce": 0, "available_qty": 0,
+            "borrowed_qty": 0, "total_physical": 0, "utilization_pct": 0,
+            "pending_issues": 0, "overdue_projects": 0, "action_items": 0,
+            "pending_projects": 0, "low_stock": 0,
+            "proj_active": 0, "proj_pending": 0, "proj_completed_month": 0,
+        }
+        activities, chart_data, deployed_rows, my_issuances = [], [], [], []
 
-        is_admin = self.user_info.get("role", "Staff") == "Admin"
-        num_cards = 5 if is_admin else 3
-
+        # ── Row 1: Summary Cards ──────────────────────────────────────────────
+        num_cards = 5 if is_admin else 4
         cards_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
-        cards_frame.pack(fill="x", pady=(0, 20))
+        cards_frame.pack(fill="x", pady=(0, 10))
         for i in range(num_cards):
             cards_frame.grid_columnconfigure(i, weight=1)
 
+        # Card 1 – Utilization
         c1 = ctk.CTkFrame(cards_frame, fg_color="#1E4528", corner_radius=10, height=130)
         c1.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
         c1.pack_propagate(False)
-        self.dash_util_lbl = ctk.CTkLabel(c1, text=f"{metrics['utilization_pct']}%", font=("Inter", 28, "bold"), text_color="white")
+        self.dash_util_lbl = ctk.CTkLabel(c1, text="0%", font=("Inter", 28, "bold"), text_color="white")
         self.dash_util_lbl.pack(anchor="w", padx=20, pady=(20, 0))
         ctk.CTkLabel(c1, text="Asset Utilization", font=("Inter", 13, "bold"), text_color="white").pack(anchor="w", padx=20, pady=(5, 0))
         ctk.CTkLabel(c1, text="Deployed vs Warehouse", font=("Inter", 11), text_color="white").pack(anchor="w", padx=20)
 
+        # Card 2 – Active Workforce
         c2 = ctk.CTkFrame(cards_frame, fg_color="#2980B9", corner_radius=10, height=130)
         c2.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
         c2.pack_propagate(False)
-        self.dash_wf_lbl = ctk.CTkLabel(c2, text=f"{metrics['active_workforce']} / {metrics['total_employees']}", font=("Inter", 28, "bold"), text_color="white")
+        self.dash_wf_lbl = ctk.CTkLabel(c2, text="0 / 0", font=("Inter", 28, "bold"), text_color="white")
         self.dash_wf_lbl.pack(anchor="w", padx=20, pady=(20, 0))
         ctk.CTkLabel(c2, text="Active Workforce", font=("Inter", 13, "bold"), text_color="white").pack(anchor="w", padx=20, pady=(5, 0))
-        ctk.CTkLabel(c2, text="Employees deployed", font=("Inter", 11), text_color="white").pack(anchor="w", padx=20)
+        ctk.CTkLabel(c2, text="Active last 30 days", font=("Inter", 11), text_color="white").pack(anchor="w", padx=20)
 
+        # Card 3 – Total Inventory
         c3 = ctk.CTkFrame(cards_frame, fg_color="#F1C40F", corner_radius=10, height=130)
         c3.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
         c3.pack_propagate(False)
-        self.dash_inv_lbl = ctk.CTkLabel(c3, text=str(metrics['total_physical']), font=("Inter", 28, "bold"), text_color="black")
+        self.dash_inv_lbl = ctk.CTkLabel(c3, text="0", font=("Inter", 28, "bold"), text_color="black")
         self.dash_inv_lbl.pack(anchor="w", padx=20, pady=(20, 0))
         ctk.CTkLabel(c3, text="Total Inventory", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
         ctk.CTkLabel(c3, text="Total physical items", font=("Inter", 11), text_color="black").pack(anchor="w", padx=20)
 
-        if is_admin:
-            # 4. Action Items Card — fully clickable, navigates to Maintenance
-            c4_bg = "#FFF5F5" if metrics["action_items"] > 0 else "#F9FAFB"
-            c4_border = "#D8000C" if metrics["action_items"] > 0 else "#E0E0E0"
-            self.dash_action_card = ctk.CTkFrame(cards_frame, fg_color=c4_bg, corner_radius=10, height=130, border_width=1, border_color=c4_border)
-            self.dash_action_card.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
-            self.dash_action_card.pack_propagate(False)
+        # Card 4 – Low Stock (admin + staff)
+        c_ls = ctk.CTkFrame(cards_frame, fg_color="#F9FAFB", corner_radius=10, height=130, border_width=1, border_color="#E0E0E0")
+        c_ls.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
+        c_ls.pack_propagate(False)
+        self.dash_lowstock_top = ctk.CTkFrame(c_ls, fg_color="transparent")
+        self.dash_lowstock_top.pack(fill="x", padx=20, pady=(15, 0))
+        self.dash_lowstock_val = ctk.CTkLabel(self.dash_lowstock_top, text="0", font=("Inter", 28, "bold"), text_color="black")
+        self.dash_lowstock_val.pack(side="left")
+        ctk.CTkLabel(c_ls, text="Low Stock Items", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
+        ctk.CTkLabel(c_ls, text="Near reorder level →", font=("Inter", 11), text_color="#888888").pack(anchor="w", padx=20)
+        self._bind_widget_tree(c_ls, lambda *_: self.show_frame("Products / Inventory", highlight_low_stock=True))
 
+        if is_admin:
+            # Card 5 – Action Items
+            self.dash_action_card = ctk.CTkFrame(cards_frame, fg_color="#F9FAFB", corner_radius=10, height=130, border_width=1, border_color="#E0E0E0")
+            self.dash_action_card.grid(row=0, column=4, padx=5, pady=5, sticky="ew")
+            self.dash_action_card.pack_propagate(False)
             self.dash_action_top = ctk.CTkFrame(self.dash_action_card, fg_color="transparent")
             self.dash_action_top.pack(fill="x", padx=20, pady=(15, 0))
-
             self._render_action_badges(metrics)
-
             ctk.CTkLabel(self.dash_action_card, text="Action Items", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
-            lbl_hint = ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=("Inter", 11), text_color="#888888")
-            lbl_hint.pack(anchor="w", padx=20, pady=(0, 0))
-
-            # Bind entire card tree to navigate to Maintenance
+            ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=("Inter", 11), text_color="#888888").pack(anchor="w", padx=20)
             self._bind_widget_tree(self.dash_action_card, lambda *_: self.show_frame("Maintenance"))
 
-            # 5. Overdue Projects Card — fully clickable, navigates to Project Management
-            c5_bg = "#FFF5F5" if metrics["overdue_projects"] > 0 else "#F9FAFB"
-            c5_border = "#D8000C" if metrics["overdue_projects"] > 0 else "#E0E0E0"
-            self.dash_overdue_card = ctk.CTkFrame(cards_frame, fg_color=c5_bg, corner_radius=10, height=130, border_width=1, border_color=c5_border)
-            self.dash_overdue_card.grid(row=0, column=4, padx=5, pady=5, sticky="ew")
-            self.dash_overdue_card.pack_propagate(False)
+        # ── Row 2: Project Status Strip (admin only) ─────────────────────────
+        if is_admin:
+            strip = ctk.CTkFrame(inner_frame, fg_color="white", corner_radius=10, height=60)
+            strip.pack(fill="x", pady=(0, 10))
+            strip.pack_propagate(False)
+            strip_inner = ctk.CTkFrame(strip, fg_color="transparent")
+            strip_inner.pack(expand=True, fill="both", padx=20)
+            ctk.CTkLabel(strip_inner, text="Projects Status:", font=("Inter", 12, "bold"), text_color="#555555").pack(side="left", padx=(0, 20))
+            # Active
+            pf_active = ctk.CTkFrame(strip_inner, fg_color="#E8F5E9", corner_radius=8)
+            pf_active.pack(side="left", padx=5, pady=10, ipadx=12, ipady=4)
+            self.dash_proj_active_lbl = ctk.CTkLabel(pf_active, text="0 Active", font=("Inter", 12, "bold"), text_color="#1E4528")
+            self.dash_proj_active_lbl.pack()
+            # Pending
+            pf_pending = ctk.CTkFrame(strip_inner, fg_color="#FFF8E1", corner_radius=8)
+            pf_pending.pack(side="left", padx=5, pady=10, ipadx=12, ipady=4)
+            self.dash_proj_pending_lbl = ctk.CTkLabel(pf_pending, text="0 Pending", font=("Inter", 12, "bold"), text_color="#C07A00")
+            self.dash_proj_pending_lbl.pack()
+            # Overdue (merged here from removed card)
+            pf_overdue = ctk.CTkFrame(strip_inner, fg_color="#FFF5F5", corner_radius=8)
+            pf_overdue.pack(side="left", padx=5, pady=10, ipadx=12, ipady=4)
+            self.dash_proj_overdue_lbl = ctk.CTkLabel(pf_overdue, text="0 Overdue", font=("Inter", 12, "bold"), text_color="#C0392B")
+            self.dash_proj_overdue_lbl.pack()
+            # Completed this month
+            pf_done = ctk.CTkFrame(strip_inner, fg_color="#E3F2FD", corner_radius=8)
+            pf_done.pack(side="left", padx=5, pady=10, ipadx=12, ipady=4)
+            self.dash_proj_done_lbl = ctk.CTkLabel(pf_done, text="0 Completed (this month)", font=("Inter", 12, "bold"), text_color="#1565C0")
+            self.dash_proj_done_lbl.pack()
+            self._bind_widget_tree(strip, lambda *_: self.show_frame("Project Management"))
 
-            self.dash_overdue_top = ctk.CTkFrame(self.dash_overdue_card, fg_color="transparent")
-            self.dash_overdue_top.pack(fill="x", padx=20, pady=(15, 0))
-
-            self._render_overdue_badges(metrics)
-
-            ctk.CTkLabel(self.dash_overdue_card, text="Overdue Projects", font=("Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
-            lbl_hint_proj = ctk.CTkLabel(self.dash_overdue_card, text="Project Mgmt →", font=("Inter", 11), text_color="#888888")
-            lbl_hint_proj.pack(anchor="w", padx=20, pady=(0, 0))
-
-            self._bind_widget_tree(self.dash_overdue_card, lambda *_: self.show_frame("Project Management"))
-
+        # ── Row 3: Bottom 2-column layout ─────────────────────────────────────
         bottom_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
         bottom_frame.pack(fill="both", expand=True)
         bottom_frame.grid_columnconfigure(0, weight=2)
         bottom_frame.grid_columnconfigure(1, weight=1)
         bottom_frame.grid_rowconfigure(0, weight=1)
 
-        # Recent Activity Feed
+        # Left column: activity feed
         activity_card = ctk.CTkFrame(bottom_frame, fg_color="white", corner_radius=10)
         activity_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=10)
-        
         ctk.CTkLabel(activity_card, text="Recent Operations (Deployments & Projects)",
                      font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 10))
-
         self.dash_activity_frame = ctk.CTkFrame(activity_card, fg_color="transparent")
         self.dash_activity_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-
         self._render_activity_feed(activities)
 
-        # Chart Frame
-        analytics_card = ctk.CTkFrame(bottom_frame, fg_color="white", corner_radius=10)
-        analytics_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0), pady=10)
-        ctk.CTkLabel(analytics_card, text="Tool Condition Metrics",
-                     font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 5))
-        
-        self.dash_fig, self.dash_ax, self.dash_canvas = self.embed_chart(analytics_card, chart_data)
-        
+        # Right column: trend chart (admin) OR my issuances (staff)
+        right_card = ctk.CTkFrame(bottom_frame, fg_color="white", corner_radius=10)
+        right_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0), pady=10)
+
+        if is_admin:
+            ctk.CTkLabel(right_card, text="7-Day Deployment Trend",
+                         font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 5))
+            self.dash_chart_frame = ctk.CTkFrame(right_card, fg_color="transparent")
+            self.dash_chart_frame.pack(fill="both", expand=True)
+            self.dash_fig, self.dash_ax, self.dash_canvas = self._embed_trend_chart(self.dash_chart_frame, chart_data)
+
+            # Currently Deployed mini-table below chart
+            ctk.CTkLabel(right_card, text="Currently Deployed by Project",
+                         font=("Inter", 13, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(10, 4))
+            self.dash_deployed_frame = ctk.CTkFrame(right_card, fg_color="transparent")
+            self.dash_deployed_frame.pack(fill="x", padx=10, pady=(0, 10))
+            self._render_deployed_table(deployed_rows)
+        else:
+            # Staff: My Active Issuances
+            ctk.CTkLabel(right_card, text="My Active Issuances",
+                         font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 5))
+            self.dash_myissue_frame = ctk.CTkFrame(right_card, fg_color="transparent")
+            self.dash_myissue_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+            self._render_my_issuances(my_issuances)
+
+        # Load real data in background
+        import threading
+        def _initial_load():
+            m, a, c, dr, mi = self.get_live_metrics()
+            self.after(0, lambda: self._apply_dashboard_data(m, a, c, dr, mi))
+        threading.Thread(target=_initial_load, daemon=True).start()
+
         self.dashboard_refresh_job = self.after(15000, self._auto_refresh_dashboard)
-        
         return frame
+
+    def _embed_trend_chart(self, parent, chart_data):
+        fig, ax = plt.subplots(figsize=(4.5, 2.4), dpi=90)
+        fig.patch.set_facecolor("#FFFFFF")
+        ax.set_facecolor("#FFFFFF")
+        self._draw_trend(ax, chart_data)
+        plt.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0, 5))
+        return fig, ax, canvas
+
+    def _draw_trend(self, ax, chart_data):
+        ax.clear()
+        if not chart_data:
+            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes, color="#aaa")
+            ax.axis("off")
+            return
+        labels  = [r[0] for r in chart_data]
+        issued  = [r[1] for r in chart_data]
+        retrv   = [r[2] for r in chart_data]
+        x = range(len(labels))
+        ax.plot(list(x), issued, marker="o", color="#27AE60", linewidth=2, label="Issued")
+        ax.plot(list(x), retrv,  marker="o", color="#2980B9", linewidth=2, label="Retrieved", linestyle="--")
+        ax.set_xticks(list(x))
+        ax.set_xticklabels(labels, fontsize=9)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.tick_params(axis="y", labelsize=8)
+        ax.legend(fontsize=8, loc="upper left", frameon=False)
+        ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+
+    def _render_deployed_table(self, deployed_rows):
+        for w in self.dash_deployed_frame.winfo_children():
+            w.destroy()
+        if not deployed_rows:
+            ctk.CTkLabel(self.dash_deployed_frame, text="No tools currently deployed.",
+                         font=("Inter", 11), text_color="#aaa").pack(pady=8)
+            return
+        hdr = ctk.CTkFrame(self.dash_deployed_frame, fg_color="#1E4528", corner_radius=5, height=28)
+        hdr.pack(fill="x", padx=0, pady=(0, 1))
+        hdr.pack_propagate(False)
+        hdr.grid_columnconfigure(0, weight=3)
+        hdr.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(hdr, text="Project", font=("Inter", 10, "bold"), text_color="white", anchor="w").grid(row=0, column=0, padx=8, sticky="ew")
+        ctk.CTkLabel(hdr, text="Tools Out", font=("Inter", 10, "bold"), text_color="white", anchor="center").grid(row=0, column=1, padx=8, sticky="ew")
+        for i, (proj, cnt) in enumerate(deployed_rows):
+            bg = "#F9FAFB" if i % 2 == 0 else "white"
+            row = ctk.CTkFrame(self.dash_deployed_frame, fg_color=bg, height=28)
+            row.pack(fill="x", pady=0)
+            row.pack_propagate(False)
+            row.grid_columnconfigure(0, weight=3)
+            row.grid_columnconfigure(1, weight=1)
+            ctk.CTkLabel(row, text=proj, font=("Inter", 10), text_color="#1A1A1A", anchor="w").grid(row=0, column=0, padx=8, sticky="ew")
+            ctk.CTkLabel(row, text=str(cnt), font=("Inter", 10, "bold"), text_color="#1E4528", anchor="center").grid(row=0, column=1, padx=8, sticky="ew")
+
+    def _render_my_issuances(self, my_issuances):
+        for w in self.dash_myissue_frame.winfo_children():
+            w.destroy()
+        if not my_issuances:
+            ctk.CTkLabel(self.dash_myissue_frame, text="✓ No tools currently issued to you.",
+                         font=("Inter", 11), text_color="#27AE60").pack(pady=20)
+            return
+        hdr = ctk.CTkFrame(self.dash_myissue_frame, fg_color="#1E4528", corner_radius=5, height=28)
+        hdr.pack(fill="x", pady=(0, 1))
+        hdr.pack_propagate(False)
+        hdr.grid_columnconfigure(0, weight=3)
+        hdr.grid_columnconfigure(1, weight=2)
+        hdr.grid_columnconfigure(2, weight=2)
+        ctk.CTkLabel(hdr, text="Tool", font=("Inter", 10, "bold"), text_color="white", anchor="w").grid(row=0, column=0, padx=8, sticky="ew")
+        ctk.CTkLabel(hdr, text="Issued", font=("Inter", 10, "bold"), text_color="white", anchor="center").grid(row=0, column=1, padx=4, sticky="ew")
+        ctk.CTkLabel(hdr, text="Project", font=("Inter", 10, "bold"), text_color="white", anchor="center").grid(row=0, column=2, padx=8, sticky="ew")
+        for i, (tool, date, proj) in enumerate(my_issuances):
+            bg = "#F9FAFB" if i % 2 == 0 else "white"
+            row = ctk.CTkFrame(self.dash_myissue_frame, fg_color=bg, height=28)
+            row.pack(fill="x", pady=0)
+            row.pack_propagate(False)
+            row.grid_columnconfigure(0, weight=3)
+            row.grid_columnconfigure(1, weight=2)
+            row.grid_columnconfigure(2, weight=2)
+            ctk.CTkLabel(row, text=tool, font=("Inter", 10), text_color="#1A1A1A", anchor="w").grid(row=0, column=0, padx=8, sticky="ew")
+            ctk.CTkLabel(row, text=date, font=("Inter", 10), text_color="#555", anchor="center").grid(row=0, column=1, padx=4, sticky="ew")
+            ctk.CTkLabel(row, text=proj, font=("Inter", 10), text_color="#2980B9", anchor="center").grid(row=0, column=2, padx=8, sticky="ew")
 
     def _bind_widget_tree(self, widget, callback):
         try:
@@ -687,11 +914,11 @@ class DashboardApp(ctk.CTkToplevel):
         for col, (w, m) in enumerate(zip(weights, min_sizes)):
             grid_frame.grid_columnconfigure(col, weight=w, minsize=m, uniform="act_cols")
 
-        # Compact Header Row (Pinaliit ang font at padding, anchor="w" para pantay sa data rows)
+        # Compact Header Row
         for col, text in enumerate(headers):
             cell = ctk.CTkFrame(grid_frame, fg_color="#1E4528", corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 1))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 10, "bold"), text_color="white", anchor="w", justify="left")
+            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 10, "bold"), text_color="white", anchor="center", justify="center")
             lbl.pack(fill="both", expand=True, padx=5, pady=6)
 
         if not activities:
@@ -719,8 +946,8 @@ class DashboardApp(ctk.CTkToplevel):
                         color = "#2ECC71"
                         font_weight = "bold"
 
-                # Pinaliit ang font sa 10
-                lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 10, font_weight), text_color=color, anchor="w", justify="left")
+                # Pinaliit ang font sa 10 at naka-center na ngayon
+                lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 10, font_weight), text_color=color, anchor="center", justify="center")
                 
                 # Dynamic text wrapping
                 def set_wrap(e, l=lbl, m=min_sizes[col]):
@@ -751,40 +978,66 @@ class DashboardApp(ctk.CTkToplevel):
             else:
                 self.nav_badges["Project Management"].configure(fg_color="transparent", text="")
 
-    def _auto_refresh_dashboard(self):
-        metrics, activities, chart_data = self.get_live_metrics()
-        
-        self._update_sidebar_badges(metrics)
-        
-        if self.current_page_name != "Dashboard" or not hasattr(self, 'dash_util_lbl') or not self.dash_util_lbl.winfo_exists():
-            self.dashboard_refresh_job = self.after(15000, self._auto_refresh_dashboard)
+    def _apply_dashboard_data(self, metrics, activities, chart_data, deployed_rows=None, my_issuances=None):
+        """Apply fetched metrics to dashboard widgets — must run on main thread."""
+        if not self.winfo_exists():
             return
-            
+        self._update_sidebar_badges(metrics)
+        if not hasattr(self, 'dash_util_lbl') or not self.dash_util_lbl.winfo_exists():
+            return
+
         self.dash_util_lbl.configure(text=f"{metrics['utilization_pct']}%")
         self.dash_wf_lbl.configure(text=f"{metrics['active_workforce']} / {metrics['total_employees']}")
         self.dash_inv_lbl.configure(text=str(metrics['total_physical']))
-        
-        self._render_action_badges(metrics)
-        self._render_overdue_badges(metrics)
-        
-        self.dash_ax.clear()
-        categories = ["Good", "Repair", "Damaged", "Lost"]
-        colors = ["#2ECC71", "#F1C40F", "#E67E22", "#95A5A6"]
-        bars = self.dash_ax.bar(categories, chart_data, color=colors, width=0.6)
-        self.dash_ax.spines["top"].set_visible(False)
-        self.dash_ax.spines["right"].set_visible(False)
-        self.dash_ax.spines["left"].set_visible(False)
-        self.dash_ax.get_yaxis().set_ticks([])
 
-        for bar in bars:
-            yval = bar.get_height()
-            offset = max(chart_data) * 0.05 + 0.1 if max(chart_data) > 0 else 0.1
-            self.dash_ax.text(bar.get_x() + bar.get_width() / 2, yval + offset,
-                    int(yval), ha="center", va="bottom",
-                    fontdict={"family": "sans-serif", "weight": "bold", "color": "#333333"})
+        # Low stock card
+        ls = metrics.get("low_stock", 0)
+        self.dash_lowstock_val.configure(text=str(ls), text_color="#D8000C" if ls > 0 else "black")
+        if hasattr(self, "dash_lowstock_top"):
+            card = self.dash_lowstock_top.master
+            card.configure(fg_color="#FFF5F5" if ls > 0 else "#F9FAFB",
+                           border_color="#D8000C" if ls > 0 else "#E0E0E0")
 
-        self.dash_canvas.draw()
-        
+        is_admin = self.user_info.get("role", "Staff") == "Admin"
+        if is_admin:
+            self._render_action_badges(metrics)
+            # Project status strip
+            if hasattr(self, "dash_proj_active_lbl"):
+                self.dash_proj_active_lbl.configure(text=f"{metrics.get('proj_active', 0)} Active")
+                self.dash_proj_pending_lbl.configure(text=f"{metrics.get('proj_pending', 0)} Pending")
+                ov = metrics.get('overdue_projects', 0)
+                self.dash_proj_overdue_lbl.configure(
+                    text=f"{ov} Overdue",
+                    text_color="#D8000C" if ov > 0 else "#C0392B"
+                )
+                self.dash_proj_done_lbl.configure(text=f"{metrics.get('proj_completed_month', 0)} Completed (this month)")
+            # Trend chart
+            if hasattr(self, "dash_ax"):
+                self._draw_trend(self.dash_ax, chart_data)
+                self.dash_canvas.draw()
+            # Deployed table
+            if hasattr(self, "dash_deployed_frame") and deployed_rows is not None:
+                self._render_deployed_table(deployed_rows)
+        else:
+            # Staff: my issuances
+            if hasattr(self, "dash_myissue_frame") and my_issuances is not None:
+                self._render_my_issuances(my_issuances)
+
+        self._render_activity_feed(activities)
+
+    def _auto_refresh_dashboard(self):
+        import threading
+        def _fetch():
+            m, a, c, dr, mi = self.get_live_metrics()
+            self.after(0, lambda: self._on_refresh_done(m, a, c, dr, mi))
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _on_refresh_done(self, metrics, activities, chart_data, deployed_rows=None, my_issuances=None):
+        if not self.winfo_exists():
+            return
+        self._update_sidebar_badges(metrics)
+        if self.current_page_name == "Dashboard" and hasattr(self, 'dash_util_lbl') and self.dash_util_lbl.winfo_exists():
+            self._apply_dashboard_data(metrics, activities, chart_data, deployed_rows, my_issuances)
         self.dashboard_refresh_job = self.after(15000, self._auto_refresh_dashboard)
 
     def embed_chart(self, parent_frame, chart_data):

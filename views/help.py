@@ -192,8 +192,11 @@ class HelpView(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        self._ensure_custom_tables()
-        self.build_ui()
+        import threading
+        def _init():
+            self._ensure_custom_tables()
+            self.after(0, self.build_ui)
+        threading.Thread(target=_init, daemon=True).start()
 
     def _ensure_custom_tables(self):
         conn = get_connection()
@@ -292,16 +295,13 @@ class HelpView(ctk.CTkFrame):
         top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 10))
 
         ctk.CTkLabel(top_bar, text="Help & Support Hub", font=("Inter", 20, "bold"), text_color="#1A1A1A").pack(side="left", padx=20)
-        ctk.CTkLabel(top_bar, text="Looking to export data? Use the 'Reports' module for PDF generation.", font=("Inter", 11, "italic"), text_color="#3498DB").pack(side="left", padx=10)
 
-        def goto_reports():
-            dash = self.winfo_toplevel()
-            if hasattr(dash, "show_frame"):
-                dash.show_frame("Reports")
-                
-        ctk.CTkButton(top_bar, text="Open Reports ↗", width=110, height=28, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 11, "bold"), command=goto_reports).pack(side="left", padx=10)
-
-        tabs = ["Help Guide", "FAQs", "System Requirements", "Support Tickets"]
+        tabs = [
+            "    ▤ Help Guide    ", 
+            "         💬 FAQs         ", 
+            " ⛭ System Requirements ", 
+            "   ✉ Support Tickets   "
+        ]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
         self.seg_btn = ctk.CTkSegmentedButton(
@@ -321,23 +321,23 @@ class HelpView(ctk.CTkFrame):
     def switch_tab(self, selected_tab):
         for widget in self.tab_content.winfo_children():
             widget.destroy()
-        if selected_tab == "Help Guide":
+        if "Help Guide" in selected_tab:
             self.render_guide_tab()
-        elif selected_tab == "FAQs":
+        elif "FAQs" in selected_tab:
             self.render_faq_tab()
-        elif selected_tab == "System Requirements":
+        elif "System Requirements" in selected_tab:
             self.render_sysreq_tab()
-        elif selected_tab == "Support Tickets":
+        elif "Support Tickets" in selected_tab:
             self.render_tickets_tab()
 
     def _build_search_bar(self, parent, on_search, placeholder="Search keywords..."):
         bar = ctk.CTkFrame(parent, fg_color="transparent")
-        bar.pack(fill="x", padx=20, pady=(12, 4))
-        entry = ctk.CTkEntry(bar, placeholder_text=placeholder, width=300)
-        entry.pack(side="left", padx=(0, 8))
+        bar.pack(fill="x", padx=20, pady=(4, 4))
+        entry = ctk.CTkEntry(bar, placeholder_text=placeholder, width=300, height=38)
+        entry.pack(side="left", padx=(0, 10))
         entry.bind("<Return>", lambda e: on_search(entry.get().strip()))
-        ctk.CTkButton(bar, text="Search", width=75, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 11, "bold"), command=lambda: on_search(entry.get().strip())).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(bar, text="↻ Clear", width=70, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: [entry.delete(0, "end"), on_search("")]).pack(side="left")
+        ctk.CTkButton(bar, text="Search", width=80, height=38, fg_color="#3498DB", text_color="white", hover_color="#2980B9", font=("Inter", 12, "bold"), command=lambda: on_search(entry.get().strip())).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(bar, text="⟳ Reset", width=80, height=38, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=lambda: [entry.delete(0, "end"), on_search("")]).pack(side="left", padx=(0, 10))
         return entry
 
     @staticmethod
@@ -357,11 +357,11 @@ class HelpView(ctk.CTkFrame):
         outer.grid_rowconfigure(2, weight=1)
 
         hdr = ctk.CTkFrame(outer, fg_color="transparent")
-        hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 0))
+        hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 0))
         ctk.CTkLabel(hdr, text="User Guide — Automated Management System", font=("Inter", 18, "bold"), text_color="#1E4528").pack(side="left")
         
         if self.is_admin:
-            ctk.CTkButton(hdr, text="+ Add Guide", fg_color="#1E4528", text_color="#F1C40F", font=("Inter", 12, "bold"), hover_color="#14301C", command=lambda: self.open_guide_modal()).pack(side="right")
+            ctk.CTkButton(hdr, text="+ Add Guide", width=140, height=38, fg_color="#1E4528", text_color="white", font=("Inter", 12, "bold"), hover_color="#14301C", command=lambda: self.open_guide_modal()).pack(side="right", padx=(10, 0))
 
         search_container = ctk.CTkFrame(outer, fg_color="transparent")
         search_container.grid(row=1, column=0, sticky="ew")
@@ -525,11 +525,11 @@ class HelpView(ctk.CTkFrame):
         outer.grid_rowconfigure(2, weight=1)
 
         hdr = ctk.CTkFrame(outer, fg_color="transparent")
-        hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 0))
+        hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 0))
         ctk.CTkLabel(hdr, text="Frequently Asked Questions", font=("Inter", 18, "bold"), text_color="#1E4528").pack(side="left")
         
         if self.is_admin:
-            ctk.CTkButton(hdr, text="+ Add FAQ", fg_color="#1E4528", text_color="#F1C40F", font=("Inter", 12, "bold"), hover_color="#14301C", command=lambda: self.open_faq_modal()).pack(side="right")
+            ctk.CTkButton(hdr, text="+ Add FAQ", width=140, height=38, fg_color="#1E4528", text_color="white", font=("Inter", 12, "bold"), hover_color="#14301C", command=lambda: self.open_faq_modal()).pack(side="right", padx=(10, 0))
 
         search_container = ctk.CTkFrame(outer, fg_color="transparent")
         search_container.grid(row=1, column=0, sticky="ew")
@@ -611,9 +611,9 @@ class HelpView(ctk.CTkFrame):
         modal.grab_set()
         
         modal.update_idletasks()
-        x = (modal.winfo_screenwidth() // 2) - (450 // 2)
-        y = (modal.winfo_screenheight() // 2) - (450 // 2)
-        modal.geometry(f"450x450+{x}+{y}")
+        x = (modal.winfo_screenwidth() // 2) - (500 // 2)
+        y = (modal.winfo_screenheight() // 2) - (600 // 2)
+        modal.geometry(f"500x600+{x}+{y}")
 
         ctk.CTkLabel(modal, text="Question:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(20, 5))
         q_entry = ctk.CTkEntry(modal)
@@ -678,7 +678,7 @@ class HelpView(ctk.CTkFrame):
         ctk.CTkLabel(hdr, text="System Requirements", font=("Inter", 18, "bold"), text_color="#1E4528").pack(side="left")
         
         if self.is_admin:
-            ctk.CTkButton(hdr, text="+ Add System Requirement", fg_color="#1E4528", text_color="#F1C40F", font=("Inter", 12, "bold"), hover_color="#14301C", command=lambda: self.open_sysreq_modal()).pack(side="right")
+            ctk.CTkButton(hdr, text="+ Add Requirement", width=140, height=38, fg_color="#1E4528", text_color="white", font=("Inter", 12, "bold"), hover_color="#14301C", command=lambda: self.open_sysreq_modal()).pack(side="right", padx=(10, 0))
 
         self._sysreq_scroll_frame = ctk.CTkScrollableFrame(outer, fg_color="transparent")
         self._sysreq_scroll_frame.grid(row=1, column=0, sticky="nsew")
@@ -757,9 +757,9 @@ class HelpView(ctk.CTkFrame):
         dialog.grab_set()
         
         dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (450 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (450 // 2)
-        dialog.geometry(f"450x450+{x}+{y}")
+        x = (dialog.winfo_screenwidth() // 2) - (500 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (600 // 2)
+        dialog.geometry(f"500x600+{x}+{y}")
 
         ctk.CTkLabel(dialog, text="Requirement Type:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(20, 5))
         type_var = ctk.StringVar(value="Hardware")
@@ -821,7 +821,6 @@ class HelpView(ctk.CTkFrame):
         frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
-        frame.grid_rowconfigure(1, weight=1)
 
         if not self.is_admin:
             form_bg = ctk.CTkFrame(frame, fg_color="#F9FAFB", corner_radius=10)

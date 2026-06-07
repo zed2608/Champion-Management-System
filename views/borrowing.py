@@ -477,6 +477,7 @@ class BorrowingView(ctk.CTkFrame):
         
         self.active_return_user_id = None
         self.active_return_tool_id = None
+        self.active_return_item_type = None
         self.max_returnable = 0
 
         self.r_emp_id.focus_set()
@@ -1102,7 +1103,8 @@ class BorrowingView(ctk.CTkFrame):
             
             for item in self.borrow_cart:
                 cursor.execute("UPDATE inventory SET quantity_available = quantity_available - %s WHERE tool_id = %s", (item['qty_borrowed'], item['id']))
-                for _ in range(int(item['qty_borrowed'])):
+                rows_to_insert = int(item['qty_borrowed']) + (1 if item['qty_borrowed'] % 1 > 0 else 0)
+                for _ in range(rows_to_insert):
                     cursor.execute("""
                         INSERT INTO transaction (user_id, tool_id, type, borrow_date, purpose, status, condition_at_borrow, project_id) 
                         VALUES (%s, %s, 'Issue', NOW(), %s, 'Active', %s, %s)
@@ -1286,22 +1288,23 @@ class BorrowingView(ctk.CTkFrame):
                 return
 
             query = """
-                SELECT t.tool_id, t.name, COUNT(tr.transaction_id) as active_borrows
+                SELECT t.tool_id, t.name, IFNULL(t.item_type, 'Equipment') as item_type, COUNT(tr.transaction_id) as active_borrows
                 FROM transaction tr
                 JOIN tool t ON tr.tool_id = t.tool_id
                 WHERE tr.tool_id = %s AND tr.status = 'Active' AND tr.user_id = %s
-                GROUP BY t.tool_id, t.name
+                GROUP BY t.tool_id, t.name, t.item_type
             """
             cursor.execute(query, (target_tool['tool_id'], self.active_return_user_id))
             record = cursor.fetchone()
             
             if record:
                 self.active_return_tool_id = record['tool_id']
+                self.active_return_item_type = record['item_type']
                 self.max_returnable = record['active_borrows']
                 self.r_record_info.configure(text=f"✓ Tool Identified: {record['name']}\nCurrently Deployed Out: {record['active_borrows']}", text_color="#2ECC71")
                 self.r_qty.delete(0, 'end'); self.r_qty.insert(0, "1")
             else:
-                self.active_return_tool_id = None; self.max_returnable = 0
+                self.active_return_tool_id = None; self.active_return_item_type = None; self.max_returnable = 0
                 self.r_record_info.configure(text="❌ No active records found.", text_color="#D8000C")
         finally:
             if conn.is_connected(): cursor.close(); conn.close()
@@ -1330,6 +1333,9 @@ class BorrowingView(ctk.CTkFrame):
         try:
             return_qty = float(self.r_qty.get())
             if return_qty <= 0: raise ValueError
+            
+            if getattr(self, 'active_return_item_type', 'Equipment') != 'Consumable' and not return_qty.is_integer():
+                return messagebox.showerror("Error", "Equipment items must be returned in whole numbers.", parent=self.retrieval_modal)
         except ValueError:
             return messagebox.showerror("Error", "Quantity must be a positive number.", parent=self.retrieval_modal)
             
@@ -1346,7 +1352,8 @@ class BorrowingView(ctk.CTkFrame):
             if not cursor.fetchone():
                 cursor.execute("ALTER TABLE transaction ADD COLUMN condition_return_notes TEXT NULL")
 
-            cursor.execute("SELECT transaction_id FROM transaction WHERE tool_id = %s AND status = 'Active' AND user_id = %s ORDER BY borrow_date ASC LIMIT %s", (self.active_return_tool_id, self.active_return_user_id, return_qty))
+            rows_to_close = int(return_qty) + (1 if return_qty % 1 > 0 else 0)
+            cursor.execute("SELECT transaction_id FROM transaction WHERE tool_id = %s AND status = 'Active' AND user_id = %s ORDER BY borrow_date ASC LIMIT %s", (self.active_return_tool_id, self.active_return_user_id, rows_to_close))
             transactions_to_close = cursor.fetchall()
             
             for trans in transactions_to_close:
@@ -1360,8 +1367,6 @@ class BorrowingView(ctk.CTkFrame):
                 cursor.execute("UPDATE inventory SET quantity_total = quantity_total - %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
             else:
                 cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
-                
-            cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
             cursor.execute("UPDATE tool SET `condition` = %s WHERE tool_id = %s", (new_cond, self.active_return_tool_id))
             conn.commit()
             messagebox.showinfo("Success", f"Successfully retrieved {return_qty} item(s) and restocked inventory!", parent=self.retrieval_modal)

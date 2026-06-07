@@ -176,10 +176,11 @@ class MaintenanceView(ctk.CTkFrame):
         ctk.CTkLabel(filter_row, text="Show:", font=(
             "Inter", 12), text_color="gray").pack(side="left")
         self.issues_filter = ctk.CTkOptionMenu(
-            filter_row, values=["All Issues", "Open (Pending)", "Resolved"],
+            filter_row, values=["Open (Pending)", "All Issues", "Resolved"],
             width=150, fg_color="#F9FAFB", text_color="black"
         )
         self.issues_filter.pack(side="left", padx=8)
+        self.issues_filter.set("Open (Pending)")
 
         self.issues_search = ctk.CTkEntry(filter_row, placeholder_text="Search tool or reporter...",
                                           width=200)
@@ -300,7 +301,7 @@ class MaintenanceView(ctk.CTkFrame):
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         status_filter = self.issues_filter.get() if hasattr(
-            self, "issues_filter") else "All Issues"
+            self, "issues_filter") else "Open (Pending)"
         q = self.issues_search.get().strip() if hasattr(self, "issues_search") else ""
 
         conn = get_connection()
@@ -428,8 +429,8 @@ class MaintenanceView(ctk.CTkFrame):
         
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - (480 // 2)
-        y = (modal.winfo_screenheight() // 2) - (400 // 2)
-        modal.geometry(f"480x400+{x}+{y}")
+        y = (modal.winfo_screenheight() // 2) - (470 // 2)
+        modal.geometry(f"480x470+{x}+{y}")
 
         status_color = "#2ECC71" if row["is_resolved"] else "#D8000C"
         status_text = "✓ RESOLVED" if row["is_resolved"] else "⚠ PENDING"
@@ -460,6 +461,12 @@ class MaintenanceView(ctk.CTkFrame):
                       ["Good", "Needs Repair", "Damaged", "Lost"] else "Needs Repair")
         cond_menu.pack(fill="x", pady=(5, 10))
 
+        ctk.CTkLabel(form, text="Restock Quantity (if replaced/found):", font=("Inter", 11, "bold"),
+                     text_color="#1A1A1A").pack(anchor="w")
+        restock_entry = ctk.CTkEntry(
+            form, placeholder_text="0 (Leave 0 if already in stock)")
+        restock_entry.pack(fill="x", pady=(5, 10))
+
         ctk.CTkLabel(form, text="Resolution Notes:", font=("Inter", 11, "bold"),
                      text_color="#1A1A1A").pack(anchor="w")
         notes_entry = ctk.CTkEntry(
@@ -473,6 +480,17 @@ class MaintenanceView(ctk.CTkFrame):
             try:
                 cursor = conn.cursor()
                 resolution = notes_entry.get().strip() or "Marked resolved by Admin."
+                
+                try:
+                    rq = float(restock_entry.get().strip() or 0)
+                    if rq < 0: raise ValueError
+                except ValueError:
+                    messagebox.showerror("Error", "Restock Quantity must be a positive number.", parent=modal)
+                    return
+
+                if rq > 0:
+                    cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s, quantity_total = quantity_total + %s WHERE tool_id = %s", (rq, rq, row["tool_id"]))
+
                 cursor.execute("""
                     UPDATE tool_issues
                     SET is_resolved = 1, condition_flag = %s,
@@ -493,7 +511,7 @@ class MaintenanceView(ctk.CTkFrame):
                                f"New condition: {cond_menu.get()}")
 
                 messagebox.showinfo(
-                    "Resolved", "Issue marked as resolved and inventory updated.", parent=modal)
+                    "Resolved", "Issue marked as resolved, inventory updated, and removed from open issues.", parent=modal)
                 modal.destroy()
                 self.load_issues()
             except Exception as e:
