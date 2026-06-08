@@ -124,16 +124,22 @@ class ProjectsView(ctk.CTkFrame):
         start_f = ctk.CTkFrame(row_dates, fg_color="transparent")
         start_f.grid(row=0, column=0, sticky="ew", padx=(0, 5))
         ctk.CTkLabel(start_f, text="Start Date", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
-        self.p_start = ctk.CTkEntry(start_f, placeholder_text="YYYY-MM-DD", takefocus=True)
-        self.p_start.pack(fill="x", pady=(5, 0))
+        start_input_row = ctk.CTkFrame(start_f, fg_color="transparent")
+        start_input_row.pack(fill="x", pady=(5, 0))
+        self.p_start = ctk.CTkEntry(start_input_row, placeholder_text="YYYY-MM-DD", takefocus=True)
+        self.p_start.pack(side="left", fill="x", expand=True)
         self.p_start.bind("<KeyRelease>", lambda e: self._format_date_mask(e, self.p_start))
+        ctk.CTkButton(start_input_row, text="📅", width=35, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.p_start)).pack(side="left", padx=(5, 0))
 
         end_f = ctk.CTkFrame(row_dates, fg_color="transparent")
         end_f.grid(row=0, column=1, sticky="ew", padx=(5, 0))
         ctk.CTkLabel(end_f, text="End Date", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
-        self.p_end = ctk.CTkEntry(end_f, placeholder_text="YYYY-MM-DD", takefocus=True)
-        self.p_end.pack(fill="x", pady=(5, 0))
+        end_input_row = ctk.CTkFrame(end_f, fg_color="transparent")
+        end_input_row.pack(fill="x", pady=(5, 0))
+        self.p_end = ctk.CTkEntry(end_input_row, placeholder_text="YYYY-MM-DD", takefocus=True)
+        self.p_end.pack(side="left", fill="x", expand=True)
         self.p_end.bind("<KeyRelease>", lambda e: self._format_date_mask(e, self.p_end)) 
+        ctk.CTkButton(end_input_row, text="📅", width=35, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.p_end)).pack(side="left", padx=(5, 0))
 
         self.p_name.bind("<Return>", lambda e: self.p_head.focus_set()) 
         self.p_head.bind("<Return>", lambda e: self.p_client.focus_set())
@@ -191,6 +197,50 @@ class ProjectsView(ctk.CTkFrame):
         if current_val != formatted:
             entry_widget.delete(0, 'end')
             entry_widget.insert(0, formatted)
+
+    def open_date_picker(self, entry_widget):
+        try:
+            from tkcalendar import Calendar
+        except ImportError:
+            messagebox.showerror("Dependency Missing", "Please install the calendar module by running in your terminal:\n\npip install tkcalendar", parent=self.draft_modal)
+            return
+
+        top = ctk.CTkToplevel(self.draft_modal)
+        top.title("Select Date")
+        top.attributes("-topmost", True)
+        top.grab_set()
+        top.resizable(False, False)
+        
+        top.update_idletasks()
+        sw = top.winfo_screenwidth()
+        sh = top.winfo_screenheight()
+        x = (sw - 280) // 2
+        y = (sh - 260) // 2
+        top.geometry(f"280x260+{x}+{y}")
+        
+        current_date = entry_widget.get().strip()
+        sel_date = datetime.now()
+        if current_date:
+            try:
+                sel_date = datetime.strptime(current_date, "%Y-%m-%d")
+            except ValueError:
+                pass
+                
+        cal = Calendar(top, selectmode='day', date_pattern='y-mm-dd',
+                       year=sel_date.year, month=sel_date.month, day=sel_date.day,
+                       background='#1E4528', foreground='white', borderwidth=0,
+                       headersbackground='#F9FAFB', headersforeground='black',
+                       normalbackground='white', normalforeground='black',
+                       weekendbackground='white', weekendforeground='black',
+                       othermonthforeground='gray', othermonthweforeground='gray')
+        cal.pack(fill="both", expand=True, padx=10, pady=(10, 5))
+        
+        def set_date():
+            entry_widget.delete(0, "end")
+            entry_widget.insert(0, cal.get_date())
+            top.destroy()
+            
+        ctk.CTkButton(top, text="Confirm", fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=set_date).pack(pady=(0, 10), padx=10, fill="x")
 
     def _add_worker_from_entry(self):
         val = self.worker_single_entry.get().strip()
@@ -631,7 +681,7 @@ class ProjectsView(ctk.CTkFrame):
                     txt_color = "#D35400" if col == 4 and "Pending" in val else ("#2ECC71" if col == 4 and "Approved" in val else "#1A1A1A")
                     font_w = "bold" if col == 4 else "normal"
 
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center")
+                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="left", anchor="w")
                     # Set wrap to ensure long text stacks downward instead of pushing grid wide
                     if wrap_l > 0:
                         lbl.configure(wraplength=wrap_l)

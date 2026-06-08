@@ -59,6 +59,7 @@ class DashboardApp(ctk.CTkToplevel):
 
         self.show_frame("Dashboard")
         self._start_inactivity_timer()
+        self.dashboard_refresh_job = self.after(15000, self._auto_refresh_dashboard)
 
         # Reset inactivity timer on any user interaction
         self.bind_all("<Motion>", self._reset_inactivity_timer)
@@ -352,10 +353,6 @@ class DashboardApp(ctk.CTkToplevel):
             
         self.current_page_name = page_name
         
-        if hasattr(self, 'dashboard_refresh_job') and self.dashboard_refresh_job:
-            self.after_cancel(self.dashboard_refresh_job)
-            self.dashboard_refresh_job = None
-
         for name, btn in self.nav_buttons.items():
             if name == page_name:
                 btn.configure(fg_color="#2A6038", text_color="#F1C40F")
@@ -507,7 +504,7 @@ class DashboardApp(ctk.CTkToplevel):
             # Activity feed
             cursor.execute("""
                 SELECT
-                    DATE_FORMAT(DATE_ADD(raw_date, INTERVAL 8 HOUR), '%Y-%m-%d %I:%i %p') as ts,
+                    DATE_FORMAT(raw_date, '%Y-%m-%d %I:%i %p') as ts,
                     action, item, actor
                 FROM (
                     SELECT borrow_date as raw_date, 'Issued' as action, t.name as item, u.full_name as actor
@@ -586,7 +583,7 @@ class DashboardApp(ctk.CTkToplevel):
                 uid = self.user_info.get("user_id")
                 cursor.execute("""
                     SELECT t.name as tool_name,
-                           DATE_FORMAT(DATE_ADD(tr.borrow_date, INTERVAL 8 HOUR), '%b %d, %Y') as issued_date,
+                           DATE_FORMAT(tr.borrow_date, '%b %d, %Y') as issued_date,
                            IFNULL(p.name, '—') as project_name
                     FROM transaction tr
                     JOIN tool t ON tr.tool_id = t.tool_id
@@ -765,7 +762,6 @@ class DashboardApp(ctk.CTkToplevel):
             self.after(0, lambda: self._apply_dashboard_data(m, a, c, dr, mi))
         threading.Thread(target=_initial_load, daemon=True).start()
 
-        self.dashboard_refresh_job = self.after(15000, self._auto_refresh_dashboard)
         return frame
 
     def _embed_trend_chart(self, parent, chart_data):
@@ -901,64 +897,33 @@ class DashboardApp(ctk.CTkToplevel):
         for w in self.dash_activity_frame.winfo_children(): w.destroy()
         
         headers = ["Date & Time", "Action Type", "Module / Item", "User"]
-        # Inayos ang weights para mas malaki ang space ng Module/Item
-        weights = [2, 1, 3, 1]
+        weights = [2, 2, 4, 2]
         
-        # MALIIT NA MIN_SIZES: Pinipilit ang table na mag-shrink para magkasya sa screen
-        min_sizes = [100, 80, 150, 80] 
-
-        # Inner frame para sa table
-        grid_frame = ctk.CTkFrame(self.dash_activity_frame, fg_color="transparent")
-        grid_frame.pack(fill="x", expand=True)
-
-        for col, (w, m) in enumerate(zip(weights, min_sizes)):
-            grid_frame.grid_columnconfigure(col, weight=w, minsize=m, uniform="act_cols")
-
-        # Compact Header Row
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(grid_frame, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 1))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 10, "bold"), text_color="white", anchor="center", justify="center")
-            lbl.pack(fill="both", expand=True, padx=5, pady=6)
+        self._make_header(self.dash_activity_frame, headers, weights, pad_left=20, pad_right=20)
 
         if not activities:
             activities = [("-", "No recent activity recorded.", "-", "-")]
 
-        # Compact Data Rows
-        for i, row_data in enumerate(activities):
-            r_idx = i + 1
+        for i, (ts, action, item, actor) in enumerate(activities):
             bg = "#F9FAFB" if i % 2 == 0 else "white"
-
-            for col, text in enumerate(row_data):
-                cell = ctk.CTkFrame(grid_frame, fg_color=bg, corner_radius=0)
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-
-                font_weight = "normal"
-                color = "#1A1A1A"
-                if col == 1:
-                    if text == "Project Created":
-                        color = "#2980B9"
-                        font_weight = "bold"
-                    elif text == "Issued":
-                        color = "#27AE60"
-                        font_weight = "bold"
-                    elif text == "Retrieved":
-                        color = "#2ECC71"
-                        font_weight = "bold"
-
-                # Pinaliit ang font sa 10 at naka-center na ngayon
-                lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 10, font_weight), text_color=color, anchor="center", justify="center")
-                
-                # Dynamic text wrapping
-                def set_wrap(e, l=lbl, m=min_sizes[col]):
-                    target_wrap = max(m - 10, e.width - 10)
-                    if not hasattr(l, '_last_wrap') or abs(l._last_wrap - target_wrap) > 5:
-                        l.configure(wraplength=target_wrap)
-                        l._last_wrap = target_wrap
-                cell.bind("<Configure>", set_wrap)
-                
-                # Pinaliit ang padding para numipis ang row height
-                lbl.pack(fill="both", expand=True, padx=5, pady=6)
+            row_frame = self._make_row(self.dash_activity_frame, [ts, action, item, actor], weights, bg)
+            
+            font_weight = "normal"
+            color = "#1A1A1A"
+            if action == "Project Created":
+                color = "#2980B9"
+                font_weight = "bold"
+            elif action == "Issued":
+                color = "#27AE60"
+                font_weight = "bold"
+            elif action == "Retrieved":
+                color = "#2ECC71"
+                font_weight = "bold"
+            
+            ctk.CTkLabel(row_frame, text=ts, font=("Inter", 11), text_color="#1A1A1A", anchor="center").grid(row=0, column=0, padx=10, pady=5, sticky="ew")
+            ctk.CTkLabel(row_frame, text=action, font=("Inter", 11, font_weight), text_color=color, anchor="center").grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+            ctk.CTkLabel(row_frame, text=item, font=("Inter", 11), text_color="#1A1A1A", anchor="center").grid(row=0, column=2, padx=10, pady=5, sticky="ew")
+            ctk.CTkLabel(row_frame, text=actor, font=("Inter", 11), text_color="#1A1A1A", anchor="center").grid(row=0, column=3, padx=10, pady=5, sticky="ew")
 
     def _update_sidebar_badges(self, metrics):
         is_admin = self.user_info.get("role", "Staff") == "Admin"

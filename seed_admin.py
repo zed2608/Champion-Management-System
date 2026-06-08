@@ -1,5 +1,6 @@
 import bcrypt
 from database import get_connection
+import datetime
 
 def seed_admin():
     print("Connecting to the database...")
@@ -12,9 +13,10 @@ def seed_admin():
         cursor = conn.cursor()
         
         # Default Admin Credentials
-        emp_id = "admin"
+        current_year = datetime.datetime.now().year
+        emp_id = f"ADM-{current_year}-001"
         name = "System Admin"
-        raw_password = "password123"
+        raw_password = "admin123"
         role = "Admin"
 
         print("Generating secure password hash...")
@@ -25,21 +27,25 @@ def seed_admin():
         existing_user = cursor.fetchone()
 
         if existing_user:
-            print(f"⚠️ Account '{emp_id}' found! Forcing password reset...")
-            # FORCE UPDATE THE PASSWORD
-            cursor.execute("UPDATE user SET password_hash = %s WHERE employee_id = %s", (hashed_pw, emp_id))
-            print("✅ Password successfully overridden!")
+            print(f"⚠️ Account '{emp_id}' found! Forcing password reset and unlocking...")
+            # FORCE UPDATE THE PASSWORD, RESET ATTEMPTS, AND UNLOCK
+            cursor.execute("""
+                UPDATE user SET password_hash = %s, status = 'Active', failed_attempts = 0, reset_requested = 0 
+                WHERE employee_id = %s
+            """, (hashed_pw, emp_id))
+            print("✅ Account unlocked and password successfully overridden!")
         else:
             print(f"Injecting new '{emp_id}' account...")
             # INSERT NEW ACCOUNT
             cursor.execute("""
-                INSERT INTO user (employee_id, full_name, password_hash, role)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO user (employee_id, full_name, password_hash, role, status, failed_attempts, reset_requested)
+                VALUES (%s, %s, %s, %s, 'Active', 0, 0)
             """, (emp_id, name, hashed_pw, role))
             print("✅ Account injected successfully!")
 
         conn.commit()
         print("-" * 30)
+        print("LOGIN CREDENTIALS")
         print(f"Employee ID (Username): {emp_id}")
         print(f"Password:               {raw_password}")
         print("-" * 30)

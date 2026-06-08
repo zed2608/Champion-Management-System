@@ -85,19 +85,30 @@ class MaintenanceView(ctk.CTkFrame):
         self.tab_content.grid_columnconfigure(0, weight=1)
         self.tab_content.grid_rowconfigure(0, weight=1)
 
+        self.cached_tabs = {}
         self.switch_tab(tab_labels[0])
 
     def switch_tab(self, selected_tab):
-        for widget in self.tab_content.winfo_children():
-            widget.destroy()
-        if "Issues" in selected_tab:
-            self.render_issues_tab()
-        elif "Tools" in selected_tab:
-            self.render_tools_tab()
-        elif "Employees" in selected_tab:
-            self.render_employees_tab()
-        elif "Projects" in selected_tab:
-            self.render_projects_tab()
+        if hasattr(self, "current_tab") and self.current_tab:
+            self.current_tab.grid_remove()
+            
+        if selected_tab not in self.cached_tabs:
+            if "Issues" in selected_tab:
+                self.cached_tabs[selected_tab] = self.render_issues_tab()
+            elif "Tools" in selected_tab:
+                self.cached_tabs[selected_tab] = self.render_tools_tab()
+            elif "Employees" in selected_tab:
+                self.cached_tabs[selected_tab] = self.render_employees_tab()
+            elif "Projects" in selected_tab:
+                self.cached_tabs[selected_tab] = self.render_projects_tab()
+                
+        self.current_tab = self.cached_tabs[selected_tab]
+        self.current_tab.grid(row=0, column=0, sticky="nsew")
+        
+        if "Issues" in selected_tab: self.load_issues()
+        elif "Tools" in selected_tab: self.load_archived_tools()
+        elif "Employees" in selected_tab: self.load_archived_employees()
+        elif "Projects" in selected_tab: self.load_archived_projects()
 
     # ------------------------------------------
     # TAB 1: Manage Issues
@@ -105,7 +116,6 @@ class MaintenanceView(ctk.CTkFrame):
     def render_issues_tab(self):
         frame = ctk.CTkFrame(
             self.tab_content, fg_color="white", corner_radius=10)
-        frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
 
@@ -206,7 +216,7 @@ class MaintenanceView(ctk.CTkFrame):
             frame, fg_color="transparent")
         self._issues_scroll.pack(
             fill="both", expand=True, padx=20, pady=(5, 20))
-        self.load_issues()
+        return frame
 
     def submit_flag(self):
         tool_input = self.flag_tool_id.get().strip()
@@ -339,8 +349,7 @@ class MaintenanceView(ctk.CTkFrame):
             sql = """
                 SELECT ti.issue_id, t.name as tool_name, ti.reported_by,
                        ti.condition_flag, IFNULL(ti.notes,'—') as notes,
-                       DATE_FORMAT(DATE_ADD(ti.flagged_at, INTERVAL 8 HOUR),
-                           '%b %d, %Y %I:%i %p') as flagged_at,
+                       DATE_FORMAT(ti.flagged_at, '%b %d, %Y %I:%i %p') as flagged_at,
                        ti.is_resolved
                 FROM tool_issues ti
                 JOIN tool t ON ti.tool_id = t.tool_id
@@ -536,7 +545,6 @@ class MaintenanceView(ctk.CTkFrame):
     def render_tools_tab(self):
         frame = ctk.CTkFrame(
             self.tab_content, fg_color="white", corner_radius=10)
-        frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(1, weight=1)
 
@@ -549,7 +557,7 @@ class MaintenanceView(ctk.CTkFrame):
             frame, fg_color="transparent")
         self._tools_scroll.pack(
             fill="both", expand=True, padx=20, pady=(5, 20))
-        self.load_archived_tools()
+        return frame
 
     def load_archived_tools(self):
         for w in self._tools_scroll.winfo_children():
@@ -663,7 +671,6 @@ class MaintenanceView(ctk.CTkFrame):
     def render_employees_tab(self):
         frame = ctk.CTkFrame(
             self.tab_content, fg_color="white", corner_radius=10)
-        frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(1, weight=1)
 
@@ -675,7 +682,7 @@ class MaintenanceView(ctk.CTkFrame):
         self._emp_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
         self._emp_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
-        self.load_archived_employees()
+        return frame
 
     def load_archived_employees(self):
         for w in self._emp_scroll.winfo_children():
@@ -789,7 +796,6 @@ class MaintenanceView(ctk.CTkFrame):
     def render_projects_tab(self):
         frame = ctk.CTkFrame(
             self.tab_content, fg_color="white", corner_radius=10)
-        frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(1, weight=1)
 
@@ -801,7 +807,7 @@ class MaintenanceView(ctk.CTkFrame):
         self._proj_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
         self._proj_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
-        self.load_archived_projects()
+        return frame
 
     def load_archived_projects(self):
         for w in self._proj_scroll.winfo_children():

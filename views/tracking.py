@@ -98,20 +98,32 @@ class TrackingView(ctk.CTkFrame):
         self.tab_content.grid_columnconfigure(0, weight=1)
         self.tab_content.grid_rowconfigure(0, weight=1)
 
+        self.cached_tabs = {}
         self.switch_tab(tabs[0])
 
     def switch_tab(self, selected_tab):
-        for widget in self.tab_content.winfo_children():
-            widget.destroy()
+        if hasattr(self, "current_tab") and self.current_tab:
+            self.current_tab.grid_remove()
+
+        if selected_tab not in self.cached_tabs:
+            if "Borrow" in selected_tab:
+                self.cached_tabs[selected_tab] = self.render_logs_tab()
+            elif "Audit" in selected_tab:
+                self.cached_tabs[selected_tab] = self.render_audit_tab()
+            elif "Activity" in selected_tab:
+                self.cached_tabs[selected_tab] = self.render_activity_tab()
+
+        self.current_tab = self.cached_tabs[selected_tab]
+        self.current_tab.grid(row=0, column=0, sticky="nsew")
 
         if "Borrow" in selected_tab:
-            self.render_logs_tab()
+            self.load_logs()
             self.log_search.focus_set()
         elif "Audit" in selected_tab:
-            self.render_audit_tab()
+            self.load_audit()
             self.audit_search.focus_set()
         elif "Activity" in selected_tab:
-            self.render_activity_tab()
+            self.load_activity()
             self.act_search.focus_set()
 
     # ------------------------------------------
@@ -120,7 +132,6 @@ class TrackingView(ctk.CTkFrame):
     def render_logs_tab(self):
         frame = ctk.CTkFrame(
             self.tab_content, fg_color="white", corner_radius=10)
-        frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(1, weight=1)
 
@@ -147,7 +158,7 @@ class TrackingView(ctk.CTkFrame):
         self._log_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
         self._log_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
-        self.load_logs()
+        return frame
 
     def load_logs(self):
         for w in self._log_scroll.winfo_children():
@@ -181,11 +192,9 @@ class TrackingView(ctk.CTkFrame):
                 SELECT tr.transaction_id, tr.type, t.name as tool_name,
                        IFNULL(t.tag_id,'Unassigned') as tag_id,
                        u.full_name,
-                       DATE_FORMAT(DATE_ADD(tr.borrow_date, INTERVAL 8 HOUR),
-                           '%b %d, %Y %I:%i %p') as borrow_date,
+                       DATE_FORMAT(tr.borrow_date, '%b %d, %Y %I:%i %p') as borrow_date,
                        IF(tr.return_date IS NOT NULL,
-                           DATE_FORMAT(DATE_ADD(tr.return_date, INTERVAL 8 HOUR),
-                               '%b %d, %Y %I:%i %p'), '—') as return_date,
+                           DATE_FORMAT(tr.return_date, '%b %d, %Y %I:%i %p'), '—') as return_date,
                        tr.status
                 FROM transaction tr
                 JOIN tool t ON tr.tool_id = t.tool_id
@@ -252,7 +261,6 @@ class TrackingView(ctk.CTkFrame):
     def render_audit_tab(self):
         frame = ctk.CTkFrame(
             self.tab_content, fg_color="white", corner_radius=10)
-        frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
 
@@ -297,7 +305,7 @@ class TrackingView(ctk.CTkFrame):
             frame, fg_color="transparent")
         self._audit_scroll.pack(
             fill="both", expand=True, padx=20, pady=(5, 20))
-        self.load_audit()
+        return frame
 
     def load_audit(self):
         for w in self._audit_scroll.winfo_children():
@@ -332,11 +340,9 @@ class TrackingView(ctk.CTkFrame):
             sql = """
                 SELECT tr.transaction_id, u.full_name, t.name as tool_name,
                        IFNULL(t.tag_id,'Unassigned') as tag_id,
-                       DATE_FORMAT(DATE_ADD(tr.borrow_date, INTERVAL 8 HOUR),
-                           '%b %d, %Y %I:%i %p') as borrow_date,
+                       DATE_FORMAT(tr.borrow_date, '%b %d, %Y %I:%i %p') as borrow_date,
                        IF(tr.return_date IS NOT NULL,
-                           DATE_FORMAT(DATE_ADD(tr.return_date, INTERVAL 8 HOUR),
-                               '%b %d, %Y %I:%i %p'), '—') as return_date,
+                           DATE_FORMAT(tr.return_date, '%b %d, %Y %I:%i %p'), '—') as return_date,
                        IFNULL(tr.condition_at_borrow,'N/A') as cond_borrow,
                        IFNULL(tr.condition_at_return,'N/A')  as cond_return,
                        tr.status
@@ -412,7 +418,6 @@ class TrackingView(ctk.CTkFrame):
     def render_activity_tab(self):
         frame = ctk.CTkFrame(
             self.tab_content, fg_color="white", corner_radius=10)
-        frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
 
@@ -481,7 +486,7 @@ class TrackingView(ctk.CTkFrame):
         self.current_act_page = 1
         self.act_page_size = 50
 
-        self.load_activity()
+        return frame
 
     def do_act_search(self):
         self.current_act_page = 1
@@ -545,8 +550,7 @@ class TrackingView(ctk.CTkFrame):
             
             sql = """
                 SELECT sl.log_id,
-                       DATE_FORMAT(DATE_ADD(sl.timestamp, INTERVAL 8 HOUR),
-                           '%b %d, %Y %I:%i %p') as ts,
+                       DATE_FORMAT(sl.timestamp, '%b %d, %Y %I:%i %p') as ts,
                        IFNULL(u.full_name, CONCAT('UID:', sl.user_id)) as employee,
                        sl.action_type, sl.module, IFNULL(sl.details,'—') as details
                 FROM system_logs sl
@@ -709,8 +713,8 @@ class TrackingView(ctk.CTkFrame):
             cursor.execute("""
                 SELECT tr.transaction_id, t.name as tool_name,
                        IFNULL(t.tag_id,'Unassigned') as tag_id,
-                       DATE_FORMAT(DATE_ADD(tr.borrow_date, INTERVAL 8 HOUR), '%b %d, %Y %I:%i %p') as borrow_date,
-                       IF(tr.return_date IS NOT NULL, DATE_FORMAT(DATE_ADD(tr.return_date, INTERVAL 8 HOUR), '%b %d, %Y %I:%i %p'), '—') as return_date,
+                       DATE_FORMAT(tr.borrow_date, '%b %d, %Y %I:%i %p') as borrow_date,
+                       IF(tr.return_date IS NOT NULL, DATE_FORMAT(tr.return_date, '%b %d, %Y %I:%i %p'), '—') as return_date,
                        IFNULL(tr.condition_at_return,'—') as cond_return,
                        tr.status
                 FROM transaction tr

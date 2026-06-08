@@ -171,8 +171,8 @@ class ProfileView(ctk.CTkFrame):
             cursor.execute("""
                 SELECT tr.transaction_id,
                        t.name as tool_name,
-                       DATE_FORMAT(DATE_ADD(tr.borrow_date, INTERVAL 8 HOUR), '%b %d, %h:%i %p') as borrow_date,
-                       IF(tr.return_date IS NOT NULL, DATE_FORMAT(DATE_ADD(tr.return_date, INTERVAL 8 HOUR), '%b %d, %h:%i %p'), '—') as return_date,
+                       DATE_FORMAT(tr.borrow_date, '%b %d, %h:%i %p') as borrow_date,
+                       IF(tr.return_date IS NOT NULL, DATE_FORMAT(tr.return_date, '%b %d, %h:%i %p'), '—') as return_date,
                        tr.status
                 FROM transaction tr
                 JOIN tool t ON tr.tool_id = t.tool_id

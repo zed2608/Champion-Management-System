@@ -35,13 +35,15 @@ class ReportsView(ctk.CTkFrame):
         filter_f = ctk.CTkFrame(top_bar, fg_color="transparent")
         filter_f.pack(side="right", padx=15)
         ctk.CTkLabel(filter_f, text="From:", font=("Inter", 11, "bold"), text_color="gray").pack(side="left", padx=(0, 5))
-        self.start_date = ctk.CTkEntry(filter_f, placeholder_text="YYYY-MM-DD", width=110, height=32)
-        self.start_date.pack(side="left", padx=(0, 10))
+        self.start_date = ctk.CTkEntry(filter_f, placeholder_text="YYYY-MM-DD", width=100, height=32)
+        self.start_date.pack(side="left", padx=(0, 2))
         self.start_date.bind("<KeyRelease>", lambda e: self._format_date_mask(e, self.start_date))
+        ctk.CTkButton(filter_f, text="📅", width=32, height=32, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.start_date)).pack(side="left", padx=(0, 10))
         ctk.CTkLabel(filter_f, text="To:", font=("Inter", 11, "bold"), text_color="gray").pack(side="left", padx=(0, 5))
-        self.end_date = ctk.CTkEntry(filter_f, placeholder_text="YYYY-MM-DD", width=110, height=32)
-        self.end_date.pack(side="left", padx=(0, 10))
+        self.end_date = ctk.CTkEntry(filter_f, placeholder_text="YYYY-MM-DD", width=100, height=32)
+        self.end_date.pack(side="left", padx=(0, 2))
         self.end_date.bind("<KeyRelease>", lambda e: self._format_date_mask(e, self.end_date))
+        ctk.CTkButton(filter_f, text="📅", width=32, height=32, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.end_date)).pack(side="left", padx=(0, 10))
         ctk.CTkButton(filter_f, text="Apply", width=60, height=32, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(0, 5))
         ctk.CTkButton(filter_f, text="Clear", width=60, height=32, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=self.clear_date_filter).pack(side="left")
 
@@ -91,6 +93,50 @@ class ReportsView(ctk.CTkFrame):
         if current_val != formatted:
             entry_widget.delete(0, 'end')
             entry_widget.insert(0, formatted)
+
+    def open_date_picker(self, entry_widget):
+        try:
+            from tkcalendar import Calendar
+        except ImportError:
+            messagebox.showerror("Dependency Missing", "Please install the calendar module by running in your terminal:\n\npip install tkcalendar", parent=self.winfo_toplevel())
+            return
+
+        top = ctk.CTkToplevel(self)
+        top.title("Select Date")
+        top.attributes("-topmost", True)
+        top.grab_set()
+        top.resizable(False, False)
+        
+        top.update_idletasks()
+        sw = top.winfo_screenwidth()
+        sh = top.winfo_screenheight()
+        x = (sw - 280) // 2
+        y = (sh - 260) // 2
+        top.geometry(f"280x260+{x}+{y}")
+        
+        current_date = entry_widget.get().strip()
+        sel_date = datetime.now()
+        if current_date:
+            try:
+                sel_date = datetime.strptime(current_date, "%Y-%m-%d")
+            except ValueError:
+                pass
+                
+        cal = Calendar(top, selectmode='day', date_pattern='y-mm-dd',
+                       year=sel_date.year, month=sel_date.month, day=sel_date.day,
+                       background='#1E4528', foreground='white', borderwidth=0,
+                       headersbackground='#F9FAFB', headersforeground='black',
+                       normalbackground='white', normalforeground='black',
+                       weekendbackground='white', weekendforeground='black',
+                       othermonthforeground='gray', othermonthweforeground='gray')
+        cal.pack(fill="both", expand=True, padx=10, pady=(10, 5))
+        
+        def set_date():
+            entry_widget.delete(0, "end")
+            entry_widget.insert(0, cal.get_date())
+            top.destroy()
+            
+        ctk.CTkButton(top, text="Confirm", fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=set_date).pack(pady=(0, 10), padx=10, fill="x")
 
     def get_and_validate_dates(self):
         sd = self.start_date.get().strip()

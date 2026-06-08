@@ -52,17 +52,30 @@ class BorrowingView(ctk.CTkFrame):
         self.tab_content.grid_columnconfigure(0, weight=1) 
         self.tab_content.grid_rowconfigure(0, weight=1)
         
+        self.cached_tabs = {}
         self.switch_tab(tabs[0])
 
     def switch_tab(self, selected_tab):
-        for widget in self.tab_content.winfo_children():
-            widget.destroy()
-
-        if selected_tab == "📅 Deployment Schedule":
-            self.build_calendar_tab(self.tab_content)
-        else:
-            self.build_history_table(self.tab_content)
+        if hasattr(self, "current_tab") and self.current_tab:
+            self.current_tab.grid_remove()
+            
+        if selected_tab not in self.cached_tabs:
+            frame = ctk.CTkFrame(self.tab_content, fg_color="transparent")
+            self.cached_tabs[selected_tab] = frame
+            
+            if selected_tab == "📅 Deployment Schedule":
+                self.build_calendar_tab(frame)
+            else:
+                self.build_history_table(frame)
+                
+        self.current_tab = self.cached_tabs[selected_tab]
+        self.current_tab.grid(row=0, column=0, sticky="nsew")
+        
+        if selected_tab == "📋 Deployment History":
             self.load_transaction_history()
+        elif selected_tab == "📅 Deployment Schedule":
+            self._render_calendar()
+            self._render_day_detail(self._cal_selected)
 
     def build_calendar_tab(self, parent):
         now = datetime.now()
@@ -555,11 +568,11 @@ class BorrowingView(ctk.CTkFrame):
                 query = """
                     SELECT tr.type, t.name as tool_name, t.tag_id, COUNT(tr.transaction_id) as grouped_qty,
                            u.full_name, tr.status,
-                           DATE_FORMAT(DATE_ADD(MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as b_date,
-                           DATE_FORMAT(DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as borrow_date_full,
-                           DATE_FORMAT(DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR), '%b %d, %Y') as borrow_date_short,
-                           DATE_FORMAT(DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as return_date_full,
-                           DATE_FORMAT(DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR), '%b %d, %Y') as return_date_short,
+                           DATE_FORMAT(MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)), '%b %d, %Y %h:%i %p') as b_date,
+                           DATE_FORMAT(MAX(tr.borrow_date), '%b %d, %Y %h:%i %p') as borrow_date_full,
+                           DATE_FORMAT(MAX(tr.borrow_date), '%b %d, %Y') as borrow_date_short,
+                           DATE_FORMAT(MAX(tr.return_date), '%b %d, %Y %h:%i %p') as return_date_full,
+                           DATE_FORMAT(MAX(tr.return_date), '%b %d, %Y') as return_date_short,
                            MIN(tr.transaction_id) as first_trn,
                            MAX(tr.transaction_id) as last_trn,
                            IFNULL(MAX(tr.purpose), '—') as purpose,
