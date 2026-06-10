@@ -46,20 +46,34 @@ class InventoryView(ctk.CTkFrame):
 
         ctk.CTkLabel(top_bar, text="Products / Inventory", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
 
+        tabs = ["📦 Inventory Catalog", "🏷️ Tag Management Hub"]
+        self.tab_var = ctk.StringVar(value=tabs[0])
+
+        self.seg_btn = ctk.CTkSegmentedButton(
+            top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
+            fg_color="#F0F0F0", selected_color="#1E4528", selected_hover_color="#14301C"
+        )
+        self.seg_btn.pack(side="right")
+
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
         self.tab_content.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 20))
         
         self.tab_content.grid_columnconfigure(0, weight=1)
         self.tab_content.grid_rowconfigure(0, weight=1)
 
-        self.switch_tab()
+        self.switch_tab(tabs[0])
 
-    def switch_tab(self):
+    def switch_tab(self, selected_tab="📦 Inventory Catalog"):
         for widget in self.tab_content.winfo_children():
             widget.destroy()
 
-        self.build_main_table(self.tab_content)
-        self.load_inventory_data()
+        if "Inventory Catalog" in selected_tab:
+            self.build_main_table(self.tab_content)
+            self.load_inventory_data()
+        elif "Tag Management Hub" in selected_tab:
+            from views.tagging import TaggingView
+            self.tag_view = TaggingView(self.tab_content)
+            self.tag_view.pack(fill="both", expand=True)
 
     def open_add_item_modal(self):
         self.add_modal = ctk.CTkToplevel(self)
@@ -183,19 +197,18 @@ class InventoryView(ctk.CTkFrame):
         search_frame = ctk.CTkFrame(table_card, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=(20, 10))
 
-        self.search_var = ctk.StringVar()
-        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Universal search (Name, Tag, ID, Supplier, Loc, Desc)...", width=350, height=38, textvariable=self.search_var)
+        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Universal search (Name, Tag, ID, Supplier, Loc, Desc)...", width=350, height=38)
         self.search_entry.pack(side="left", padx=(0, 10))
-        
-        self._search_timer = None
-        def on_search_change(*args):
-            if self._search_timer:
-                self.after_cancel(self._search_timer)
-            self._search_timer = self.after(300, self.perform_search)
-        self.search_var.trace_add("write", on_search_change)
+        self.search_entry.bind("<Return>", lambda e: self.perform_search())
 
         self.sort_menu = ctk.CTkOptionMenu(search_frame, values=["Most Recent", "Oldest", "A-Z (Name)", "Z-A (Name)", "PID (Low-High)"], width=140, height=38, fg_color="#F9FAFB", text_color="black", command=lambda e: self.perform_search())
         self.sort_menu.pack(side="left", padx=(0, 10))
+
+        self.search_btn = ctk.CTkButton(search_frame, text="Search", width=90, height=38, fg_color="#3498DB", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.perform_search)
+        self.search_btn.pack(side="left", padx=10)
+
+        self.reset_btn = ctk.CTkButton(search_frame, text="↻ Reset", width=80, height=38, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=self.reset_search)
+        self.reset_btn.pack(side="left", padx=(0, 0))
         
         ctk.CTkButton(search_frame, text="+ Add New Item", width=120, height=38, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_add_item_modal).pack(side="right", padx=(10, 0))
         

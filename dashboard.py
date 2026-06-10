@@ -343,6 +343,26 @@ class DashboardApp(ctk.CTkToplevel):
         self.master.error_banner.configure(text="", fg_color="transparent")
         self.master.failed_attempts = 0
 
+    def _show_loading_overlay(self):
+        """Show a spinner overlay on the main container while switching frames."""
+        overlay = ctk.CTkFrame(self.main_container, fg_color="white", corner_radius=10)
+        overlay.place(relx=0.5, rely=0.5, anchor="center", relwidth=1.0, relheight=1.0)
+        spinner_lbl = ctk.CTkLabel(overlay, text="⟳", font=("Inter", 36), text_color="#1E4528")
+        spinner_lbl.place(relx=0.5, rely=0.5, anchor="center")
+        msg_lbl = ctk.CTkLabel(overlay, text="Loading...", font=("Inter", 13), text_color="gray")
+        msg_lbl.place(relx=0.5, rely=0.56, anchor="center")
+
+        # Animate the spinner
+        _angle = ["⟳", "↻", "⟳", "↺"]
+        _idx = [0]
+        def _spin():
+            if overlay.winfo_exists():
+                spinner_lbl.configure(text=_angle[_idx[0] % len(_angle)])
+                _idx[0] += 1
+                overlay._spin_job = self.after(120, _spin)
+        _spin()
+        return overlay
+
     def show_frame(self, page_name, highlight_low_stock=False, highlight_tool_id=None):
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         restricted_modules = ["Project Management", "Reports", "Maintenance", "Role Management"]
@@ -361,6 +381,9 @@ class DashboardApp(ctk.CTkToplevel):
 
         if self.current_frame is not None:
             self.current_frame.destroy()
+
+        # Show spinner overlay while the new frame is built
+        overlay = self._show_loading_overlay()
 
         uid = self.user_info.get("user_id")
         if uid and page_name != "Dashboard":
@@ -395,6 +418,12 @@ class DashboardApp(ctk.CTkToplevel):
             self.current_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
             ctk.CTkLabel(self.current_frame, text=f"{page_name.upper()} MODULE",
                          font=("Inter", 20), text_color="gray").pack(expand=True)
+
+        # Remove overlay and show the real frame
+        if overlay.winfo_exists():
+            if hasattr(overlay, "_spin_job"):
+                self.after_cancel(overlay._spin_job)
+            overlay.destroy()
 
         self.current_frame.place(relx=0.5, rely=0.5, anchor="center", relwidth=1.0, relheight=1.0)
 
@@ -1028,35 +1057,4 @@ class DashboardApp(ctk.CTkToplevel):
                     fontdict={"family": "sans-serif", "weight": "bold", "color": "#333333"})
 
         plt.tight_layout()
-        canvas = FigureCanvasTkAgg(fig, master=parent_frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0, 10))
-        
-        return fig, ax, canvas
-
-    def show_toast(self, message, is_error=False):
-        color = "#E74C3C" if is_error else "#27AE60"
-        
-        toast = ctk.CTkFrame(self, fg_color=color, corner_radius=8)
-        lbl = ctk.CTkLabel(toast, text=message, text_color="white", font=("Inter", 13, "bold"))
-        lbl.pack(padx=20, pady=12)
-        
-        toast.place(relx=0.95, rely=1.1, anchor="se")
-        
-        def slide_in(rely_val):
-            if not toast.winfo_exists(): return
-            if rely_val > 0.95:
-                toast.place(relx=0.95, rely=rely_val, anchor="se")
-                self.after(15, lambda: slide_in(rely_val - 0.01))
-            else:
-                self.after(3000, lambda: slide_out(0.95))
-                
-        def slide_out(rely_val):
-            if not toast.winfo_exists(): return
-            if rely_val < 1.1:
-                toast.place(relx=0.95, rely=rely_val, anchor="se")
-                self.after(15, lambda: slide_out(rely_val + 0.01))
-            else:
-                toast.destroy()
-                
-        slide_in(1.1)
+        canvas = FigureCanva

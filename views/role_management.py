@@ -334,84 +334,87 @@ class RoleManagementView(ctk.CTkFrame):
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         q = self.user_search.get().strip() if hasattr(self, "user_search") else ""
-        conn = get_connection()
-        if not conn:
-            return
-        try:
-            cursor = conn.cursor(dictionary=True)
-            sql = """
-                SELECT user_id, employee_id, full_name,
-                       IFNULL(email,'—') as email, role, IFNULL(status, 'Active') as status,
-                       IFNULL(failed_attempts, 0) as failed_attempts, IFNULL(reset_requested, 0) as reset_requested
-                FROM user WHERE IFNULL(status, 'Active') != 'Archived'
-            """
-            params = []
-            if q:
-                sql += " AND (full_name LIKE %s OR employee_id LIKE %s)"
-                params = [f"%{q}%", f"%{q}%"]
-            sql += " ORDER BY full_name ASC"
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
 
-            if not rows:
-                ctk.CTkLabel(table_inner, text="No users found.",
-                             text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading users... Please wait", text_color="gray", font=("Inter", 12, "italic"))
+        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
+
+        def _fetch():
+            conn = get_connection()
+            if not conn:
+                self.after(0, lambda: loading_lbl.configure(text="Connection failed.", text_color="red"))
                 return
+            try:
+                cursor = conn.cursor(dictionary=True)
+                sql = """
+                    SELECT user_id, employee_id, full_name,
+                           IFNULL(email,'—') as email, role, IFNULL(status, 'Active') as status,
+                           IFNULL(failed_attempts, 0) as failed_attempts, IFNULL(reset_requested, 0) as reset_requested
+                    FROM user WHERE IFNULL(status, 'Active') != 'Archived'
+                """
+                params = []
+                if q:
+                    sql += " AND (full_name LIKE %s OR employee_id LIKE %s)"
+                    params = [f"%{q}%", f"%{q}%"]
+                sql += " ORDER BY full_name ASC"
+                cursor.execute(sql, params)
+                rows = cursor.fetchall()
+                self.after(0, lambda: self._render_user_table(rows, table_inner, loading_lbl, headers, min_sizes))
+            except Exception as e:
+                self.after(0, lambda err=e: loading_lbl.configure(text=f"Error: {err}", text_color="red", wraplength=600))
+            finally:
+                if conn.is_connected():
+                    cursor.close()
+                    conn.close()
 
-            for i, row in enumerate(rows):
-                r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+        import threading
+        threading.Thread(target=_fetch, daemon=True).start()
 
-                is_locked = row["status"] == "Locked" or row["reset_requested"] == 1
-                display_name = f"🔒 {row['full_name']}" if is_locked else row["full_name"]
+    def _render_user_table(self, rows, table_inner, loading_lbl, headers, min_sizes):
+        if not self.winfo_exists() or not table_inner.winfo_exists():
+            return
+        loading_lbl.destroy()
 
-                vals = [row["employee_id"], display_name, row["email"], row["role"]]
-                
-                for col, val in enumerate(vals):
-                    cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                    cell.grid(row=r_idx, column=col, sticky="nsew")
+        if not rows:
+            ctk.CTkLabel(table_inner, text="No users found.",
+                         text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+            return
 
-                    color = "#1A1A1A"
-                    if is_locked and col in (0, 1, 2):
-                        color = "#D8000C"
-                    elif col == 3:
-                        if val == "Admin": color = "#2ECC71"
-                        elif val == "Worker": color = "#D35400"
+        for i, row in enumerate(rows):
+            r_idx = i + 1
+            bg = "#F9FAFB" if i % 2 == 0 else "white"
+            is_locked = row["status"] == "Locked" or row["reset_requested"] == 1
+            display_name = f"🔒 {row['full_name']}" if is_locked else row["full_name"]
+            vals = [row["employee_id"], display_name, row["email"], row["role"]]
 
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11), text_color=color, justify="center", anchor="center")
-                    
-                    lbl.configure(wraplength=min_sizes[col] - 10)
-                    lbl.pack(fill="both", expand=True, padx=4, pady=12)
+            for col, val in enumerate(vals):
+                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
+                cell.grid(row=r_idx, column=col, sticky="nsew")
+                color = "#1A1A1A"
+                if is_locked and col in (0, 1, 2):
+                    color = "#D8000C"
+                elif col == 3:
+                    if val == "Admin": color = "#2ECC71"
+                    elif val == "Worker": color = "#D35400"
+                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11), text_color=color, justify="center", anchor="center")
+                lbl.configure(wraplength=min_sizes[col] - 10)
+                lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
-                # Action Cell (Contains all 3 Buttons)
-                btn_cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                btn_cell.grid(row=r_idx, column=4, sticky="nsew")
-                
-                action_frame = ctk.CTkFrame(btn_cell, fg_color="transparent")
-                action_frame.pack(expand=True, pady=6)
-                
-                ctk.CTkButton(action_frame, text="Edit", width=56, height=28,
-                              fg_color="#F1C40F", text_color="black",
-                              hover_color="#D4AC0D", font=("Inter", 10, "bold"),
-                              command=lambda r=row: self.open_edit_modal(r)).pack(side="left", padx=(0, 4))
-                              
-                ctk.CTkButton(action_frame, text="🔖 Badge", width=80, height=28,
-                              fg_color="#3498DB", text_color="white",
-                              hover_color="#2980B9", font=("Inter", 10, "bold"),
-                              command=lambda r=row: self.print_user_badge(r)).pack(side="left", padx=(0, 4))
-                              
-                ctk.CTkButton(action_frame, text="Archive", width=56, height=28,
-                              fg_color="#FFEAEA", text_color="#D8000C",
-                              hover_color="#FFC0C0", font=("Inter", 10, "bold"),
-                              command=lambda r=row: self.delete_user(r)).pack(side="left")
-
-        except Exception as e:
-            ctk.CTkLabel(self.user_scroll,
-                         text=f"Error: {e}", text_color="red").pack(pady=10)
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+            btn_cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
+            btn_cell.grid(row=r_idx, column=4, sticky="nsew")
+            action_frame = ctk.CTkFrame(btn_cell, fg_color="transparent")
+            action_frame.pack(expand=True, pady=6)
+            ctk.CTkButton(action_frame, text="Edit", width=56, height=28,
+                          fg_color="#F1C40F", text_color="black",
+                          hover_color="#D4AC0D", font=("Inter", 10, "bold"),
+                          command=lambda r=row: self.open_edit_modal(r)).pack(side="left", padx=(0, 4))
+            ctk.CTkButton(action_frame, text="🔖 Badge", width=80, height=28,
+                          fg_color="#3498DB", text_color="white",
+                          hover_color="#2980B9", font=("Inter", 10, "bold"),
+                          command=lambda r=row: self.print_user_badge(r)).pack(side="left", padx=(0, 4))
+            ctk.CTkButton(action_frame, text="Archive", width=56, height=28,
+                          fg_color="#FFEAEA", text_color="#D8000C",
+                          hover_color="#FFC0C0", font=("Inter", 10, "bold"),
+                          command=lambda r=row: self.delete_user(r)).pack(side="left")
 
     def delete_user(self, row):
         if messagebox.askyesno("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
