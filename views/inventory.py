@@ -183,18 +183,19 @@ class InventoryView(ctk.CTkFrame):
         search_frame = ctk.CTkFrame(table_card, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=(20, 10))
 
-        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Universal search (Name, Tag, ID, Supplier, Loc, Desc)...", width=350, height=38)
+        self.search_var = ctk.StringVar()
+        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Universal search (Name, Tag, ID, Supplier, Loc, Desc)...", width=350, height=38, textvariable=self.search_var)
         self.search_entry.pack(side="left", padx=(0, 10))
-        self.search_entry.bind("<Return>", lambda e: self.perform_search())
+        
+        self._search_timer = None
+        def on_search_change(*args):
+            if self._search_timer:
+                self.after_cancel(self._search_timer)
+            self._search_timer = self.after(300, self.perform_search)
+        self.search_var.trace_add("write", on_search_change)
 
         self.sort_menu = ctk.CTkOptionMenu(search_frame, values=["Most Recent", "Oldest", "A-Z (Name)", "Z-A (Name)", "PID (Low-High)"], width=140, height=38, fg_color="#F9FAFB", text_color="black", command=lambda e: self.perform_search())
         self.sort_menu.pack(side="left", padx=(0, 10))
-
-        self.search_btn = ctk.CTkButton(search_frame, text="Search", width=90, height=38, fg_color="#3498DB", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.perform_search)
-        self.search_btn.pack(side="left", padx=10)
-
-        self.reset_btn = ctk.CTkButton(search_frame, text="↻ Reset", width=80, height=38, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=self.reset_search)
-        self.reset_btn.pack(side="left", padx=(0, 0))
         
         ctk.CTkButton(search_frame, text="+ Add New Item", width=120, height=38, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_add_item_modal).pack(side="right", padx=(10, 0))
         

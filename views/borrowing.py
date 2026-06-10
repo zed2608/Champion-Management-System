@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, date as _date
 import calendar as _cal
 import threading
 
-class BorrowingView(ctk.CTkFrame):
+class IssuanceView(ctk.CTkFrame):
     def __init__(self, parent, user_info=None, navigate_to=None, *args, **kwargs):
         super().__init__(parent, fg_color="transparent")
 
@@ -52,30 +52,17 @@ class BorrowingView(ctk.CTkFrame):
         self.tab_content.grid_columnconfigure(0, weight=1) 
         self.tab_content.grid_rowconfigure(0, weight=1)
         
-        self.cached_tabs = {}
         self.switch_tab(tabs[0])
 
     def switch_tab(self, selected_tab):
-        if hasattr(self, "current_tab") and self.current_tab:
-            self.current_tab.grid_remove()
-            
-        if selected_tab not in self.cached_tabs:
-            frame = ctk.CTkFrame(self.tab_content, fg_color="transparent")
-            self.cached_tabs[selected_tab] = frame
-            
-            if selected_tab == "📅 Deployment Schedule":
-                self.build_calendar_tab(frame)
-            else:
-                self.build_history_table(frame)
-                
-        self.current_tab = self.cached_tabs[selected_tab]
-        self.current_tab.grid(row=0, column=0, sticky="nsew")
-        
-        if selected_tab == "📋 Deployment History":
+        for widget in self.tab_content.winfo_children():
+            widget.destroy()
+
+        if selected_tab == "📅 Deployment Schedule":
+            self.build_calendar_tab(self.tab_content)
+        else:
+            self.build_history_table(self.tab_content)
             self.load_transaction_history()
-        elif selected_tab == "📅 Deployment Schedule":
-            self._render_calendar()
-            self._render_day_detail(self._cal_selected)
 
     def build_calendar_tab(self, parent):
         now = datetime.now()
@@ -510,14 +497,18 @@ class BorrowingView(ctk.CTkFrame):
         ctk.CTkLabel(title_col, text="Click any row to view details or reprint receipt.",
                      font=("Inter", 10), text_color="gray").pack(anchor="w")
 
-        self.search_entry = ctk.CTkEntry(top_bar, placeholder_text="Search Name or Tag...", width=200)
+        self.search_var = ctk.StringVar()
+        self.search_entry = ctk.CTkEntry(top_bar, placeholder_text="Search Name or Tag...", width=200, textvariable=self.search_var)
         self.search_entry.pack(side="right", padx=(10, 0))
-        self.search_entry.bind("<Return>", lambda e: self.load_transaction_history())
-        ctk.CTkButton(top_bar, text="Search", width=70, fg_color="#E0E0E0", text_color="black",
-                      hover_color="#CCCCCC", font=("Inter", 11, "bold"),
-                      command=self.load_transaction_history).pack(side="right")
+        
+        self._search_timer = None
+        def on_search_change(*args):
+            if self._search_timer:
+                self.after_cancel(self._search_timer)
+            self._search_timer = self.after(300, self.load_transaction_history)
+        self.search_var.trace_add("write", on_search_change)
                       
-        self.history_filter = ctk.CTkOptionMenu(top_bar, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Returned", "Overdue", "A-Z (Item)"], width=160, fg_color="#F9FAFB", text_color="black", command=lambda e: self.load_transaction_history())
+        self.history_filter = ctk.CTkOptionMenu(top_bar, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Retrieved", "Overdue", "A-Z (Item)"], width=160, fg_color="#F9FAFB", text_color="black", command=lambda e: self.load_transaction_history())
         self.history_filter.pack(side="right", padx=(10, 5))
 
         ctk.CTkButton(top_bar, text="📥 Retrieve Tools", width=120, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.open_retrieval_modal).pack(side="right", padx=(5, 10))
@@ -535,7 +526,7 @@ class BorrowingView(ctk.CTkFrame):
         table_inner = ctk.CTkFrame(self.data_scroll, fg_color="transparent")
         table_inner.pack(fill="x", expand=True)
 
-        headers = ["Type", "Item Name", "Tag ID", "Qty", "Assignee", "Date Issued", "Due / Returned", "Status"]
+        headers = ["Type", "Item Name", "Tag ID", "Qty", "Assignee", "Date Issued", "Due / Retrieved", "Status"]
         
         weights = [1, 2, 1, 1, 2, 2, 2, 1]
         min_sizes = [60, 140, 80, 50, 100, 130, 140, 80]
@@ -568,11 +559,11 @@ class BorrowingView(ctk.CTkFrame):
                 query = """
                     SELECT tr.type, t.name as tool_name, t.tag_id, COUNT(tr.transaction_id) as grouped_qty,
                            u.full_name, tr.status,
-                           DATE_FORMAT(MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)), '%b %d, %Y %h:%i %p') as b_date,
-                           DATE_FORMAT(MAX(tr.borrow_date), '%b %d, %Y %h:%i %p') as borrow_date_full,
-                           DATE_FORMAT(MAX(tr.borrow_date), '%b %d, %Y') as borrow_date_short,
-                           DATE_FORMAT(MAX(tr.return_date), '%b %d, %Y %h:%i %p') as return_date_full,
-                           DATE_FORMAT(MAX(tr.return_date), '%b %d, %Y') as return_date_short,
+                           DATE_FORMAT(DATE_ADD(MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as b_date,
+                           DATE_FORMAT(DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as borrow_date_full,
+                           DATE_FORMAT(DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR), '%b %d, %Y') as borrow_date_short,
+                           DATE_FORMAT(DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as return_date_full,
+                           DATE_FORMAT(DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR), '%b %d, %Y') as return_date_short,
                            MIN(tr.transaction_id) as first_trn,
                            MAX(tr.transaction_id) as last_trn,
                            IFNULL(MAX(tr.purpose), '—') as purpose,
@@ -594,7 +585,7 @@ class BorrowingView(ctk.CTkFrame):
                     
                 if filter_val == "All Active":
                     where_clauses.append("tr.status = 'Active'")
-                elif filter_val == "All Returned":
+                elif filter_val == "All Retrieved":
                     where_clauses.append("tr.status = 'Returned'")
                 elif filter_val == "Overdue":
                     where_clauses.append("tr.status = 'Active' AND p.end_date < CURDATE()")
@@ -981,12 +972,14 @@ class BorrowingView(ctk.CTkFrame):
                 ctk.CTkLabel(self.proj_req_frame, text=row_str, font=("Inter", 11, "bold" if remaining > 0 else "normal"), text_color=txt_color).pack(anchor="w", padx=10, pady=2)
             
             if not all_fulfilled:
-                self.b_tag_id.configure(state="normal")
-                self.b_scan_btn.configure(state="normal")
-                self.b_tag_id.focus_set()
+                if hasattr(self, 'b_tag_id') and self.b_tag_id.winfo_exists():
+                    self.b_tag_id.configure(state="normal")
+                    self.b_scan_btn.configure(state="normal")
+                    self.b_tag_id.focus_set()
             else:
-                self.b_tag_id.configure(state="disabled")
-                self.b_scan_btn.configure(state="disabled")
+                if hasattr(self, 'b_tag_id') and self.b_tag_id.winfo_exists():
+                    self.b_tag_id.configure(state="disabled")
+                    self.b_scan_btn.configure(state="disabled")
                 
         finally:
             if conn.is_connected(): cursor.close(); conn.close()

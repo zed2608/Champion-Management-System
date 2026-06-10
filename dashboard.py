@@ -14,7 +14,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from views.projects import ProjectsView
 from views.inventory import InventoryView
 from views.profile import ProfileView
-from views.borrowing import BorrowingView
+from views.borrowing import IssuanceView
 from views.tracking import TrackingView
 from views.reports import ReportsView
 from views.maintenance import MaintenanceView
@@ -378,7 +378,7 @@ class DashboardApp(ctk.CTkToplevel):
                 highlight_tool_id=highlight_tool_id,
             )
         elif page_name == "Issuance & Retrieval":
-            self.current_frame = BorrowingView(self.main_container, self.user_info, navigate_to=self.navigate_to_project)
+            self.current_frame = IssuanceView(self.main_container, self.user_info, navigate_to=self.navigate_to_project)
         elif page_name == "Tracking & Accountability":
             self.current_frame = TrackingView(self.main_container, self.user_info)
         elif page_name == "Reports":

@@ -83,7 +83,7 @@ class TrackingView(ctk.CTkFrame):
         ctk.CTkLabel(top_bar, text="Tracking & Accountability", font=(
             "Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
 
-        tabs = ["📋 Borrow/Return Logs", "🔎 Audit Records", "⚙️ Activity Log"]
+        tabs = ["📋 Issuance & Retrieval Logs", "🔎 Audit Records", "⚙️ Activity Log"]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
         self.seg_btn = ctk.CTkSegmentedButton(
@@ -106,7 +106,7 @@ class TrackingView(ctk.CTkFrame):
             self.current_tab.grid_remove()
 
         if selected_tab not in self.cached_tabs:
-            if "Borrow" in selected_tab:
+            if "Issuance" in selected_tab:
                 self.cached_tabs[selected_tab] = self.render_logs_tab()
             elif "Audit" in selected_tab:
                 self.cached_tabs[selected_tab] = self.render_audit_tab()
@@ -116,7 +116,7 @@ class TrackingView(ctk.CTkFrame):
         self.current_tab = self.cached_tabs[selected_tab]
         self.current_tab.grid(row=0, column=0, sticky="nsew")
 
-        if "Borrow" in selected_tab:
+        if "Issuance" in selected_tab:
             self.load_logs()
             self.log_search.focus_set()
         elif "Audit" in selected_tab:
@@ -137,20 +137,20 @@ class TrackingView(ctk.CTkFrame):
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 5))
-        ctk.CTkLabel(top, text="Borrow / Return Transaction Logs",
+        ctk.CTkLabel(top, text="Issuance & Retrieval Logs",
                      font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
 
+        self.log_search_var = ctk.StringVar()
         self.log_search = ctk.CTkEntry(
-            top, placeholder_text="Search employee or tool...", width=220)
+            top, placeholder_text="Search employee or tool...", width=220, textvariable=self.log_search_var)
         self.log_search.pack(side="right", padx=(5, 0))
-        self.log_search.bind("<Return>", lambda e: self.load_logs())
 
-        ctk.CTkButton(top, text="Search", width=70, fg_color="#1E4528",
-                      hover_color="#14301C", font=("Inter", 11, "bold"),
-                      command=self.load_logs).pack(side="right", padx=5)
-        ctk.CTkButton(top, text="↻", width=40, fg_color="#E0E0E0",
-                      text_color="black", hover_color="#CCCCCC",
-                      command=lambda: [self.log_search.delete(0, "end"), self.load_logs()]).pack(side="right")
+        self._log_timer = None
+        def on_log_search(*args):
+            if self._log_timer:
+                self.after_cancel(self._log_timer)
+            self._log_timer = self.after(300, self.load_logs)
+        self.log_search_var.trace_add("write", on_log_search)
 
         ctk.CTkLabel(frame, text="An endless, chronological history book. Records exactly what happened and when (e.g., 'John took a hammer on Tuesday').",
                      font=("Inter", 11, "italic"), text_color="gray").pack(anchor="w", padx=20, pady=(0, 8))
@@ -168,7 +168,7 @@ class TrackingView(ctk.CTkFrame):
         table_inner = ctk.CTkFrame(self._log_scroll, fg_color="transparent")
         table_inner.pack(fill="x", expand=True)
 
-        headers = ["TRN", "Type", "Tool Name", "Tag ID", "Borrower", "Borrow Date", "Return Date", "Status"]
+        headers = ["TRN", "Type", "Tool Name", "Tag ID", "Assignee", "Date Issued", "Date Retrieved", "Status"]
         weights = [1, 1, 3, 2, 2, 3, 3, 1]
         min_sizes = [50, 70, 160, 100, 120, 150, 150, 80]
 
@@ -266,7 +266,7 @@ class TrackingView(ctk.CTkFrame):
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 5))
-        ctk.CTkLabel(top, text="Audit Trail — Borrow & Return Records",
+        ctk.CTkLabel(top, text="Audit Trail — Issuance & Retrieval Records",
                      font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
 
         ctk.CTkLabel(frame, text="Investigating Missing Items: An active math equation. Cross-references Total Inventory vs. Available Stock vs. Active Transactions to flag discrepancies.",
@@ -278,24 +278,22 @@ class TrackingView(ctk.CTkFrame):
         ctk.CTkLabel(filter_row, text="Filter by Status:",
                      font=("Inter", 12), text_color="gray").pack(side="left")
         self.audit_filter = ctk.CTkOptionMenu(
-            filter_row, values=["All", "Active", "Returned"],
-            width=120, fg_color="#F9FAFB", text_color="black"
+            filter_row, values=["All", "Active", "Retrieved"],
+            width=120, fg_color="#F9FAFB", text_color="black", command=lambda e: self.load_audit()
         )
         self.audit_filter.pack(side="left", padx=8)
 
+        self.audit_search_var = ctk.StringVar()
         self.audit_search = ctk.CTkEntry(
-            filter_row, placeholder_text="Search name / tool...", width=200)
+            filter_row, placeholder_text="Search name / tool...", width=200, textvariable=self.audit_search_var)
         self.audit_search.pack(side="left", padx=(0, 5))
-        self.audit_search.bind("<Return>", lambda e: self.load_audit())
 
-        ctk.CTkButton(filter_row, text="Run Audit", width=80,
-                      fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D",
-                      font=("Inter", 11, "bold"),
-                      command=self.load_audit).pack(side="left", padx=5)
-        ctk.CTkButton(filter_row, text="↻ Reset", width=70,
-                      fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
-                      command=lambda: [self.audit_search.delete(0, "end"),
-                                       self.audit_filter.set("All"), self.load_audit()]).pack(side="left")
+        self._audit_timer = None
+        def on_audit_search(*args):
+            if self._audit_timer:
+                self.after_cancel(self._audit_timer)
+            self._audit_timer = self.after(300, self.load_audit)
+        self.audit_search_var.trace_add("write", on_audit_search)
 
         self.audit_summary = ctk.CTkLabel(frame, text="", font=("Inter", 11, "bold"),
                                           text_color="#1E4528")
@@ -314,7 +312,7 @@ class TrackingView(ctk.CTkFrame):
         table_inner = ctk.CTkFrame(self._audit_scroll, fg_color="transparent")
         table_inner.pack(fill="x", expand=True)
 
-        headers = ["TRN", "Borrower", "Tool", "Tag ID", "Borrowed On", "Return Date", "Cond@Borrow", "Cond@Return", "Status"]
+        headers = ["TRN", "Assignee", "Tool", "Tag ID", "Date Issued", "Date Retrieved", "Cond@Issuance", "Cond@Retrieval", "Status"]
         weights = [1, 2, 3, 2, 3, 3, 2, 2, 1]
         min_sizes = [50, 120, 150, 100, 150, 150, 90, 90, 80]
 
@@ -353,8 +351,9 @@ class TrackingView(ctk.CTkFrame):
             """
             params = []
             if status_filter != "All":
+                actual_status = "Returned" if status_filter == "Retrieved" else status_filter
                 sql += " AND tr.status = %s"
-                params.append(status_filter)
+                params.append(actual_status)
             if q:
                 sql += " AND (u.full_name LIKE %s OR t.name LIKE %s)"
                 params += [f"%{q}%", f"%{q}%"]
@@ -366,7 +365,7 @@ class TrackingView(ctk.CTkFrame):
             active = sum(1 for r in rows if r["status"] == "Active")
             returned = sum(1 for r in rows if r["status"] == "Returned")
             self.audit_summary.configure(
-                text=f"  Total: {total}   |   Active: {active}   |   Returned: {returned}"
+                text=f"  Total: {total}   |   Active: {active}   |   Retrieved: {returned}"
             )
 
             if not rows:
@@ -445,23 +444,19 @@ class TrackingView(ctk.CTkFrame):
             width=180, fg_color="#F9FAFB", text_color="black"
         )
         self.act_module_filter.pack(side="left", padx=8)
+        self.act_module_filter.configure(command=lambda e: self.do_act_search())
 
+        self.act_search_var = ctk.StringVar()
         self.act_search = ctk.CTkEntry(
-            filter_row, placeholder_text="Search user or details...", width=200)
+            filter_row, placeholder_text="Search user or details...", width=200, textvariable=self.act_search_var)
         self.act_search.pack(side="left", padx=(0, 5))
-        self.act_search.bind("<Return>", lambda e: self.do_act_search())
 
-        ctk.CTkButton(filter_row, text="Search", width=80,
-                      fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"),
-                      command=self.do_act_search).pack(side="left", padx=5)
-        ctk.CTkButton(filter_row, text="↻ Reset", width=70,
-                      fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
-                      command=lambda: [
-                          self.act_search.delete(0, "end"),
-                          self.act_module_filter.set("All"),
-                          self.do_act_search()
-                      ]).pack(side="left")
+        self._act_timer = None
+        def on_act_search(*args):
+            if self._act_timer:
+                self.after_cancel(self._act_timer)
+            self._act_timer = self.after(300, self.do_act_search)
+        self.act_search_var.trace_add("write", on_act_search)
 
         self.act_summary = ctk.CTkLabel(frame, text="", font=(
             "Inter", 11, "bold"), text_color="#1E4528")
@@ -653,7 +648,7 @@ class TrackingView(ctk.CTkFrame):
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 10))
-        ctk.CTkLabel(top, text="My Borrowing & Return History", font=(
+        ctk.CTkLabel(top, text="My Deployment History", font=(
             "Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
         ctk.CTkLabel(frame, text="Click on any transaction record below to view its Deployment Receipt.", font=(
             "Inter", 11), text_color="gray").pack(anchor="w", padx=20, pady=(0, 10))
@@ -664,7 +659,7 @@ class TrackingView(ctk.CTkFrame):
         table_inner = ctk.CTkFrame(scroll, fg_color="transparent")
         table_inner.pack(fill="x", expand=True)
 
-        headers = ["TRN", "Tool Name", "Tag ID", "Borrow Date", "Return Date", "Cond@Return", "Status"]
+        headers = ["TRN", "Tool Name", "Tag ID", "Date Issued", "Date Retrieved", "Cond@Retrieval", "Status"]
         weights = [1, 3, 2, 3, 3, 2, 1]
         min_sizes = [50, 160, 100, 150, 150, 100, 80]
 
@@ -726,7 +721,7 @@ class TrackingView(ctk.CTkFrame):
 
             if not rows:
                 ctk.CTkLabel(
-                    table_inner, text="You have no borrowing history.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+                    table_inner, text="You have no deployment history.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
                 return
 
             for i, row in enumerate(rows):

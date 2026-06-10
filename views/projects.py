@@ -128,7 +128,7 @@ class ProjectsView(ctk.CTkFrame):
         start_input_row.pack(fill="x", pady=(5, 0))
         self.p_start = ctk.CTkEntry(start_input_row, placeholder_text="YYYY-MM-DD", takefocus=True)
         self.p_start.pack(side="left", fill="x", expand=True)
-        self.p_start.bind("<KeyRelease>", lambda e: self._format_date_mask(e, self.p_start))
+        self.p_start.configure(state="readonly")
         ctk.CTkButton(start_input_row, text="📅", width=35, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.p_start)).pack(side="left", padx=(5, 0))
 
         end_f = ctk.CTkFrame(row_dates, fg_color="transparent")
@@ -138,7 +138,7 @@ class ProjectsView(ctk.CTkFrame):
         end_input_row.pack(fill="x", pady=(5, 0))
         self.p_end = ctk.CTkEntry(end_input_row, placeholder_text="YYYY-MM-DD", takefocus=True)
         self.p_end.pack(side="left", fill="x", expand=True)
-        self.p_end.bind("<KeyRelease>", lambda e: self._format_date_mask(e, self.p_end)) 
+        self.p_end.configure(state="readonly")
         ctk.CTkButton(end_input_row, text="📅", width=35, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.p_end)).pack(side="left", padx=(5, 0))
 
         self.p_name.bind("<Return>", lambda e: self.p_head.focus_set()) 
@@ -146,8 +146,6 @@ class ProjectsView(ctk.CTkFrame):
         self.p_client.bind("<Return>", lambda e: self.p_location.focus_set())
         self.p_location.bind("<Return>", lambda e: self.worker_single_entry.focus_set())
         self.worker_single_entry.bind("<Return>", lambda e: [self._add_worker_from_entry(), self.worker_single_entry.focus_set()])
-        self.p_start.bind("<Return>", lambda e: self.p_end.focus_set())
-        self.p_end.bind("<Return>", lambda e: self.save_project())
 
         btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(20, 20))
@@ -163,8 +161,12 @@ class ProjectsView(ctk.CTkFrame):
             self.p_head.insert(0, edit_row.get('project_head') or "")
             self.p_client.insert(0, edit_row['client'])
             self.p_location.insert(0, edit_row['location'])
+            self.p_start.configure(state="normal")
             self.p_start.insert(0, str(edit_row['start_date']) if edit_row.get('start_date') else "")
+            self.p_start.configure(state="readonly")
+            self.p_end.configure(state="normal")
             self.p_end.insert(0, str(edit_row['end_date']) if edit_row.get('end_date') else "")
+            self.p_end.configure(state="readonly")
             
             self.workers_list = [w.strip() for w in (edit_row.get('workers_assigned') or "").split(',') if w.strip()]
             self._refresh_worker_tags()
@@ -178,25 +180,6 @@ class ProjectsView(ctk.CTkFrame):
             self.req_cart.clear()
 
         self.p_name.focus_set()
-
-    def _format_date_mask(self, event, entry_widget):
-        if event.keysym in ('BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 'Tab'):
-            return
-            
-        text = entry_widget.get().replace('-', '')
-        if not text.isdigit() and text != "":
-            text = ''.join(filter(str.isdigit, text))
-            
-        formatted = ''
-        for i, char in enumerate(text[:8]):
-            if i == 4 or i == 6:
-                formatted += '-'
-            formatted += char
-            
-        current_val = entry_widget.get()
-        if current_val != formatted:
-            entry_widget.delete(0, 'end')
-            entry_widget.insert(0, formatted)
 
     def open_date_picker(self, entry_widget):
         try:
@@ -236,8 +219,10 @@ class ProjectsView(ctk.CTkFrame):
         cal.pack(fill="both", expand=True, padx=10, pady=(10, 5))
         
         def set_date():
+            entry_widget.configure(state="normal")
             entry_widget.delete(0, "end")
             entry_widget.insert(0, cal.get_date())
+            entry_widget.configure(state="readonly")
             top.destroy()
             
         ctk.CTkButton(top, text="Confirm", fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=set_date).pack(pady=(0, 10), padx=10, fill="x")
@@ -574,7 +559,12 @@ class ProjectsView(ctk.CTkFrame):
             self.p_name.delete(0, 'end'); self.p_desc.delete("1.0", "end")
             self.p_head.delete(0, 'end'); self.p_client.delete(0, 'end')
             self.p_location.delete(0, 'end')
-            self.p_start.delete(0, 'end'); self.p_end.delete(0, 'end')
+            self.p_start.configure(state="normal")
+            self.p_start.delete(0, 'end')
+            self.p_start.configure(state="readonly")
+            self.p_end.configure(state="normal")
+            self.p_end.delete(0, 'end')
+            self.p_end.configure(state="readonly")
             self.workers_list.clear()
             self._refresh_worker_tags(); self.req_cart.clear()
             self.refresh_req_cart()
@@ -596,12 +586,16 @@ class ProjectsView(ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Project Deployment Plans", font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
 
-        self.proj_search = ctk.CTkEntry(top, placeholder_text="Search project or client...", width=250, takefocus=True)
+        self.search_var = ctk.StringVar()
+        self.proj_search = ctk.CTkEntry(top, placeholder_text="Search project or client...", width=250, takefocus=True, textvariable=self.search_var)
         self.proj_search.pack(side="right", padx=(5, 0))
-        self.proj_search.bind("<Return>", lambda e: self.load_projects(self.proj_search.get().strip()))
         
-        ctk.CTkButton(top, text="Search", width=80, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 11, "bold"), command=lambda: self.load_projects(self.proj_search.get().strip())).pack(side="right", padx=5)
-        ctk.CTkButton(top, text="↻ Reset", width=70, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=lambda: [self.proj_search.delete(0, "end"), self.load_projects()]).pack(side="right")
+        self._search_timer = None
+        def on_search_change(*args):
+            if self._search_timer:
+                self.after_cancel(self._search_timer)
+            self._search_timer = self.after(300, lambda: self.load_projects(self.proj_search.get().strip()))
+        self.search_var.trace_add("write", on_search_change)
 
         ctk.CTkButton(top, text="+ Add Project", width=140, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_draft_project_modal).pack(side="right", padx=(10, 5))
 
@@ -804,8 +798,12 @@ class ProjectsView(ctk.CTkFrame):
             self.p_head.delete(0, 'end'); self.p_head.insert(0, row.get('project_head') or "")
             self.p_client.delete(0, 'end'); self.p_client.insert(0, row['client'])
             self.p_location.delete(0, 'end'); self.p_location.insert(0, row['location'])
+            self.p_start.configure(state="normal")
             self.p_start.delete(0, 'end'); self.p_start.insert(0, str(row['start_date']) if row.get('start_date') else "")
+            self.p_start.configure(state="readonly")
+            self.p_end.configure(state="normal")
             self.p_end.delete(0, 'end'); self.p_end.insert(0, str(row['end_date']) if row.get('end_date') else "")
+            self.p_end.configure(state="readonly")
             
             self.workers_list = [w.strip() for w in (row.get('workers_assigned') or "").split(',') if w.strip()]
             self._refresh_worker_tags()

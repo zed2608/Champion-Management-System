@@ -37,12 +37,12 @@ class ReportsView(ctk.CTkFrame):
         ctk.CTkLabel(filter_f, text="From:", font=("Inter", 11, "bold"), text_color="gray").pack(side="left", padx=(0, 5))
         self.start_date = ctk.CTkEntry(filter_f, placeholder_text="YYYY-MM-DD", width=100, height=32)
         self.start_date.pack(side="left", padx=(0, 2))
-        self.start_date.bind("<KeyRelease>", lambda e: self._format_date_mask(e, self.start_date))
+        self.start_date.configure(state="readonly")
         ctk.CTkButton(filter_f, text="📅", width=32, height=32, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.start_date)).pack(side="left", padx=(0, 10))
         ctk.CTkLabel(filter_f, text="To:", font=("Inter", 11, "bold"), text_color="gray").pack(side="left", padx=(0, 5))
         self.end_date = ctk.CTkEntry(filter_f, placeholder_text="YYYY-MM-DD", width=100, height=32)
         self.end_date.pack(side="left", padx=(0, 2))
-        self.end_date.bind("<KeyRelease>", lambda e: self._format_date_mask(e, self.end_date))
+        self.end_date.configure(state="readonly")
         ctk.CTkButton(filter_f, text="📅", width=32, height=32, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.end_date)).pack(side="left", padx=(0, 10))
         ctk.CTkButton(filter_f, text="Apply", width=60, height=32, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(0, 5))
         ctk.CTkButton(filter_f, text="Clear", width=60, height=32, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=self.clear_date_filter).pack(side="left")
@@ -71,28 +71,13 @@ class ReportsView(ctk.CTkFrame):
         self.render_abc_tab()
 
     def clear_date_filter(self):
+        self.start_date.configure(state="normal")
         self.start_date.delete(0, 'end')
+        self.start_date.configure(state="readonly")
+        self.end_date.configure(state="normal")
         self.end_date.delete(0, 'end')
+        self.end_date.configure(state="readonly")
         self.switch_tab(self.tab_var.get())
-
-    def _format_date_mask(self, event, entry_widget):
-        if event.keysym in ('BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 'Tab'):
-            return
-            
-        text = entry_widget.get().replace('-', '')
-        if not text.isdigit() and text != "":
-            text = ''.join(filter(str.isdigit, text))
-            
-        formatted = ''
-        for i, char in enumerate(text[:8]):
-            if i == 4 or i == 6:
-                formatted += '-'
-            formatted += char
-            
-        current_val = entry_widget.get()
-        if current_val != formatted:
-            entry_widget.delete(0, 'end')
-            entry_widget.insert(0, formatted)
 
     def open_date_picker(self, entry_widget):
         try:
@@ -132,8 +117,10 @@ class ReportsView(ctk.CTkFrame):
         cal.pack(fill="both", expand=True, padx=10, pady=(10, 5))
         
         def set_date():
+            entry_widget.configure(state="normal")
             entry_widget.delete(0, "end")
             entry_widget.insert(0, cal.get_date())
+            entry_widget.configure(state="readonly")
             top.destroy()
             
         ctk.CTkButton(top, text="Confirm", fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=set_date).pack(pady=(0, 10), padx=10, fill="x")
@@ -318,7 +305,7 @@ class ReportsView(ctk.CTkFrame):
             for w in self.abc_table_inner.winfo_children(): w.destroy()
 
             headers = [("Rank", "rank_raw"), ("Tool ID", "tool_id"), ("Tool Name", "name"),
-                       ("Times Borrowed", "usage"), ("Cumulative %", "cum_pct_raw"), ("ABC Category", "category")]
+                       ("Times Issued", "usage"), ("Cumulative %", "cum_pct_raw"), ("ABC Category", "category")]
             weights = [1, 2, 5, 2, 2, 3]
             min_sizes = [50, 80, 200, 120, 120, 140]
 
@@ -400,12 +387,16 @@ class ReportsView(ctk.CTkFrame):
         search_frame = ctk.CTkFrame(frame, fg_color="transparent")
         search_frame.grid(row=2, column=0, sticky="ew", padx=30, pady=(0, 10))
         
-        self.usage_search_entry = ctk.CTkEntry(search_frame, placeholder_text="Search Tool, Tag ID, Condition...", width=280, height=38)
+        self.usage_search_var = ctk.StringVar()
+        self.usage_search_entry = ctk.CTkEntry(search_frame, placeholder_text="Search Tool, Tag ID, Condition...", width=280, height=38, textvariable=self.usage_search_var)
         self.usage_search_entry.pack(side="left", padx=(0, 10))
-        self.usage_search_entry.bind("<Return>", lambda e: self.run_usage_algorithm(self.usage_search_entry.get().strip()))
         
-        ctk.CTkButton(search_frame, text="Search", width=80, height=38, fg_color="#3498DB", text_color="white", hover_color="#2980B9", font=("Inter", 12, "bold"), command=lambda: self.run_usage_algorithm(self.usage_search_entry.get().strip())).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(search_frame, text="⟳ Reset", width=80, height=38, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=lambda: [self.usage_search_entry.delete(0, 'end'), self.run_usage_algorithm("")]).pack(side="left", padx=(0, 10))
+        self._usage_timer = None
+        def on_usage_search(*args):
+            if self._usage_timer:
+                self.after_cancel(self._usage_timer)
+            self._usage_timer = self.after(300, lambda: self.run_usage_algorithm(self.usage_search_entry.get().strip()))
+        self.usage_search_var.trace_add("write", on_usage_search)
 
         self._usage_scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         self._usage_scroll.grid(row=3, column=0, sticky="nsew", padx=20, pady=(0, 10))
@@ -538,7 +529,7 @@ class ReportsView(ctk.CTkFrame):
             w.destroy()
 
         headers = [("Tool ID", "tool_id"), ("Tool Name", "name"), ("Tag ID", "tag_id"),
-                   ("Total Borrowed", "total_borrowed"), ("Currently Out", "currently_out"),
+                   ("Total Issued", "total_borrowed"), ("Currently Out", "currently_out"),
                    ("Qty Avail", "qty_avail"), ("Condition", "condition")]
         weights = [2, 5, 2, 2, 2, 2, 2]
         min_sizes = [80, 200, 100, 120, 120, 100, 100]
@@ -636,7 +627,7 @@ class ReportsView(ctk.CTkFrame):
         ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
                       font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("activity")).pack(side="right")
 
-        ctk.CTkLabel(frame, text="Aggregated borrowing activity per employee for accountability monitoring.",
+        ctk.CTkLabel(frame, text="Aggregated deployment activity per employee for accountability monitoring.",
                      font=("Inter", 11), text_color="gray").grid(row=1, column=0, sticky="w", padx=30, pady=(0, 4))
 
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
@@ -745,8 +736,8 @@ class ReportsView(ctk.CTkFrame):
             for w in self.activity_table_inner.winfo_children(): w.destroy()
 
             headers = [("Employee ID", "employee_id"), ("Full Name", "full_name"), ("Role", "role"),
-                       ("Total Borrows", "total_borrows"), ("Currently Active", "active_borrows"),
-                       ("Total Returned", "total_returned")]
+                       ("Total Issuances", "total_borrows"), ("Active Issuances", "active_borrows"),
+                       ("Total Retrieved", "total_returned")]
             weights = [2, 4, 2, 2, 2, 2]
             min_sizes = [100, 180, 100, 120, 120, 120]
 
@@ -1443,7 +1434,7 @@ class ReportsView(ctk.CTkFrame):
 
                 if report_type == "abc":
                     title = "Inventory ABC Analysis Report"
-                    col_labels = ["Rank", "Tool ID", "Tool Name", "Times Borrowed", "Cumulative%", "Category"]
+                    col_labels = ["Rank", "Tool ID", "Tool Name", "Times Issued", "Cumulative%", "Category"]
                     cursor.execute("""
                         SELECT t.tool_id, t.name, COUNT(tr.transaction_id) as usage_count
                         FROM tool t
@@ -1465,7 +1456,7 @@ class ReportsView(ctk.CTkFrame):
 
                 elif report_type == "usage":
                     title = "Tool Usage Report"
-                    col_labels = ["Tool ID", "Name", "Tag ID", "Total Borrowed", "Currently Out", "Qty Avail", "Condition"]
+                    col_labels = ["Tool ID", "Name", "Tag ID", "Total Issued", "Currently Out", "Qty Avail", "Condition"]
                     cursor.execute("""
                         SELECT t.tool_id, t.name, IFNULL(t.tag_id,'—') as tag_id,
                                COUNT(tr.transaction_id) as total_borrowed,
@@ -1486,7 +1477,7 @@ class ReportsView(ctk.CTkFrame):
 
                 elif report_type == "activity":
                     title = "Employee Activity Report"
-                    col_labels = ["Employee ID", "Full Name", "Role", "Total Borrows", "Active", "Returned"]
+                    col_labels = ["Employee ID", "Full Name", "Role", "Total Issuances", "Active", "Retrieved"]
                     cursor.execute("""
                         SELECT u.employee_id, u.full_name, u.role,
                                COUNT(tr.transaction_id) as total_borrows,

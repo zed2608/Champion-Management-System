@@ -31,15 +31,19 @@ class TaggingView(ctk.CTkFrame):
         search_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=(10, 20))
         
-        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Universal Search (PID, Name, Cat, Sup, Tag)...", width=350)
+        self.search_var = ctk.StringVar()
+        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Universal Search (PID, Name, Cat, Sup, Tag)...", width=350, textvariable=self.search_var)
         self.search_entry.pack(side="left")
-        self.search_entry.bind("<Return>", lambda e: self.perform_search())
 
-        self.filter_menu = ctk.CTkOptionMenu(search_frame, values=["All Tools", "Needs Tag", "Already Tagged"], width=140, fg_color="#F9FAFB", text_color="black")
+        self._tag_timer = None
+        def on_tag_search(*args):
+            if self._tag_timer:
+                self.after_cancel(self._tag_timer)
+            self._tag_timer = self.after(300, self.perform_search)
+        self.search_var.trace_add("write", on_tag_search)
+
+        self.filter_menu = ctk.CTkOptionMenu(search_frame, values=["All Tools", "Needs Tag", "Already Tagged"], width=140, fg_color="#F9FAFB", text_color="black", command=lambda e: self.perform_search())
         self.filter_menu.pack(side="left", padx=10)
-
-        ctk.CTkButton(search_frame, text="Search", width=80, fg_color="#F1C40F", hover_color="#D4AC0D", text_color="black", font=("Inter", 11, "bold"), command=self.perform_search).pack(side="left")
-        ctk.CTkButton(search_frame, text="↻ Reset", width=70, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=self.reset_search).pack(side="left", padx=10)
 
         self.scan_test_btn = ctk.CTkButton(search_frame, text="📷 Scan & Test QR", width=140, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=self.open_test_scanner)
         self.scan_test_btn.pack(side="right", padx=10)
@@ -72,69 +76,77 @@ class TaggingView(ctk.CTkFrame):
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
             lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        conn = get_connection()
-        if not conn: return
-
-        try:
-            cursor = conn.cursor()
             
-            base_query = """
-                SELECT t.tool_id, t.name, IFNULL(t.category, 'Uncategorized'), IFNULL(t.supplier, 'N/A'), 
-                       IFNULL(i.quantity_available, 0), IFNULL(t.location, 'N/A'), t.condition, IFNULL(t.tag_id, 'Unassigned'),
-                       t.description, t.price
-                FROM tool t
-                LEFT JOIN inventory i ON t.tool_id = i.tool_id
-                WHERE t.is_archived = 0
-            """
-            params = []
+        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading data... Please wait", text_color="gray", font=("Inter", 12, "italic"))
+        loading_lbl.grid(row=1, column=0, columnspan=len(self.headers), pady=20)
 
-            if filter_type == "Needs Tag":
-                base_query += " AND (t.tag_id IS NULL OR t.tag_id = '')"
-            elif filter_type == "Already Tagged":
-                base_query += " AND t.tag_id IS NOT NULL AND t.tag_id != ''"
-
-            if query:
-                base_query += " AND (t.name LIKE %s OR t.tool_id LIKE %s OR t.category LIKE %s OR t.supplier LIKE %s OR t.tag_id LIKE %s)"
-                params.extend([f"%{query}%"] * 5)
-
-            cursor.execute(base_query, tuple(params))
-            results = cursor.fetchall()
-
-            if not results:
-                ctk.CTkLabel(table_inner, text="No tools found matching the criteria.", text_color="gray").grid(row=1, column=0, columnspan=len(self.headers), pady=20)
-                return
-
-            for i, row_data in enumerate(results):
-                tool_id, name, cat, sup, qty, loc, cond, tag, desc, price = row_data
-                display_data = [str(tool_id), str(name), str(cat), str(sup), str(qty), str(loc), str(cond), str(tag)]
-                full_data = [tool_id, name, desc, price, qty, loc, cond, tag, cat, sup]
+        def _fetch():
+            conn = get_connection()
+            if not conn: return
+            try:
+                cursor = conn.cursor()
                 
-                r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+                base_query = """
+                    SELECT t.tool_id, t.name, IFNULL(t.category, 'Uncategorized'), IFNULL(t.supplier, 'N/A'), 
+                           IFNULL(i.quantity_available, 0), IFNULL(t.location, 'N/A'), t.condition, IFNULL(t.tag_id, 'Unassigned'),
+                           t.description, t.price
+                    FROM tool t
+                    LEFT JOIN inventory i ON t.tool_id = i.tool_id
+                    WHERE t.is_archived = 0
+                """
+                params = []
+    
+                if filter_type == "Needs Tag":
+                    base_query += " AND (t.tag_id IS NULL OR t.tag_id = '')"
+                elif filter_type == "Already Tagged":
+                    base_query += " AND t.tag_id IS NOT NULL AND t.tag_id != ''"
+    
+                if query:
+                    base_query += " AND (t.name LIKE %s OR t.tool_id LIKE %s OR t.category LIKE %s OR t.supplier LIKE %s OR t.tag_id LIKE %s)"
+                    params.extend([f"%{query}%"] * 5)
+    
+                cursor.execute(base_query, tuple(params))
+                results = cursor.fetchall()
+                self.after(0, lambda: self._render_tagging_data(results, table_inner, loading_lbl, min_sizes))
+            except Exception as e:
+                self.after(0, lambda err=e: loading_lbl.configure(text=f"Failed to load tags: {err}", text_color="red"))
+            finally:
+                if conn.is_connected(): cursor.close(); conn.close()
+                
+        import threading
+        threading.Thread(target=_fetch, daemon=True).start()
 
-                for col, val in enumerate(display_data):
-                    cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
-                    cell.grid(row=r_idx, column=col, sticky="nsew")
+    def _render_tagging_data(self, results, table_inner, loading_lbl, min_sizes):
+        if not self.winfo_exists() or not table_inner.winfo_exists(): return
+        loading_lbl.destroy()
 
-                    txt_col = "#D8000C" if col == 7 and val == "Unassigned" else "#1A1A1A"
-                    font_w = "bold" if col == 7 and val != "Unassigned" else "normal"
+        if not results:
+            ctk.CTkLabel(table_inner, text="No tools found matching the criteria.", text_color="gray").grid(row=1, column=0, columnspan=len(self.headers), pady=20)
+            return
 
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
-                    
-                    lbl.configure(wraplength=min_sizes[col] - 10)
-                    lbl.pack(fill="both", expand=True, padx=4, pady=12)
+        for i, row_data in enumerate(results):
+            tool_id, name, cat, sup, qty, loc, cond, tag, desc, price = row_data
+            display_data = [str(tool_id), str(name), str(cat), str(sup), str(qty), str(loc), str(cond), str(tag)]
+            full_data = [tool_id, name, desc, price, qty, loc, cond, tag, cat, sup]
+            
+            r_idx = i + 1
+            bg = "#F9FAFB" if i % 2 == 0 else "white"
 
-                    # Binds whole cell & text to open the modal
-                    cell.bind("<Button-1>", lambda e, data=full_data: self.open_tag_manager(data))
-                    lbl.bind("<Button-1>", lambda e, data=full_data: self.open_tag_manager(data))
+            for col, val in enumerate(display_data):
+                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
+                cell.grid(row=r_idx, column=col, sticky="nsew")
 
-        except Exception as e:
-            messagebox.showerror("Database Error", f"Failed to load tags: {e}", parent=self.winfo_toplevel())
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+                txt_col = "#D8000C" if col == 7 and val == "Unassigned" else "#1A1A1A"
+                font_w = "bold" if col == 7 and val != "Unassigned" else "normal"
+
+                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
+                
+                lbl.configure(wraplength=min_sizes[col] - 10)
+                lbl.pack(fill="both", expand=True, padx=4, pady=12)
+
+                # Binds whole cell & text to open the modal
+                cell.bind("<Button-1>", lambda e, data=full_data: self.open_tag_manager(data))
+                lbl.bind("<Button-1>", lambda e, data=full_data: self.open_tag_manager(data))
 
     def perform_search(self):
         query = self.search_entry.get().strip()

@@ -122,7 +122,7 @@ class ProfileView(ctk.CTkFrame):
             right_container, fg_color="white", corner_radius=10)
         history_card.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
 
-        ctk.CTkLabel(history_card, text="My Borrowing History",
+        ctk.CTkLabel(history_card, text="My Deployment History",
                      font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(
             anchor="w", padx=30, pady=(20, 5))
 
@@ -140,7 +140,7 @@ class ProfileView(ctk.CTkFrame):
         table_inner = ctk.CTkFrame(self.history_scroll, fg_color="transparent")
         table_inner.pack(fill="x", expand=True)
 
-        headers = ["TRN", "Tool Name", "Borrow Date", "Return Date", "Status"]
+        headers = ["TRN", "Tool Name", "Date Issued", "Date Retrieved", "Status"]
         # Balanced weights to stretch cleanly across wide screens
         weights = [1, 3, 2, 2, 1]
         # Minimum sizes to prevent squishing when minimized
@@ -183,7 +183,7 @@ class ProfileView(ctk.CTkFrame):
             rows = cursor.fetchall()
 
             if not rows:
-                ctk.CTkLabel(table_inner, text="No borrowing history found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+                ctk.CTkLabel(table_inner, text="No deployment history found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
                 return
 
             for i, row in enumerate(rows):
