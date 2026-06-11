@@ -99,8 +99,10 @@ class ProjectsView(ctk.CTkFrame):
         self.worker_single_entry = ctk.CTkEntry(worker_input_row, placeholder_text="Employee ID or name...", takefocus=True)
         self.worker_single_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
-        ctk.CTkButton(worker_input_row, text="+ Add", width=55, height=32, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 11, "bold"), command=self._add_worker_from_entry).pack(side="left", padx=(0, 5))
-        ctk.CTkButton(worker_input_row, text="📷 Scan", width=65, height=32, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=self.scan_worker).pack(side="left")
+        self.btn_add_worker = ctk.CTkButton(worker_input_row, text="+ Add", width=55, height=32, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 11, "bold"), command=self._add_worker_from_entry)
+        self.btn_add_worker.pack(side="left", padx=(0, 5))
+        self.btn_scan_worker = ctk.CTkButton(worker_input_row, text="📷 Scan", width=65, height=32, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=self.scan_worker)
+        self.btn_scan_worker.pack(side="left")
 
         self.worker_tags_frame = ctk.CTkScrollableFrame(form_card, fg_color="#F9FAFB", corner_radius=6, height=80)
         self.worker_tags_frame.pack(fill="x", padx=20, pady=(0, 12))
@@ -108,7 +110,8 @@ class ProjectsView(ctk.CTkFrame):
         self._refresh_worker_tags()
 
         ctk.CTkLabel(form_card, text="Tools & Equipment Needed *", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
-        ctk.CTkButton(form_card, text="🔍 Browse Inventory Catalog", fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.open_tool_picker).pack(fill="x", padx=20, pady=(5, 10))
+        self.browse_btn = ctk.CTkButton(form_card, text="🔍 Browse Inventory Catalog", fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.open_tool_picker)
+        self.browse_btn.pack(fill="x", padx=20, pady=(5, 10))
 
         cart_bg = ctk.CTkFrame(form_card, fg_color="#F9FAFB", corner_radius=8)
         cart_bg.pack(fill="x", padx=20, pady=(0, 15))
@@ -151,7 +154,9 @@ class ProjectsView(ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(20, 20))
-        ctk.CTkButton(btn_row, text="Update Project" if edit_row else "Save as Draft", height=40, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 13, "bold"), command=self.save_project).pack(side="left", fill="x", expand=True, padx=(0, 5))
+        btn_text = "Update Project" if edit_row else ("Save & Approve (Ready for Deployment)" if self.is_admin else "Save as Draft")
+        self.btn_save = ctk.CTkButton(btn_row, text=btn_text, height=40, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 13, "bold"), command=self.save_project)
+        self.btn_save.pack(side="left", fill="x", expand=True, padx=(0, 5))
         ctk.CTkButton(btn_row, text="Cancel", height=40, width=90, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 13, "bold"), command=self.draft_modal.destroy).pack(side="right")
 
         if edit_row:
@@ -170,12 +175,30 @@ class ProjectsView(ctk.CTkFrame):
             self._refresh_worker_tags()
             
             self.req_cart = [{'tool_id': r['tool_id'], 'name': r['name'], 'uom': r['unit_of_measure'], 'qty': r['quantity'], 'needs_retrieval': r['status'] == 'Warning'} for r in reqs]
+            
+            raw_status = edit_row['status'].replace(' (OVERDUE)', '')
+            if raw_status in ['Ongoing', 'Completed', 'Cancelled']:
+                self.p_name.configure(state="disabled", fg_color="#F9FAFB")
+                self.p_client.configure(state="disabled", fg_color="#F9FAFB")
+                self.p_head.configure(state="disabled", fg_color="#F9FAFB")
+                self.p_location.configure(state="disabled", fg_color="#F9FAFB")
+                self.p_start.configure(state="disabled", fg_color="#F9FAFB")
+                self.p_end.configure(state="disabled", fg_color="#F9FAFB")
+                self.worker_single_entry.configure(state="disabled", fg_color="#F9FAFB")
+                self.btn_add_worker.configure(state="disabled")
+                self.btn_scan_worker.configure(state="disabled")
+                self.browse_btn.configure(state="disabled")
+                self.btn_save.configure(state="disabled")
+                self._is_cart_locked = True
+            else:
+                self._is_cart_locked = False
             self.refresh_req_cart()
         else:
             self.editing_project_id = None
             self.editing_project_status = None
             self.workers_list.clear()
             self.req_cart.clear()
+            self._is_cart_locked = False
 
         self.p_name.focus_set()
 
@@ -284,7 +307,8 @@ class ProjectsView(ctk.CTkFrame):
             tag_row.pack(fill="x", pady=2, padx=5)
             tag_row.pack_propagate(False)
             ctk.CTkLabel(tag_row, text=f"👷 {worker}", font=("Inter", 11), text_color="#1E4528").pack(side="left", padx=8)
-            ctk.CTkButton(tag_row, text="✕", width=22, height=22, fg_color="#FFEAEA", text_color="#D8000C", hover_color="#FFC0C0", command=lambda i=idx: self._remove_worker(i)).pack(side="right", padx=5)
+            if not getattr(self, '_is_cart_locked', False):
+                ctk.CTkButton(tag_row, text="✕", width=22, height=22, fg_color="#FFEAEA", text_color="#D8000C", hover_color="#FFC0C0", command=lambda i=idx: self._remove_worker(i)).pack(side="right", padx=5)
 
     def _remove_worker(self, idx):
         if 0 <= idx < len(self.workers_list):
@@ -350,7 +374,7 @@ class ProjectsView(ctk.CTkFrame):
             for col, text in enumerate(cols):
                 cell = ctk.CTkFrame(cat_inner, fg_color="#1E4528", corner_radius=0)
                 cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-                ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center").pack(fill="both", expand=True, padx=5, pady=8)
+                ctk.CTkLabel(cell, text=text, font=("Inter", 12, "bold"), text_color="white", anchor="center").pack(fill="both", expand=True, padx=5, pady=8)
 
             conn = get_connection()
             if not conn: return
@@ -390,7 +414,7 @@ class ProjectsView(ctk.CTkFrame):
                         cell = ctk.CTkFrame(cat_inner, fg_color=bg, corner_radius=0)
                         cell.grid(row=r_idx, column=col_idx, sticky="nsew")
                         
-                        l = ctk.CTkLabel(cell, text=str(text), font=("Inter", 11, "bold" if bold else "normal"), text_color=color, justify="center")
+                        l = ctk.CTkLabel(cell, text=str(text), font=("Inter", 12, "bold" if bold else "normal"), text_color=color, justify="center")
                         if wrap > 0:
                             l.configure(wraplength=wrap)
                         l.pack(fill="both", expand=True, padx=5, pady=10)
@@ -470,7 +494,8 @@ class ProjectsView(ctk.CTkFrame):
             text_col = "#D35400" if item.get('needs_retrieval') else "black"
             info = f"{warning_icon}{item['name']} ({item['qty']:g} {item['uom']})"
             ctk.CTkLabel(row, text=info, font=("Inter", 11, "bold"), text_color=text_col).pack(side="left", padx=5)
-            ctk.CTkButton(row, text="✕", width=20, height=20, fg_color="#FFEAEA", text_color="#D8000C", hover_color="#FFC0C0", command=lambda idx=i: [self.req_cart.pop(idx), self.refresh_req_cart()]).pack(side="right")
+            if not getattr(self, '_is_cart_locked', False):
+                ctk.CTkButton(row, text="✕", width=20, height=20, fg_color="#FFEAEA", text_color="#D8000C", hover_color="#FFC0C0", command=lambda idx=i: [self.req_cart.pop(idx), self.refresh_req_cart()]).pack(side="right")
 
     def scan_worker(self):
         try: cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
@@ -577,9 +602,9 @@ class ProjectsView(ctk.CTkFrame):
             if editing_id:
                 old_status = getattr(self, "editing_project_status", "Pending")
                 new_status = old_status.replace(' (OVERDUE)', '')
+                if new_status == 'Declined': new_status = 'Cancelled'
                 if 'Approved' in old_status and not self.is_admin:
                     new_status = 'Pending'
-                    messagebox.showwarning("Notice", "Modifying an approved project reverts it to Pending status for Admin review.", parent=self.winfo_toplevel())
                     messagebox.showwarning("Notice", "Modifying an approved project reverts it to Pending status for Admin review.", parent=self.draft_modal)
                 
                 cursor.execute('''
@@ -592,12 +617,19 @@ class ProjectsView(ctk.CTkFrame):
                 project_id = editing_id
                 action_text = "Updated"
             else:
-                cursor.execute('''
-                    INSERT INTO projects (name, description, project_head, client, location, workers_assigned, start_date, end_date, manager_id, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Pending')
-                ''', (name, desc_text, project_head, client, self.p_location.get(), workers_str, start_date, end_date, self.user_info['user_id']))
+                if self.is_admin:
+                    cursor.execute('''
+                        INSERT INTO projects (name, description, project_head, client, location, workers_assigned, start_date, end_date, manager_id, status, approved_by)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Approved', %s)
+                    ''', (name, desc_text, project_head, client, self.p_location.get(), workers_str, start_date, end_date, self.user_info['user_id'], self.user_info['user_id']))
+                    action_text = "Drafted & Approved"
+                else:
+                    cursor.execute('''
+                        INSERT INTO projects (name, description, project_head, client, location, workers_assigned, start_date, end_date, manager_id, status)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Pending')
+                    ''', (name, desc_text, project_head, client, self.p_location.get(), workers_str, start_date, end_date, self.user_info['user_id']))
+                    action_text = "Drafted"
                 project_id = cursor.lastrowid
-                action_text = "Drafted"
 
             for item in self.req_cart:
                 req_status = 'Warning' if item.get('needs_retrieval') else 'Clear'
@@ -636,13 +668,16 @@ class ProjectsView(ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Project Deployment Plans", font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
 
-        self.proj_search = ctk.CTkEntry(top, placeholder_text="Search project or client...", width=250, takefocus=True)
+        self.proj_search_var = ctk.StringVar()
+        self.proj_search = ctk.CTkEntry(top, placeholder_text="Search project or client...", width=250, takefocus=True, textvariable=self.proj_search_var)
         self.proj_search.pack(side="right", padx=(5, 0))
-        self.proj_search.bind("<Return>", lambda e: self.load_projects(self.proj_search.get().strip()))
-        
-        ctk.CTkButton(top, text="Search", width=80, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 11, "bold"), command=lambda: self.load_projects(self.proj_search.get().strip())).pack(side="right", padx=5)
-        ctk.CTkButton(top, text="↻ Reset", width=70, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=lambda: [self.proj_search.delete(0, "end"), self.load_projects()]).pack(side="right")
 
+        self._proj_search_timer = None
+        def on_proj_search(*args):
+            if self._proj_search_timer: self.after_cancel(self._proj_search_timer)
+            self._proj_search_timer = self.after(300, lambda: self.load_projects(self.proj_search.get().strip()))
+        self.proj_search_var.trace_add("write", on_proj_search)
+        
         ctk.CTkButton(top, text="+ Add Project", width=140, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_draft_project_modal).pack(side="right", padx=(10, 5))
 
         # Removed the crashing "both" orientation - back to safe standard vertical scrolling
@@ -670,7 +705,7 @@ class ProjectsView(ctk.CTkFrame):
         for col, text in enumerate(headers):
             cell = ctk.CTkFrame(table_inner, fg_color="#1E4528", corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
+            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 12, "bold"), text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=5, pady=10)
 
         conn = get_connection()
@@ -681,6 +716,7 @@ class ProjectsView(ctk.CTkFrame):
                 SELECT p.*, a.full_name as admin_approver,
                        CASE
                            WHEN p.status IN ('Approved', 'Ongoing') AND p.end_date < CURDATE() THEN CONCAT(p.status, ' (OVERDUE)')
+                           WHEN p.status = 'Cancelled' THEN 'Declined'
                            ELSE p.status
                        END as display_status
                 FROM projects p
@@ -722,7 +758,7 @@ class ProjectsView(ctk.CTkFrame):
                     txt_color = "#D35400" if col == 4 and "Pending" in val else ("#2ECC71" if col == 4 and "Approved" in val else "#1A1A1A")
                     font_w = "bold" if col == 4 else "normal"
 
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center")
+                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 12, font_w), text_color=txt_color, justify="center", anchor="center")
                     # Set wrap to ensure long text stacks downward instead of pushing grid wide
                     lbl.configure(wraplength=min_sizes[col] - 10)
                         
@@ -735,7 +771,7 @@ class ProjectsView(ctk.CTkFrame):
                 btn_color = "#3498DB" if row['status'] == 'Pending' else "#BDC3C7"
                 btn_text = "Review" if row['status'] == 'Pending' else "View"
                 
-                btn = ctk.CTkButton(btn_cell, text=btn_text, width=65, height=28, fg_color=btn_color, hover_color="#2980B9", font=("Inter", 11, "bold"), command=lambda r=row: self.open_project_modal(r))
+                btn = ctk.CTkButton(btn_cell, text=btn_text, width=65, height=28, fg_color=btn_color, hover_color="#2980B9", font=("Inter", 12, "bold"), command=lambda r=row: self.open_project_modal(r))
                 # expand=True forces the button perfectly into the horizontal and vertical center
                 btn.pack(expand=True, pady=10)
 
@@ -816,22 +852,37 @@ class ProjectsView(ctk.CTkFrame):
         btn_frame.pack(side="bottom", fill="x", padx=20, pady=15)
 
         def update_proj_status(new_status):
+            db_status = 'Cancelled' if new_status == 'Declined' else new_status
+            
+            if db_status in ['Cancelled', 'Completed']:
+                conn = get_connection()
+                if conn:
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT COUNT(*) FROM transaction WHERE project_id=%s AND status='Active'", (row['project_id'],))
+                        active_tools = cursor.fetchone()[0]
+                        if active_tools > 0:
+                            action_name = "declining/canceling" if db_status == 'Cancelled' else "completing"
+                            return messagebox.showerror("Active Tools Found", f"This project currently has {active_tools} active tool(s) deployed.\n\nPlease retrieve all tools before {action_name} the project.", parent=modal)
+                    finally:
+                        conn.close()
+
             has_warnings = any(r['status'] == 'Warning' for r in reqs)
             msg = f"Mark this project as {new_status}?"
-            if new_status == 'Approved' and has_warnings:
-                msg = "⚠️ WARNING: Tools are deployed elsewhere. Approve anyway?"
+            if db_status == 'Approved' and has_warnings:
+                msg = "⚠️ WARNING: Some required tools are deployed elsewhere and currently out of stock.\n\nMark as Ready for Deployment anyway?"
                 
             if messagebox.askyesno("Confirm Status", msg, parent=modal):
                 conn = get_connection()
                 if conn:
                     c = conn.cursor()
-                    if new_status == 'Approved':
-                        c.execute("UPDATE projects SET status=%s, approved_by=%s WHERE project_id=%s", (new_status, self.user_info['user_id'], row['project_id']))
+                    if db_status == 'Approved':
+                        c.execute("UPDATE projects SET status=%s, approved_by=%s WHERE project_id=%s", (db_status, self.user_info['user_id'], row['project_id']))
                     else:
-                        c.execute("UPDATE projects SET status=%s WHERE project_id=%s", (new_status, row['project_id']))
+                        c.execute("UPDATE projects SET status=%s WHERE project_id=%s", (db_status, row['project_id']))
                     conn.commit()
                     c.close(); conn.close()
-                    if self.user_info.get("user_id"): log_action(self.user_info['user_id'], "Updated", "Projects", f"Project '{row['name']}' status changed to {new_status}.")
+                    if self.user_info.get("user_id"): log_action(self.user_info['user_id'], "Updated", "Projects", f"Project '{row['name']}' status changed to {db_status}.")
                     modal.destroy()
                     self.load_projects()
 
@@ -861,16 +912,24 @@ class ProjectsView(ctk.CTkFrame):
         raw_status = row['status'].replace(' (OVERDUE)', '')
         if raw_status in ['Pending', 'Approved']:
             ctk.CTkButton(btn_frame, text="Edit Project", width=90, fg_color="#F1C40F", hover_color="#D4AC0D", text_color="black", font=("Inter", 11, "bold"), command=trigger_edit_mode).pack(side="left", padx=5)
+            
         if raw_status == 'Pending' and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Approve", fg_color="#2ECC71", hover_color="#27AE60", text_color="black", font=("Inter", 11, "bold"), command=lambda: update_proj_status('Approved')).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text="Ready for Deployment", fg_color="#2ECC71", hover_color="#27AE60", text_color="black", font=("Inter", 12, "bold"), command=lambda: update_proj_status('Approved')).pack(side="left", padx=5)
+            
         if raw_status == 'Approved' and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Mark Ongoing", fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=lambda: update_proj_status('Ongoing')).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text="Deploy / Mark Ongoing", fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 12, "bold"), command=lambda: update_proj_status('Ongoing')).pack(side="left", padx=5)
+            
         if raw_status == 'Ongoing' and self.is_admin:
             ctk.CTkButton(btn_frame, text="Complete Project", fg_color="#27AE60", hover_color="#1E8449", font=("Inter", 11, "bold"), command=lambda: update_proj_status('Completed')).pack(side="left", padx=5)
+            
         if raw_status in ['Pending', 'Approved', 'Ongoing'] and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Cancel", fg_color="#E74C3C", hover_color="#C0392B", font=("Inter", 11, "bold"), command=lambda: update_proj_status('Cancelled')).pack(side="left", padx=5)
-        if raw_status in ['Completed', 'Cancelled'] and self.is_admin:
+            btn_text = "Decline Project" if raw_status == 'Pending' else "Cancel Project"
+            cmd_status = "Declined" if raw_status == 'Pending' else "Cancelled"
+            ctk.CTkButton(btn_frame, text=btn_text, fg_color="#E74C3C", hover_color="#C0392B", font=("Inter", 11, "bold"), command=lambda s=cmd_status: update_proj_status(s)).pack(side="left", padx=5)
+            
+        if raw_status in ['Completed', 'Declined', 'Cancelled'] and self.is_admin:
             ctk.CTkButton(btn_frame, text="Archive", fg_color="#95A5A6", hover_color="#7F8C8D", font=("Inter", 11, "bold"), command=lambda: self.archive_project(row['project_id'], row['name'], modal)).pack(side="left", padx=5)
+            
         ctk.CTkButton(btn_frame, text="Close", width=70, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=modal.destroy).pack(side="right", padx=5)
 
     def archive_project(self, project_id, project_name, modal):

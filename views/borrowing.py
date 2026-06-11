@@ -539,7 +539,7 @@ class IssuanceView(ctk.CTkFrame):
         for col, text in enumerate(headers):
             cell = ctk.CTkFrame(table_inner, fg_color="#1E4528", corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
+            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 12, "bold"), text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         loading_lbl = ctk.CTkLabel(table_inner, text="Fetching transaction history, please wait...", text_color="gray", font=("Inter", 12, "italic"))
@@ -559,11 +559,11 @@ class IssuanceView(ctk.CTkFrame):
                 query = """
                     SELECT tr.type, t.name as tool_name, t.tag_id, COUNT(tr.transaction_id) as grouped_qty,
                            u.full_name, tr.status,
-                           DATE_FORMAT(DATE_ADD(MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as b_date,
-                           DATE_FORMAT(DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as borrow_date_full,
-                           DATE_FORMAT(DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR), '%b %d, %Y') as borrow_date_short,
-                           DATE_FORMAT(DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR), '%b %d, %Y %h:%i %p') as return_date_full,
-                           DATE_FORMAT(DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR), '%b %d, %Y') as return_date_short,
+                       DATE_ADD(MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)), INTERVAL 8 HOUR) as b_date,
+                       DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR) as borrow_date_full,
+                       DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR) as borrow_date_short,
+                       DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR) as return_date_full,
+                       DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR) as return_date_short,
                            MIN(tr.transaction_id) as first_trn,
                            MAX(tr.transaction_id) as last_trn,
                            IFNULL(MAX(tr.purpose), '—') as purpose,
@@ -631,6 +631,12 @@ class IssuanceView(ctk.CTkFrame):
             return
 
         for i, row in enumerate(results):
+            if hasattr(row['b_date'], 'strftime'): row['b_date'] = row['b_date'].strftime('%b %d, %Y %I:%M %p')
+            if hasattr(row['borrow_date_full'], 'strftime'): row['borrow_date_full'] = row['borrow_date_full'].strftime('%b %d, %Y %I:%M %p')
+            if hasattr(row['borrow_date_short'], 'strftime'): row['borrow_date_short'] = row['borrow_date_short'].strftime('%b %d, %Y')
+            if hasattr(row['return_date_full'], 'strftime'): row['return_date_full'] = row['return_date_full'].strftime('%b %d, %Y %I:%M %p')
+            if hasattr(row['return_date_short'], 'strftime'): row['return_date_short'] = row['return_date_short'].strftime('%b %d, %Y')
+
             due_ret_text = "—"
             due_ret_color = "#1A1A1A"
             due_font_w = "normal"
@@ -675,7 +681,7 @@ class IssuanceView(ctk.CTkFrame):
                     txt_color = "#D8000C"
                     font_w = "bold"
                 
-                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
+                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 12, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
                 
                 lbl.configure(wraplength=min_sizes[col] - 10)
 
@@ -1249,16 +1255,16 @@ class IssuanceView(ctk.CTkFrame):
             btn_bar.pack(fill="x", side="bottom")
             btn_bar.pack_propagate(False)
 
-            def export_pdf():
+            def export_jpg():
                 import tempfile as _tf
-                path = os.path.join(_tf.gettempdir(), "Receipt.pdf")
-                img.save(path, "PDF", resolution=150.0)
+                path = os.path.join(_tf.gettempdir(), "Receipt.jpg")
+                img.save(path, "JPEG", quality=95)
                 os.startfile(path)
 
-            ctk.CTkButton(btn_bar, text="🖨  Export & Open PDF", height=38,
+            ctk.CTkButton(btn_bar, text="🖨  Export & Open JPG", height=38,
                           fg_color="#1E4528", hover_color="#14301C",
                           font=("Inter", 12, "bold"),
-                          command=export_pdf).pack(side="left", padx=20, pady=11)
+                          command=export_jpg).pack(side="left", padx=20, pady=11)
             ctk.CTkButton(btn_bar, text="Close", height=38, width=90,
                           fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
                           font=("Inter", 12, "bold"),
@@ -1374,6 +1380,9 @@ class IssuanceView(ctk.CTkFrame):
             
             if new_cond == "Lost":
                 cursor.execute("UPDATE inventory SET quantity_total = quantity_total - %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
+            elif new_cond in ["Damaged", "Needs Repair"]:
+                # Do NOT restock available quantity, keeping it out of circulation until Maintenance resolves it.
+                pass
             else:
                 cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
             cursor.execute("UPDATE tool SET `condition` = %s WHERE tool_id = %s", (new_cond, self.active_return_tool_id))

@@ -271,6 +271,12 @@ class RoleManagementView(ctk.CTkFrame):
             self.reg_modal.destroy()
             self.load_user_table()
             
+            dashboard = self.winfo_toplevel()
+            if hasattr(dashboard, "dashboard_refresh_job") and dashboard.dashboard_refresh_job:
+                dashboard.after_cancel(dashboard.dashboard_refresh_job)
+            if hasattr(dashboard, "_auto_refresh_dashboard"):
+                dashboard._auto_refresh_dashboard()
+            
         except Exception as e:
             messagebox.showerror("Database Error", str(e), parent=self.reg_modal)
         finally:
@@ -291,18 +297,16 @@ class RoleManagementView(ctk.CTkFrame):
         ctk.CTkLabel(top, text="Registered Users",
                      font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
 
+        self.user_search_var = ctk.StringVar()
         self.user_search = ctk.CTkEntry(
-            top, placeholder_text="Search name or ID...", width=200)
+            top, placeholder_text="Search name or ID...", width=200, textvariable=self.user_search_var)
         self.user_search.pack(side="right", padx=(5, 0))
-        self.user_search.bind("<Return>", lambda e: self.load_user_table())
-        ctk.CTkButton(top, text="Search", width=70,
-                      fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"),
-                      command=self.load_user_table).pack(side="right", padx=5)
-        ctk.CTkButton(top, text="↻", width=40,
-                      fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
-                      command=lambda: [self.user_search.delete(0, "end"),
-                                       self.load_user_table()]).pack(side="right")
+        
+        self._user_search_timer = None
+        def on_user_search(*args):
+            if self._user_search_timer: self.after_cancel(self._user_search_timer)
+            self._user_search_timer = self.after(300, self.load_user_table)
+        self.user_search_var.trace_add("write", on_user_search)
                                        
         ctk.CTkButton(top, text="+ Register New User", width=150, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_register_modal).pack(side="right", padx=(10, 5))
 
@@ -435,6 +439,11 @@ class RoleManagementView(ctk.CTkFrame):
                 dashboard = self.winfo_toplevel()
                 if hasattr(dashboard, "show_toast"):
                     dashboard.show_toast(f"✓ User '{row['full_name']}' deactivated and archived.")
+                    
+                if hasattr(dashboard, "dashboard_refresh_job") and dashboard.dashboard_refresh_job:
+                    dashboard.after_cancel(dashboard.dashboard_refresh_job)
+                if hasattr(dashboard, "_auto_refresh_dashboard"):
+                    dashboard._auto_refresh_dashboard()
             except Exception as e:
                 messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
             finally:
@@ -668,6 +677,12 @@ class RoleManagementView(ctk.CTkFrame):
                 messagebox.showinfo("Updated", "User account updated successfully.", parent=modal)
                 modal.destroy()
                 self.load_user_table()
+                
+                dashboard = self.winfo_toplevel()
+                if hasattr(dashboard, "dashboard_refresh_job") and dashboard.dashboard_refresh_job:
+                    dashboard.after_cancel(dashboard.dashboard_refresh_job)
+                if hasattr(dashboard, "_auto_refresh_dashboard"):
+                    dashboard._auto_refresh_dashboard()
             except Exception as e:
                 messagebox.showerror("Error", str(e), parent=modal)
             finally:

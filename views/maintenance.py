@@ -218,17 +218,6 @@ class MaintenanceView(ctk.CTkFrame):
             self._issues_timer = self.after(300, self.load_issues)
         self.issues_search_var.trace_add("write", on_issues_search)
 
-        ctk.CTkButton(filter_row, text="Filter", width=70, fg_color="#1E4528",
-                      hover_color="#14301C", font=("Inter", 11, "bold"),
-                      command=self.load_issues).pack(side="left", padx=5)
-        ctk.CTkButton(filter_row, text="↻ Reset", width=75,
-                      fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
-                      command=lambda: [
-                          self.issues_search.delete(0, "end"),
-                          self.issues_filter.set("All Issues"),
-                          self.load_issues()
-                      ]).pack(side="left")
-
         self.issues_summary = ctk.CTkLabel(frame, text="", font=("Inter", 11, "bold"),
                                            text_color="#1E4528")
         self.issues_summary.pack(anchor="w", padx=20, pady=(0, 5))
@@ -332,7 +321,7 @@ class MaintenanceView(ctk.CTkFrame):
                 table_inner, fg_color="#1E4528", corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
             lbl = ctk.CTkLabel(cell, text=text, font=(
-                "Inter", 11, "bold"), text_color="white", anchor="center")
+                "Inter", 12, "bold"), text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading issues... Please wait",
@@ -383,7 +372,7 @@ class MaintenanceView(ctk.CTkFrame):
                 sql = """
                     SELECT ti.issue_id, t.name as tool_name, ti.reported_by,
                            ti.condition_flag, IFNULL(ti.notes,'—') as notes,
-                           DATE_FORMAT(ti.flagged_at, '%%b %%d, %%Y %%I:%%i %%p') as flagged_at,
+                       ti.flagged_at,
                            ti.is_resolved
                     FROM tool_issues ti
                     JOIN tool t ON ti.tool_id = t.tool_id
@@ -460,7 +449,7 @@ class MaintenanceView(ctk.CTkFrame):
                 font_w = "bold" if col in (3, 6) else "normal"
 
                 lbl = ctk.CTkLabel(cell, text=val, font=(
-                    "Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
+                    "Inter", 12, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
 
                 # High-performance static wrapping
                 lbl.configure(wraplength=min_sizes[col] - 10)
@@ -626,7 +615,7 @@ class MaintenanceView(ctk.CTkFrame):
                 table_inner, fg_color="#1E4528", corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
             lbl = ctk.CTkLabel(cell, text=text, font=(
-                "Inter", 11, "bold"), text_color="white", anchor="center")
+                "Inter", 12, "bold"), text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading archived tools... Please wait",
@@ -685,7 +674,7 @@ class MaintenanceView(ctk.CTkFrame):
                 cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
                 cell.grid(row=r_idx, column=col, sticky="nsew")
                 lbl = ctk.CTkLabel(cell, text=val, font=(
-                    "Inter", 11), text_color="#1A1A1A", justify="center", anchor="center")
+                    "Inter", 12), text_color="#1A1A1A", justify="center", anchor="center")
                 lbl.configure(wraplength=min_sizes[col] - 10)
                 lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
@@ -766,7 +755,7 @@ class MaintenanceView(ctk.CTkFrame):
                 table_inner, fg_color="#1E4528", corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
             lbl = ctk.CTkLabel(cell, text=text, font=(
-                "Inter", 11, "bold"), text_color="white", anchor="center")
+                "Inter", 12, "bold"), text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading archived employees... Please wait",
@@ -824,7 +813,7 @@ class MaintenanceView(ctk.CTkFrame):
                 cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
                 cell.grid(row=r_idx, column=col, sticky="nsew")
                 lbl = ctk.CTkLabel(cell, text=val, font=(
-                    "Inter", 11), text_color="#1A1A1A", justify="center", anchor="center")
+                    "Inter", 12), text_color="#1A1A1A", justify="center", anchor="center")
                 lbl.configure(wraplength=min_sizes[col] - 10)
                 lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
@@ -906,7 +895,7 @@ class MaintenanceView(ctk.CTkFrame):
                 table_inner, fg_color="#1E4528", corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
             lbl = ctk.CTkLabel(cell, text=text, font=(
-                "Inter", 11, "bold"), text_color="white", anchor="center")
+                "Inter", 12, "bold"), text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading archived projects... Please wait",
@@ -967,7 +956,7 @@ class MaintenanceView(ctk.CTkFrame):
                 cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
                 cell.grid(row=r_idx, column=col, sticky="nsew")
                 lbl = ctk.CTkLabel(cell, text=val, font=(
-                    "Inter", 11), text_color="#1A1A1A", justify="center", anchor="center")
+                    "Inter", 12), text_color="#1A1A1A", justify="center", anchor="center")
                 lbl.configure(wraplength=min_sizes[col] - 10)
                 lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
@@ -1609,7 +1598,7 @@ class MaintenanceView(ctk.CTkFrame):
             cell = ctk.CTkFrame(
                 table_inner, fg_color="#1E4528", corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"),
+            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 12, "bold"),
                                text_color="white", anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
@@ -1699,7 +1688,7 @@ class MaintenanceView(ctk.CTkFrame):
                     font_w = "bold"
 
                 lbl = ctk.CTkLabel(cell, text=val,
-                                   font=("Inter", 11, font_w),
+                                   font=("Inter", 12, font_w),
                                    text_color=txt_col,
                                    justify="center", anchor="center")
                 lbl.configure(wraplength=min_sizes[col] - 10)

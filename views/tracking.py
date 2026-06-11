@@ -198,9 +198,8 @@ class TrackingView(ctk.CTkFrame):
                     SELECT tr.transaction_id, tr.type, t.name as tool_name,
                            IFNULL(t.tag_id,'Unassigned') as tag_id,
                            u.full_name,
-                           DATE_FORMAT(tr.borrow_date, '%b %d, %Y %I:%i %p') as borrow_date,
-                           IF(tr.return_date IS NOT NULL,
-                               DATE_FORMAT(tr.return_date, '%b %d, %Y %I:%i %p'), '—') as return_date,
+                       tr.borrow_date,
+                       tr.return_date,
                            tr.status
                     FROM transaction tr
                     JOIN tool t ON tr.tool_id = t.tool_id
@@ -237,6 +236,11 @@ class TrackingView(ctk.CTkFrame):
         for i, row in enumerate(rows):
             r_idx = i + 1
             bg = "#F9FAFB" if i % 2 == 0 else "white"
+            
+            if hasattr(row["borrow_date"], 'strftime'): row["borrow_date"] = row["borrow_date"].strftime('%b %d, %Y %I:%M %p')
+            if hasattr(row["return_date"], 'strftime'): row["return_date"] = row["return_date"].strftime('%b %d, %Y %I:%M %p')
+            elif not row["return_date"]: row["return_date"] = "—"
+            
             vals = [
                 str(row["transaction_id"]), row["type"], row["tool_name"],
                 row["tag_id"], row["full_name"],
@@ -346,9 +350,8 @@ class TrackingView(ctk.CTkFrame):
                 sql = """
                     SELECT tr.transaction_id, u.full_name, t.name as tool_name,
                            IFNULL(t.tag_id,'Unassigned') as tag_id,
-                           DATE_FORMAT(tr.borrow_date, '%b %d, %Y %I:%i %p') as borrow_date,
-                           IF(tr.return_date IS NOT NULL,
-                               DATE_FORMAT(tr.return_date, '%b %d, %Y %I:%i %p'), '—') as return_date,
+                       tr.borrow_date,
+                       tr.return_date,
                            IFNULL(tr.condition_at_borrow,'N/A') as cond_borrow,
                            IFNULL(tr.condition_at_return,'N/A')  as cond_return,
                            tr.status
@@ -398,6 +401,11 @@ class TrackingView(ctk.CTkFrame):
         for i, row in enumerate(rows):
             r_idx = i + 1
             bg = "#FFF8F0" if row["status"] == "Active" else ("#F9FAFB" if i % 2 == 0 else "white")
+            
+            if hasattr(row["borrow_date"], 'strftime'): row["borrow_date"] = row["borrow_date"].strftime('%b %d, %Y %I:%M %p')
+            if hasattr(row["return_date"], 'strftime'): row["return_date"] = row["return_date"].strftime('%b %d, %Y %I:%M %p')
+            elif not row["return_date"]: row["return_date"] = "—"
+            
             vals = [
                 str(row["transaction_id"]), row["full_name"], row["tool_name"],
                 row["tag_id"], row["borrow_date"], row["return_date"],
@@ -540,6 +548,18 @@ class TrackingView(ctk.CTkFrame):
                 return
             try:
                 cursor = conn.cursor(dictionary=True)
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS system_logs (
+                        log_id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NULL,
+                        action_type VARCHAR(100),
+                        module VARCHAR(100),
+                        details TEXT,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                conn.commit()
+
                 count_sql = """
                     SELECT COUNT(*) as cnt
                     FROM system_logs sl
@@ -553,12 +573,12 @@ class TrackingView(ctk.CTkFrame):
                 if q:
                     count_sql += " AND (u.full_name LIKE %s OR sl.details LIKE %s OR sl.action_type LIKE %s)"
                     count_params += [f"%{q}%", f"%{q}%", f"%{q}%"]
-                cursor.execute(count_sql, count_params)
+                cursor.execute(count_sql, tuple(count_params))
                 total_records = cursor.fetchone()["cnt"]
 
                 sql = """
                     SELECT sl.log_id,
-                           DATE_FORMAT(sl.timestamp, '%b %d, %Y %I:%i %p') as ts,
+                       sl.timestamp as ts,
                            IFNULL(u.full_name, CONCAT('UID:', sl.user_id)) as employee,
                            sl.action_type, sl.module, IFNULL(sl.details,'—') as details
                     FROM system_logs sl
@@ -568,7 +588,7 @@ class TrackingView(ctk.CTkFrame):
                 params = list(count_params)
                 offset = (page - 1) * page_size
                 sql += f" ORDER BY sl.log_id DESC LIMIT {page_size} OFFSET {offset}"
-                cursor.execute(sql, params)
+                cursor.execute(sql, tuple(params))
                 rows = cursor.fetchall()
                 self.after(0, lambda: self._render_activity(rows, table_inner, loading_lbl, headers, min_sizes, total_records, page, page_size, offset))
             except Exception as e:
@@ -614,7 +634,9 @@ class TrackingView(ctk.CTkFrame):
         for i, row in enumerate(rows):
             r_idx = i + 1
             bg = "#F9FAFB" if i % 2 == 0 else "white"
-            vals = [str(row["log_id"]), row["ts"], row["employee"], row["action_type"], row["module"], row["details"]]
+            
+            if hasattr(row["ts"], 'strftime'): row["ts"] = row["ts"].strftime('%b %d, %Y %I:%M %p')
+            vals = [str(row["log_id"]), str(row["ts"]), row["employee"], row["action_type"], row["module"], row["details"]]
             for col, val in enumerate(vals):
                 cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
                 cell.grid(row=r_idx, column=col, sticky="nsew")
@@ -717,8 +739,8 @@ class TrackingView(ctk.CTkFrame):
             cursor.execute("""
                 SELECT tr.transaction_id, t.name as tool_name,
                        IFNULL(t.tag_id,'Unassigned') as tag_id,
-                       DATE_FORMAT(tr.borrow_date, '%b %d, %Y %I:%i %p') as borrow_date,
-                       IF(tr.return_date IS NOT NULL, DATE_FORMAT(tr.return_date, '%b %d, %Y %I:%i %p'), '—') as return_date,
+                   tr.borrow_date,
+                   tr.return_date,
                        IFNULL(tr.condition_at_return,'—') as cond_return,
                        tr.status
                 FROM transaction tr
@@ -736,6 +758,10 @@ class TrackingView(ctk.CTkFrame):
             for i, row in enumerate(rows):
                 r_idx = i + 1
                 bg = "#F9FAFB" if i % 2 == 0 else "white"
+
+                if hasattr(row["borrow_date"], 'strftime'): row["borrow_date"] = row["borrow_date"].strftime('%b %d, %Y %I:%M %p')
+                if hasattr(row["return_date"], 'strftime'): row["return_date"] = row["return_date"].strftime('%b %d, %Y %I:%M %p')
+                elif not row["return_date"]: row["return_date"] = "—"
 
                 vals = [
                     str(row["transaction_id"]), row["tool_name"], row["tag_id"],

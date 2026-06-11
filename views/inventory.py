@@ -7,6 +7,9 @@ import qrcode
 from PIL import Image, ImageDraw, ImageFont
 import difflib
 import threading
+import cv2
+from pyzbar.pyzbar import decode, ZBarSymbol
+from datetime import datetime
 
 
 class InventoryView(ctk.CTkFrame):
@@ -26,7 +29,9 @@ class InventoryView(ctk.CTkFrame):
         self.tool_hash_table = {}
 
         self._ensure_inventory_floats()
-        self.build_top_tabs()
+        self.build_top_bar()
+        self.build_main_table()
+        self.load_inventory_data()
 
     def _ensure_inventory_floats(self):
         """Ensures that the database can actually store fractional quantities for consumables."""
@@ -36,6 +41,20 @@ class InventoryView(ctk.CTkFrame):
                 c = conn.cursor()
                 c.execute(
                     "ALTER TABLE inventory MODIFY quantity_total FLOAT, MODIFY quantity_available FLOAT, MODIFY minimum_stock FLOAT")
+                
+                # Ensure tool_issues exists before querying for last_checked_date
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS tool_issues (
+                        issue_id INT AUTO_INCREMENT PRIMARY KEY,
+                        tool_id INT NOT NULL,
+                        reported_by VARCHAR(100),
+                        condition_flag VARCHAR(100),
+                        notes TEXT,
+                        flagged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_resolved TINYINT(1) DEFAULT 0,
+                        FOREIGN KEY (tool_id) REFERENCES tool(tool_id)
+                    )
+                """)
                 conn.commit()
             except Exception:
                 pass
@@ -44,43 +63,12 @@ class InventoryView(ctk.CTkFrame):
                     c.close()
                     conn.close()
 
-    def build_top_tabs(self):
+    def build_top_bar(self):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Inventory", font=(
+        ctk.CTkLabel(top_bar, text="Inventory Catalog", font=(
             "Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-
-        tabs = ["📦 Inventory Catalog", "🏷️ Tag Management Hub"]
-        self.tab_var = ctk.StringVar(value=tabs[0])
-
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
-            fg_color="#F0F0F0", selected_color="#1E4528", selected_hover_color="#14301C"
-        )
-        self.seg_btn.pack(side="right")
-
-        self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
-        self.tab_content.grid(
-            row=1, column=0, sticky="nsew", padx=10, pady=(0, 20))
-
-        self.tab_content.grid_columnconfigure(0, weight=1)
-        self.tab_content.grid_rowconfigure(0, weight=1)
-
-        self.switch_tab(tabs[0])
-
-    def switch_tab(self, selected_tab="📦 Inventory Catalog"):
-        for widget in self.tab_content.winfo_children():
-            widget.destroy()
-
-        if "Inventory Catalog" in selected_tab:
-            self.build_main_table(self.tab_content)
-            self.load_inventory_data()
-        elif "Tag Management Hub" in selected_tab:
-            from views.tagging import TaggingView
-            self.tag_view = TaggingView(
-                self.tab_content, user_info=self.user_info)
-            self.tag_view.pack(fill="both", expand=True)
 
     def open_add_item_modal(self):
         self.add_modal = ctk.CTkToplevel(self)
@@ -227,35 +215,42 @@ class InventoryView(ctk.CTkFrame):
                 cursor.close()
                 conn.close()
 
-    def build_main_table(self, parent):
-        table_card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10)
-        table_card.grid(row=0, column=0, sticky="nsew", padx=0)
+    def build_main_table(self):
+        table_card = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        table_card.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 20))
+        table_card.grid_columnconfigure(0, weight=1)
+        table_card.grid_rowconfigure(1, weight=1)
 
         search_frame = ctk.CTkFrame(table_card, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=(20, 10))
 
+        self.search_var = ctk.StringVar()
         self.search_entry = ctk.CTkEntry(
-            search_frame, placeholder_text="Universal search (Name, Tag, ID, Supplier, Loc, Desc)...", width=350, height=38)
+            search_frame, placeholder_text="Universal search (Name, Tag, ID, Supplier, Loc, Desc)...", width=350, height=38, textvariable=self.search_var)
         self.search_entry.pack(side="left", padx=(0, 10))
-        self.search_entry.bind("<Return>", lambda e: self.perform_search())
 
-        self.sort_menu = ctk.CTkOptionMenu(search_frame, values=["Most Recent", "Oldest", "A-Z (Name)", "Z-A (Name)", "PID (Low-High)"],
+        self._search_timer = None
+        def on_search_change(*args):
+            if self._search_timer:
+                self.after_cancel(self._search_timer)
+            self._search_timer = self.after(300, self.perform_search)
+        self.search_var.trace_add("write", on_search_change)
+
+        self.sort_menu = ctk.CTkOptionMenu(search_frame, values=["Most Recent", "Oldest", "A-Z (Name)", "Z-A (Name)", "PID (Low-High)", "Needs Tag", "Already Tagged"],
                                            width=140, height=38, fg_color="#F9FAFB", text_color="black", command=lambda e: self.perform_search())
         self.sort_menu.pack(side="left", padx=(0, 10))
-
-        self.search_btn = ctk.CTkButton(search_frame, text="Search", width=90, height=38, fg_color="#3498DB",
-                                        text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.perform_search)
-        self.search_btn.pack(side="left", padx=10)
-
-        self.reset_btn = ctk.CTkButton(search_frame, text="↻ Reset", width=80, height=38, fg_color="#E0E0E0",
-                                       text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=self.reset_search)
-        self.reset_btn.pack(side="left", padx=(0, 0))
 
         is_staff = self.user_info.get("role", "").lower() == "staff"
 
         if not is_staff:
             ctk.CTkButton(search_frame, text="+ Add New Item", width=120, height=38, fg_color="#1E4528", hover_color="#14301C",
                           font=("Inter", 12, "bold"), command=self.open_add_item_modal).pack(side="right", padx=(10, 0))
+            
+        ctk.CTkButton(search_frame, text="📷 Scan & Test QR", width=140, height=38, fg_color="#8E44AD", hover_color="#732D91", 
+                      font=("Inter", 12, "bold"), command=self.open_test_scanner).pack(side="right", padx=(10, 0))
+        
+        self.batch_print_btn = ctk.CTkButton(search_frame, text="⎙ Batch Print Tags", width=140, height=38, fg_color="#F1C40F", hover_color="#D4AC0D", text_color="black", font=("Inter", 12, "bold"), command=self.execute_batch_print)
+        self.batch_print_btn.pack(side="right", padx=(10, 0))
 
         hint_text = "💡 Click any row to View" if is_staff else "💡 Click any row to View/Edit"
         ctk.CTkLabel(search_frame, text=hint_text,
@@ -264,22 +259,216 @@ class InventoryView(ctk.CTkFrame):
         self.data_scroll = ctk.CTkScrollableFrame(
             table_card, fg_color="transparent")
         self.data_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
+        
+    def toggle_print_selection(self, pid, value):
+        if value == "on":
+            self.selected_for_print.add(pid)
+        else:
+            self.selected_for_print.discard(pid)
+
+    def execute_batch_print(self):
+        if not hasattr(self, 'selected_for_print') or not self.selected_for_print:
+            messagebox.showwarning("No Items Selected", "Please select at least one item with an assigned Tag ID by clicking its checkbox.", parent=self.winfo_toplevel())
+            return
+            
+        try:
+            canvas_width = 850
+            canvas_height = 1100
+            
+            conn = get_connection()
+            if not conn: return
+            
+            items = []
+            try:
+                cursor = conn.cursor(dictionary=True)
+                placeholders = ', '.join(['%s'] * len(self.selected_for_print))
+                query = f"SELECT tool_id, name, location, `condition`, tag_id FROM tool WHERE tool_id IN ({placeholders})"
+                cursor.execute(query, tuple(self.selected_for_print))
+                items = cursor.fetchall()
+            finally:
+                if conn.is_connected():
+                    cursor.close()
+                    conn.close()
+
+            if not items:
+                return
+
+            # A4 at 300 DPI
+            canvas_width = 2480
+            canvas_height = 3508
+            
+            canvas = Image.new('RGB', (canvas_width, canvas_height), 'white')
+            draw = ImageDraw.Draw(canvas)
+            try:
+                font = ImageFont.truetype("arialbd.ttf", 36)
+                font_small = ImageFont.truetype("arial.ttf", 28)
+            except IOError:
+                font = ImageFont.load_default()
+                font_small = ImageFont.load_default()
+
+            cols = 5
+            rows = 6
+            cell_w = 496 # 1.654 inches * 300 DPI
+            cell_h = 584 # 1.948 inches * 300 DPI
+            margin_x = (canvas_width - (cols * cell_w)) // 2
+            margin_y = (canvas_height - (rows * cell_h)) // 2
+            
+            pages = []
+            
+            for i, item in enumerate(items):
+                idx_on_page = i % (cols * rows)
+                
+                if idx_on_page == 0 and i > 0:
+                    pages.append(canvas)
+                    canvas = Image.new('RGB', (canvas_width, canvas_height), 'white')
+                    draw = ImageDraw.Draw(canvas)
+                
+                col = idx_on_page % cols
+                row = idx_on_page // cols
+                x = margin_x + col * cell_w
+                y = margin_y + row * cell_h
+                
+                # Draw border around the tag for easy cutting
+                draw.rectangle([x, y, x + cell_w, y + cell_h], outline="black", width=2)
+                
+                qr_payload = f"Tag ID: {item['tag_id']}\nPID: {item['tool_id']}\nName: {item['name']}\nLocation: {item['location']}\nStatus: {item['condition']}"
+                qr = qrcode.QRCode(version=1, box_size=10, border=1)
+                qr.add_data(qr_payload)
+                qr.make(fit=True)
+                qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+                
+                if qr_img.width > cell_w - 40:
+                    qr_img = qr_img.resize((cell_w - 40, cell_w - 40), Image.NEAREST)
+                
+                qr_x = x + (cell_w - qr_img.width) // 2
+                qr_y = y + 25
+                canvas.paste(qr_img, (qr_x, qr_y))
+                
+                text_y = qr_y + qr_img.height + 15
+                tag_text = f"Tag: {item['tag_id']}"
+                name_text = f"{item['name'][:22]}" 
+                
+                bbox1 = draw.textbbox((0, 0), tag_text, font=font)
+                draw.text((x + (cell_w - (bbox1[2] - bbox1[0])) // 2, text_y), tag_text, fill="black", font=font)
+                bbox2 = draw.textbbox((0, 0), name_text, font=font_small)
+                draw.text((x + (cell_w - (bbox2[2] - bbox2[0])) // 2, text_y + 45), name_text, fill="#555555", font=font_small)
+                
+            pages.append(canvas)
+
+            temp_dir = tempfile.gettempdir()
+            file_path = os.path.join(temp_dir, f"Batch_Print_Tags_{datetime.now().strftime('%H%M%S')}.pdf")
+            
+            if len(pages) > 1:
+                pages[0].save(file_path, "PDF", resolution=300.0, save_all=True, append_images=pages[1:])
+            else:
+                pages[0].save(file_path, "PDF", resolution=300.0)
+            
+            import time
+            time.sleep(0.5)
+            os.startfile(file_path)
+
+            self.selected_for_print.clear()
+            self.load_inventory_data(self.search_entry.get().strip(), self.sort_menu.get())
+
+        except Exception as e:
+            messagebox.showerror("Print Error", f"Failed to generate batch print document.\n{e}", parent=self.winfo_toplevel())
+
+    def open_test_scanner(self):
+        try:
+            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        except:
+            cap = cv2.VideoCapture(0)
+
+        if not cap.isOpened():
+            messagebox.showerror("Camera Error", "No webcam detected.", parent=self.winfo_toplevel())
+            return
+
+        detected_tag = None
+        while True:
+            ret, frame = cap.read()
+            if not ret: break
+            
+            height, width, _ = frame.shape
+            top_left = (int(width*0.25), int(height*0.3))
+            bottom_right = (int(width*0.75), int(height*0.7))
+            cv2.rectangle(frame, top_left, bottom_right, (0, 255, 0), 2)
+            cv2.putText(frame, "Align QR Code inside box", (top_left[0], top_left[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(frame, "Press 'Q' to Cancel", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            
+            detected_codes = decode(frame, symbols=[ZBarSymbol.QRCODE])
+            for barcode in detected_codes:
+                raw_data = barcode.data.decode('utf-8')
+                if "Tag ID:" in raw_data:
+                    first_line = raw_data.split('\n')[0]
+                    detected_tag = first_line.replace("Tag ID: ", "").strip()
+                else:
+                    detected_tag = raw_data.strip()
+                break 
+                
+            cv2.imshow('Champion Scanner - Turbo Mode', frame)
+            
+            if detected_tag or cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        cap.release()
+        cv2.destroyAllWindows()
+        
+        if detected_tag:
+            self.fetch_and_display_scanned_tool(detected_tag)
+
+    def fetch_and_display_scanned_tool(self, tag_id):
+        conn = get_connection()
+        if not conn: return
+        
+        try:
+            cursor = conn.cursor()
+            query = """
+                SELECT t.tool_id, t.name, t.category, t.supplier, t.condition, t.location, IFNULL(i.quantity_available, 0)
+                FROM tool t
+                LEFT JOIN inventory i ON t.tool_id = i.tool_id
+                WHERE t.tag_id = %s
+            """
+            cursor.execute(query, (tag_id,))
+            result = cursor.fetchone()
+            
+            if result:
+                info = (
+                    f"✓ Tag Recognized: {tag_id}\n"
+                    f"{'-'*40}\n"
+                    f"Product Name:   {result[1]}\n"
+                    f"Category:       {result[2]}\n"
+                    f"Supplier:       {result[3]}\n"
+                    f"Condition:      {result[4]}\n"
+                    f"Storage Loc:    {result[5]}\n"
+                    f"Qty Available:  {result[6]}\n"
+                )
+                if messagebox.askyesno("Tool Successfully Identified", info + "\nDo you want to open this item in the Inventory?", parent=self.winfo_toplevel()):
+                    self.open_tool_modal(str(result[0]))
+            else:
+                messagebox.showwarning("Unknown Tag", f"The tag '{tag_id}' was scanned, but it is not linked to any active tool in the database.", parent=self.winfo_toplevel())
+        except Exception as e:
+            messagebox.showerror("Database Error", str(e), parent=self.winfo_toplevel())
+        finally:
+            if conn.is_connected():
+                cursor.close()
+                conn.close()
 
     def load_inventory_data(self, query="", sort_type="Most Recent"):
         for widget in self.data_scroll.winfo_children():
             widget.destroy()
         self.tool_hash_table.clear()
+        
+        if not hasattr(self, 'selected_for_print'):
+            self.selected_for_print = set()
 
         table_inner = ctk.CTkFrame(self.data_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", anchor="n")
+        table_inner.pack(fill="x", expand=True)
 
-        headers = ["PID", "Type", "Name", "Tag ID",
+        headers = ["Print", "PID", "Type", "Name", "Tag ID",
                    "Qty Avail.", "UoM", "Location", "Status"]
 
-        # DYNAMIC PROPORTIONS: Weights determine the exact ratio relative to each other.
-        # Adding 'uniform' guarantees these specific proportions lock in place during resizing.
-        weights = [1, 2, 4, 3, 2, 1, 4, 2]
-        min_sizes = [50, 80, 150, 120, 80, 50, 150, 80]
+        weights = [1, 1, 2, 4, 3, 2, 1, 4, 2]
+        min_sizes = [40, 50, 80, 150, 120, 80, 50, 150, 80]
 
         for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
             # uniform="inv_cols" strictly ties the columns together mathematically
@@ -320,6 +509,8 @@ class InventoryView(ctk.CTkFrame):
                            IFNULL(t.category, 'Uncategorized') as category,
                            IFNULL(t.supplier, 'N/A') as supplier,
                            t.tag_id,
+                           DATE_FORMAT(t.date_acquired, '%Y-%m-%d') as date_acquired,
+                           (SELECT DATE_FORMAT(MAX(flagged_at), '%Y-%m-%d') FROM tool_issues WHERE tool_id = t.tool_id) as last_checked_date,
                            (SELECT p.name FROM transaction tr 
                             JOIN projects p ON tr.project_id = p.project_id 
                             WHERE tr.tool_id = t.tool_id AND tr.status = 'Active' 
@@ -335,6 +526,11 @@ class InventoryView(ctk.CTkFrame):
                 if query:
                     base_query += " AND (t.name LIKE %s OR CAST(t.tool_id AS CHAR) LIKE %s OR t.category LIKE %s OR t.item_type LIKE %s OR t.supplier LIKE %s OR IFNULL(t.tag_id,'') LIKE %s OR t.location LIKE %s OR t.description LIKE %s)"
                     params.extend([f"%{query}%"] * 8)
+
+                if sort_type == "Needs Tag":
+                    base_query += " AND (t.tag_id IS NULL OR t.tag_id = '')"
+                elif sort_type == "Already Tagged":
+                    base_query += " AND t.tag_id IS NOT NULL AND t.tag_id != ''"
 
                 if sort_type == "Oldest":
                     base_query += " ORDER BY t.tool_id ASC"
@@ -399,6 +595,7 @@ class InventoryView(ctk.CTkFrame):
             qty_display = f"⚠ {avail}/{tot}" if is_low_stock else f"{avail}/{tot}"
 
             vals = [
+                "",
                 pid,
                 row['item_type'],
                 row['name'],
@@ -419,31 +616,41 @@ class InventoryView(ctk.CTkFrame):
                 cell = ctk.CTkFrame(table_inner, fg_color=bg,
                                     corner_radius=0, cursor="hand2")
                 cell.grid(row=r_idx, column=col, sticky="nsew")
+                
+                if col == 0:
+                    if tag_display != "Unassigned":
+                        chk_var = ctk.StringVar(value="on" if pid in self.selected_for_print else "off")
+                        chk = ctk.CTkCheckBox(cell, text="", variable=chk_var, onvalue="on", offvalue="off", width=20, height=20, 
+                                              command=lambda p=pid, v=chk_var: self.toggle_print_selection(p, v.get()))
+                        chk.pack(expand=True, pady=8)
+                    else:
+                        chk = ctk.CTkCheckBox(cell, text="", width=20, height=20, state="disabled")
+                        chk.pack(expand=True, pady=8)
+                else:
+                    txt_col = "#1A1A1A"
+                    if col == 7 and "Deployed:" in val:
+                        txt_col = "#2980B9"
+                    elif col == 2 and val == "Consumable":
+                        txt_col = "#D37F00"
+                    elif col == 4 and val == "Unassigned":
+                        txt_col = "#D8000C"
+                    elif col == 5 and is_low_stock:
+                        txt_col = "#D8000C"
 
-                txt_col = "#1A1A1A"
-                if col == 6 and "Deployed:" in val:
-                    txt_col = "#2980B9"
-                elif col == 1 and val == "Consumable":
-                    txt_col = "#D37F00"
-                elif col == 3 and val == "Unassigned":
-                    txt_col = "#D8000C"
-                elif col == 4 and is_low_stock:
-                    txt_col = "#D8000C"
+                    font_w = "bold" if col == 2 or col == 4 or (col == 5 and is_low_stock) or (
+                        col == 7 and "Deployed:" in val) else "normal"
 
-                font_w = "bold" if col == 1 or col == 3 or (col == 4 and is_low_stock) or (
-                    col == 6 and "Deployed:" in val) else "normal"
+                    lbl = ctk.CTkLabel(cell, text=val, font=(
+                        "Inter", 12, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
 
-                lbl = ctk.CTkLabel(cell, text=val, font=(
-                    "Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
+                    lbl.configure(wraplength=min_sizes[col] - 10)
 
-                lbl.configure(wraplength=min_sizes[col] - 10)
+                    lbl.pack(fill="both", expand=True, padx=4, pady=8)
 
-                lbl.pack(fill="both", expand=True, padx=4, pady=12)
-
-                cell.bind("<Button-1>", lambda e,
-                          lookup_id=pid: self.open_tool_modal(lookup_id))
-                lbl.bind("<Button-1>", lambda e,
-                         lookup_id=pid: self.open_tool_modal(lookup_id))
+                    cell.bind("<Button-1>", lambda e,
+                              lookup_id=pid: self.open_tool_modal(lookup_id))
+                    lbl.bind("<Button-1>", lambda e,
+                             lookup_id=pid: self.open_tool_modal(lookup_id))
 
         if getattr(self, 'highlight_tool_id', None):
             self.after(
@@ -583,7 +790,9 @@ class InventoryView(ctk.CTkFrame):
                                IFNULL(t.location, 'N/A') as location, t.`condition` as status,
                                IFNULL(t.category, 'Uncategorized') as category,
                                IFNULL(t.supplier, 'N/A') as supplier,
-                               t.tag_id, t.is_archived
+                               t.tag_id, t.is_archived,
+                               DATE_FORMAT(t.date_acquired, '%Y-%m-%d') as date_acquired,
+                               (SELECT DATE_FORMAT(MAX(flagged_at), '%Y-%m-%d') FROM tool_issues WHERE tool_id = t.tool_id) as last_checked_date
                         FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id
                         WHERE t.tool_id = %s
                     """, (lookup_id,))
@@ -660,6 +869,11 @@ class InventoryView(ctk.CTkFrame):
         uom_menu.set(data['uom'])
 
         loc_entry = create_modal_row(form_scroll, "Location", data['location'])
+
+        date_acq_entry = create_modal_row(form_scroll, "Acquired On", data.get('date_acquired') or 'N/A')
+        date_acq_entry.configure(state="disabled", fg_color="#F9FAFB")
+        last_chk_entry = create_modal_row(form_scroll, "Last Checked", data.get('last_checked_date') or 'No Maintenance Record')
+        last_chk_entry.configure(state="disabled", fg_color="#F9FAFB")
 
         ctk.CTkLabel(form_scroll, text="ℹ  For consumables (boxes, kg, sets): fractional quantities are supported.\n   e.g., set Total Qty to 2.5 if half a box was partially used.", font=(
             "Inter", 10), text_color="gray", justify="left", wraplength=450).pack(anchor="w", pady=(3, 5))
@@ -754,7 +968,7 @@ class InventoryView(ctk.CTkFrame):
         def update_preview(event=None):
             current_val = tag_entry.get().strip()
             if not current_val:
-                qr_img_lbl.configure(image="", text="No Tag Assigned")
+                qr_img_lbl.configure(image=None, text="No Tag Assigned")
                 return
 
             qr_payload = f"Tag ID: {current_val}\nPID: {lookup_id}\nName: {name_entry.get()}\nLocation: {loc_entry.get()}\nStatus: {status_menu.get()}"

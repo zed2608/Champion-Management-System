@@ -333,11 +333,16 @@ class HelpView(ctk.CTkFrame):
     def _build_search_bar(self, parent, on_search, placeholder="Search keywords..."):
         bar = ctk.CTkFrame(parent, fg_color="transparent")
         bar.pack(fill="x", padx=20, pady=(4, 4))
-        entry = ctk.CTkEntry(bar, placeholder_text=placeholder, width=300, height=38)
+        entry_var = ctk.StringVar()
+        entry = ctk.CTkEntry(bar, placeholder_text=placeholder, width=300, height=38, textvariable=entry_var)
         entry.pack(side="left", padx=(0, 10))
-        entry.bind("<Return>", lambda e: on_search(entry.get().strip()))
-        ctk.CTkButton(bar, text="Search", width=80, height=38, fg_color="#3498DB", text_color="white", hover_color="#2980B9", font=("Inter", 12, "bold"), command=lambda: on_search(entry.get().strip())).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(bar, text="⟳ Reset", width=80, height=38, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=lambda: [entry.delete(0, "end"), on_search("")]).pack(side="left", padx=(0, 10))
+        
+        entry._search_timer = None
+        def _do_search(*args):
+            if entry._search_timer: parent.after_cancel(entry._search_timer)
+            entry._search_timer = parent.after(300, lambda: on_search(entry.get().strip()))
+            
+        entry_var.trace_add("write", _do_search)
         return entry
 
     @staticmethod

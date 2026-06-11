@@ -492,6 +492,7 @@ class DashboardApp(ctk.CTkToplevel):
             "proj_active": 0,
             "proj_pending": 0,
             "proj_completed_month": 0,
+            "pwd_resets": 0,
         }
         activities = []
         # chart_data: 7 days of (issues, retrievals) — [(day_label, issued, retrieved), ...]
@@ -584,6 +585,13 @@ class DashboardApp(ctk.CTkToplevel):
             except Exception:
                 pass
 
+            # Password Reset Requests
+            try:
+                cursor.execute("SELECT COUNT(*) as cnt FROM user WHERE reset_requested = 1")
+                metrics["pwd_resets"] = int(cursor.fetchone()["cnt"] or 0)
+            except Exception:
+                pass
+
             # Activity feed
             cursor.execute("""
                 SELECT
@@ -612,7 +620,7 @@ class DashboardApp(ctk.CTkToplevel):
                     WHERE sl.action_type = 'Submitted' AND sl.module = 'Projects'
                 ) as combined_log
                 ORDER BY raw_date DESC
-                LIMIT 8
+                LIMIT 10
             """)
             for row in cursor.fetchall():
                 activities.append(
@@ -898,37 +906,40 @@ class DashboardApp(ctk.CTkToplevel):
         return frame
 
     def _embed_trend_chart(self, parent, chart_data):
-        fig, ax = plt.subplots(figsize=(4.5, 2.4), dpi=90)
+        fig, ax = plt.subplots(figsize=(5.2, 2.6), dpi=100)  # Slightly wider
         fig.patch.set_facecolor("#FFFFFF")
         ax.set_facecolor("#FFFFFF")
+
         self._draw_trend(ax, chart_data)
-        plt.tight_layout()
+        plt.tight_layout(pad=2.0)
+
         canvas = FigureCanvasTkAgg(fig, master=parent)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0, 5))
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=(5, 10))
         return fig, ax, canvas
 
     def _draw_trend(self, ax, chart_data):
         ax.clear()
         if not chart_data:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center",
-                    transform=ax.transAxes, color="#aaa")
+            ax.text(0.5, 0.5, "No data available", ha="center", va="center", 
+                    transform=ax.transAxes, color="#aaa", fontsize=11)
             ax.axis("off")
             return
+
         labels = [r[0] for r in chart_data]
         issued = [r[1] for r in chart_data]
-        retrv = [r[2] for r in chart_data]
+        retrieved = [r[2] for r in chart_data]
+
         x = range(len(labels))
-        ax.plot(list(x), issued, marker="o",
-                color="#27AE60", linewidth=2, label="Issued")
-        ax.plot(list(x), retrv,  marker="o", color="#2980B9",
-                linewidth=2, label="Retrieved", linestyle="--")
-        ax.set_xticks(list(x))
-        ax.set_xticklabels(labels, fontsize=9)
+        ax.plot(x, issued, marker="o", color="#27AE60", linewidth=2.5, label="Issued")
+        ax.plot(x, retrieved, marker="o", color="#2980B9", linewidth=2.5, linestyle="--", label="Retrieved")
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, fontsize=10, rotation=0)   # No rotation needed with wider chart
+        ax.set_ylabel("Count", fontsize=10)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        ax.tick_params(axis="y", labelsize=8)
-        ax.legend(fontsize=8, loc="upper left", frameon=False)
+        ax.legend(fontsize=9, loc="upper left", frameon=False)
         ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
 
     def _render_deployed_table(self, deployed_rows):
@@ -1120,6 +1131,15 @@ class DashboardApp(ctk.CTkToplevel):
                     fg_color="#DB8534", text="")
             else:
                 self.nav_badges["Project Management"].configure(
+                    fg_color="transparent", text="")
+
+        if "Role Management" in self.nav_badges:
+            resets = metrics.get("pwd_resets", 0)
+            if resets > 0:
+                self.nav_badges["Role Management"].configure(
+                    fg_color="#D8000C", text="")
+            else:
+                self.nav_badges["Role Management"].configure(
                     fg_color="transparent", text="")
 
     def _apply_dashboard_data(self, metrics, activities, chart_data, deployed_rows=None, my_issuances=None):
