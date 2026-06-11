@@ -332,13 +332,10 @@ class MaintenanceView(ctk.CTkFrame):
             self, "issues_filter") else "Open (Pending)"
         q = self.issues_search.get().strip() if hasattr(self, "issues_search") else ""
 
-        conn = get_connection()
-        if not conn:
-            return
-
         def _fetch():
             conn = get_connection()
             if not conn:
+                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
                 return
             try:
                 cursor = conn.cursor(dictionary=True)
@@ -625,6 +622,7 @@ class MaintenanceView(ctk.CTkFrame):
         def _fetch():
             conn = get_connection()
             if not conn:
+                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
                 return
             try:
                 cursor = conn.cursor(dictionary=True)
@@ -765,6 +763,7 @@ class MaintenanceView(ctk.CTkFrame):
         def _fetch():
             conn = get_connection()
             if not conn:
+                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
                 return
             try:
                 cursor = conn.cursor(dictionary=True)
@@ -905,6 +904,7 @@ class MaintenanceView(ctk.CTkFrame):
         def _fetch():
             conn = get_connection()
             if not conn:
+                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
                 return
             try:
                 cursor = conn.cursor(dictionary=True)
@@ -1610,6 +1610,7 @@ class MaintenanceView(ctk.CTkFrame):
         def _fetch():
             conn = get_connection()
             if not conn:
+                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
                 return
             try:
                 cursor = conn.cursor(dictionary=True)
