@@ -193,8 +193,8 @@ class RoleManagementView(ctk.CTkFrame):
                 return messagebox.showerror("Validation Error", "Full Name and Password are required.", parent=self.reg_modal)
             if pwd != cpwd:
                 return messagebox.showerror("Password Mismatch", "Passwords do not match.", parent=self.reg_modal)
-            if len(pwd) < 8:
-                return messagebox.showerror("Weak Password", "Password must be at least 8 characters.", parent=self.reg_modal)
+            if len(pwd) < 8 or not any(c.isdigit() for c in pwd) or not any(c.isupper() for c in pwd) or not any(c in r"!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in pwd):
+                return messagebox.showerror("Weak Password", "Password must meet all strength guidelines (8+ chars, number, uppercase, special).", parent=self.reg_modal)
 
         conn = get_connection()
         if not conn: return
@@ -366,7 +366,14 @@ class RoleManagementView(ctk.CTkFrame):
                 is_locked = row["status"] == "Locked" or row["reset_requested"] == 1
                 display_name = f"🔒 {row['full_name']}" if is_locked else row["full_name"]
 
-                vals = [row["employee_id"], display_name, row["email"], row["role"]]
+                raw_email = row["email"]
+                if "@" in raw_email:
+                    local, domain = raw_email.split("@", 1)
+                    censored_email = f"{local[0]}****@{domain}" if local else f"****@{domain}"
+                else:
+                    censored_email = raw_email
+
+                vals = [row["employee_id"], display_name, censored_email, row["role"]]
                 
                 for col, val in enumerate(vals):
                     cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
@@ -436,15 +443,15 @@ class RoleManagementView(ctk.CTkFrame):
     def open_edit_modal(self, row):
         modal = ctk.CTkToplevel(self)
         modal.title(f"Edit User — {row['full_name']}")
-        modal.geometry("500x500")
+        modal.geometry("500x700")
         modal.configure(fg_color="white")
         modal.resizable(False, False)
         modal.attributes("-topmost", True)
         modal.grab_set()
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - 250
-        y = (modal.winfo_screenheight() // 2) - 250
-        modal.geometry(f"500x500+{x}+{y}")
+        y = (modal.winfo_screenheight() // 2) - 350
+        modal.geometry(f"500x700+{x}+{y}")
 
         ctk.CTkLabel(modal, text=f"Edit: {row['full_name']}",
                      font=("Inter", 15, "bold"), text_color="black").pack(pady=(20, 3))
@@ -478,7 +485,7 @@ class RoleManagementView(ctk.CTkFrame):
 
         # Dynamic password section — hidden for Worker
         pass_section = ctk.CTkFrame(form, fg_color="transparent")
-        pass_e_holder = [None]  # mutable container so inner functions can update reference
+        pass_e_holder = [None, None]  # mutable container so inner functions can update reference
 
         def build_pass_section(target_role):
             for w in pass_section.winfo_children():
@@ -489,12 +496,13 @@ class RoleManagementView(ctk.CTkFrame):
                              font=("Inter", 11), text_color="#D35400",
                              wraplength=400, justify="left").pack(anchor="w", pady=(0, 8))
                 pass_e_holder[0] = None
+                pass_e_holder[1] = None
             else:
                 ctk.CTkLabel(pass_section,
                              text="New Password (leave blank to keep current)",
                              font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
                 pass_row = ctk.CTkFrame(pass_section, fg_color="transparent")
-                pass_row.pack(fill="x", pady=(4, 15))
+                pass_row.pack(fill="x", pady=(4, 5))
                 
                 e = ctk.CTkEntry(pass_row, placeholder_text="Optional new password",
                                  show="•", height=35)
@@ -512,8 +520,56 @@ class RoleManagementView(ctk.CTkFrame):
                     e.configure(show="" if show_pwd_state[0] else "•")
                     eye_btn.configure(text="✕" if show_pwd_state[0] else "👁")
                 eye_btn.configure(command=_toggle_edit_pass)
+
+                # Password strength criteria
+                strength_frame = ctk.CTkFrame(pass_section, fg_color="transparent")
+                strength_frame.pack(anchor="w", pady=(0, 8))
+                GRAY = "#AAAAAA"; GREEN = "#2ECC71"
+                crit_8     = ctk.CTkLabel(strength_frame, text="✗  At least 8 characters",     font=("Inter", 10), text_color=GRAY)
+                crit_num   = ctk.CTkLabel(strength_frame, text="✗  Contains a number",         font=("Inter", 10), text_color=GRAY)
+                crit_upper = ctk.CTkLabel(strength_frame, text="✗  Contains an uppercase letter", font=("Inter", 10), text_color=GRAY)
+                crit_spec  = ctk.CTkLabel(strength_frame, text="✗  Contains a special character", font=("Inter", 10), text_color=GRAY)
+                for lbl in (crit_8, crit_num, crit_upper, crit_spec):
+                    lbl.pack(anchor="w")
+
+                def _check_edit_strength(event=None):
+                    pwd = e.get()
+                    if not pwd:
+                        for lbl in (crit_8, crit_num, crit_upper, crit_spec):
+                            lbl.configure(text=lbl.cget("text").replace("✓", "✗"), text_color=GRAY)
+                        return
+                    has_8     = len(pwd) >= 8
+                    has_num   = any(c.isdigit() for c in pwd)
+                    has_upper = any(c.isupper() for c in pwd)
+                    has_spec  = any(c in r"!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in pwd)
+                    crit_8.configure(    text=f"{'✓' if has_8     else '✗'}  At least 8 characters",      text_color=GREEN if has_8     else GRAY)
+                    crit_num.configure(  text=f"{'✓' if has_num   else '✗'}  Contains a number",          text_color=GREEN if has_num   else GRAY)
+                    crit_upper.configure(text=f"{'✓' if has_upper else '✗'}  Contains an uppercase letter", text_color=GREEN if has_upper else GRAY)
+                    crit_spec.configure( text=f"{'✓' if has_spec  else '✗'}  Contains a special character", text_color=GREEN if has_spec  else GRAY)
+
+                e.bind("<KeyRelease>", _check_edit_strength)
+
+                ctk.CTkLabel(pass_section, text="Confirm New Password", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
+                conf_row = ctk.CTkFrame(pass_section, fg_color="transparent")
+                conf_row.pack(fill="x", pady=(4, 15))
+                conf_e = ctk.CTkEntry(conf_row, placeholder_text="Re-enter new password", show="•", height=35)
+                conf_e.pack(side="left", fill="x", expand=True, padx=(0, 5))
+                
+                show_conf_state = [False]
+                eye_conf_btn = ctk.CTkButton(conf_row, text="👁", width=38, height=35,
+                                        fg_color="#F3F4F6", text_color="#4B5563",
+                                        hover_color="#E5E7EB", corner_radius=6,
+                                        font=("Inter", 14))
+                eye_conf_btn.pack(side="left")
+                
+                def _toggle_conf_pass():
+                    show_conf_state[0] = not show_conf_state[0]
+                    conf_e.configure(show="" if show_conf_state[0] else "•")
+                    eye_conf_btn.configure(text="✕" if show_conf_state[0] else "👁")
+                eye_conf_btn.configure(command=_toggle_conf_pass)
                 
                 pass_e_holder[0] = e
+                pass_e_holder[1] = conf_e
 
         role_menu.configure(command=lambda r: build_pass_section(r))
         build_pass_section(row["role"])
@@ -524,6 +580,7 @@ class RoleManagementView(ctk.CTkFrame):
             new_email = email_e.get().strip()
             new_role  = role_menu.get()
             new_pass  = pass_e_holder[0].get().strip() if pass_e_holder[0] else ""
+            conf_pass = pass_e_holder[1].get().strip() if pass_e_holder[1] else ""
 
             if not new_name:
                 messagebox.showerror("Error", "Full Name is required.", parent=modal)
@@ -541,6 +598,14 @@ class RoleManagementView(ctk.CTkFrame):
                                      "Assigning a login role requires setting a password.",
                                      parent=modal)
                 return
+                
+            if new_pass:
+                if new_pass != conf_pass:
+                    messagebox.showerror("Password Mismatch", "Passwords do not match.", parent=modal)
+                    return
+                if len(new_pass) < 8 or not any(c.isdigit() for c in new_pass) or not any(c.isupper() for c in new_pass) or not any(c in r"!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in new_pass):
+                    messagebox.showerror("Weak Password", "Password must meet all guidelines (8+ chars, number, uppercase, special).", parent=modal)
+                    return
 
             conn = get_connection()
             if not conn:
@@ -621,48 +686,7 @@ class RoleManagementView(ctk.CTkFrame):
 
     def print_user_badge(self, row):
         try:
-            qr_payload = f"Employee ID: {row['employee_id']}\nName: {row['full_name']}\nRole: {row['role']}"
-            qr = qrcode.QRCode(version=1, box_size=6, border=1)
-            qr.add_data(qr_payload)
-            qr.make(fit=True)
-            qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-            
-            canvas_width, canvas_height = 450, 300
-            canvas = Image.new('RGB', (canvas_width, canvas_height), 'white')
-            draw = ImageDraw.Draw(canvas)
-            
-            try:
-                font_title = ImageFont.truetype("arialbd.ttf", 16)
-                font_name = ImageFont.truetype("arialbd.ttf", 20)
-                font_id = ImageFont.truetype("arial.ttf", 14)
-            except IOError:
-                font_title = font_name = font_id = ImageFont.load_default()
-                
-            title_text = "CHAMPION"
-            bbox = draw.textbbox((0, 0), title_text, font=font_title)
-            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, 10), title_text, fill="black", font=font_title)
-            
-            qr_x = (canvas_width - qr_img.width) // 2
-            qr_y = 30
-            canvas.paste(qr_img, (qr_x, qr_y))
-            
-            y_offset = qr_y + qr_img.height + 10
-            
-            name_text = row['full_name']
-            if len(name_text) > 30: name_text = name_text[:27] + "..."
-            
-            bbox = draw.textbbox((0, 0), name_text, font=font_name)
-            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, y_offset), name_text, fill="#1A1A1A", font=font_name)
-            
-            y_offset += 24
-            id_text = f"ID: {row['employee_id']}"
-            bbox = draw.textbbox((0, 0), id_text, font=font_id)
-            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, y_offset), id_text, fill="#555555", font=font_id)
-            
-            temp_dir = tempfile.gettempdir()
-            file_path = os.path.join(temp_dir, f"Badge_{row['employee_id']}.pdf")
-            canvas.save(file_path, "PDF", resolution=300.0)
-            
+            file_path = generate_id_badge(row['employee_id'], row['full_name'], row['role'])
             import time
             time.sleep(0.5)
             os.startfile(file_path)

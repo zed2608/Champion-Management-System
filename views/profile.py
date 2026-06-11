@@ -122,7 +122,7 @@ class ProfileView(ctk.CTkFrame):
             right_container, fg_color="white", corner_radius=10)
         history_card.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
 
-        ctk.CTkLabel(history_card, text="My Deployment History",
+        ctk.CTkLabel(history_card, text="My Borrowing History",
                      font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(
             anchor="w", padx=30, pady=(20, 5))
 
@@ -140,7 +140,7 @@ class ProfileView(ctk.CTkFrame):
         table_inner = ctk.CTkFrame(self.history_scroll, fg_color="transparent")
         table_inner.pack(fill="x", expand=True)
 
-        headers = ["TRN", "Tool Name", "Date Issued", "Date Retrieved", "Status"]
+        headers = ["TRN", "Tool Name", "Borrow Date", "Return Date", "Status"]
         # Balanced weights to stretch cleanly across wide screens
         weights = [1, 3, 2, 2, 1]
         # Minimum sizes to prevent squishing when minimized
@@ -183,7 +183,7 @@ class ProfileView(ctk.CTkFrame):
             rows = cursor.fetchall()
 
             if not rows:
-                ctk.CTkLabel(table_inner, text="No deployment history found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+                ctk.CTkLabel(table_inner, text="No borrowing history found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
                 return
 
             for i, row in enumerate(rows):
@@ -305,11 +305,11 @@ class ProfileView(ctk.CTkFrame):
     def open_password_modal(self):
         dialog = ctk.CTkToplevel(self)
         dialog.title("Change Password")
-        dialog.geometry("400x350")
+        dialog.geometry("400x480")
         dialog.update_idletasks()
         x = int((dialog.winfo_screenwidth() / 2) - (400 / 2))
-        y = int((dialog.winfo_screenheight() / 2) - (350 / 2))
-        dialog.geometry(f"+{x}+{y}")
+        y = int((dialog.winfo_screenheight() / 2) - (480 / 2))
+        dialog.geometry(f"400x480+{x}+{y}")
         dialog.configure(fg_color="white")
         dialog.attributes("-topmost", True)
         dialog.grab_set()
@@ -323,6 +323,30 @@ class ProfileView(ctk.CTkFrame):
         new_entry = ctk.CTkEntry(
             dialog, placeholder_text="New Password", width=340, height=35, show="*")
         new_entry.pack(padx=30, pady=(0, 10))
+        
+        strength_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        strength_frame.pack(anchor="w", padx=30, pady=(0, 10))
+        GRAY = "#AAAAAA"; GREEN = "#2ECC71"
+        crit_8     = ctk.CTkLabel(strength_frame, text="✗  At least 8 chars", font=("Inter", 10), text_color=GRAY)
+        crit_num   = ctk.CTkLabel(strength_frame, text="✗  Contains a number", font=("Inter", 10), text_color=GRAY)
+        crit_upper = ctk.CTkLabel(strength_frame, text="✗  Contains an uppercase letter", font=("Inter", 10), text_color=GRAY)
+        crit_spec  = ctk.CTkLabel(strength_frame, text="✗  Contains a special char", font=("Inter", 10), text_color=GRAY)
+        for lbl in (crit_8, crit_num, crit_upper, crit_spec):
+            lbl.pack(anchor="w")
+            
+        def _check_profile_strength(event=None):
+            pwd = new_entry.get()
+            has_8     = len(pwd) >= 8
+            has_num   = any(c.isdigit() for c in pwd)
+            has_upper = any(c.isupper() for c in pwd)
+            has_spec  = any(c in r"!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in pwd)
+            crit_8.configure(    text=f"{'✓' if has_8     else '✗'}  At least 8 chars",      text_color=GREEN if has_8     else GRAY)
+            crit_num.configure(  text=f"{'✓' if has_num   else '✗'}  Contains a number",          text_color=GREEN if has_num   else GRAY)
+            crit_upper.configure(text=f"{'✓' if has_upper else '✗'}  Contains an uppercase letter", text_color=GREEN if has_upper else GRAY)
+            crit_spec.configure( text=f"{'✓' if has_spec  else '✗'}  Contains a special char", text_color=GREEN if has_spec  else GRAY)
+
+        new_entry.bind("<KeyRelease>", _check_profile_strength)
+
         conf_entry = ctk.CTkEntry(
             dialog, placeholder_text="Confirm New Password", width=340, height=35, show="*")
         conf_entry.pack(padx=30, pady=(0, 20))
@@ -343,9 +367,9 @@ class ProfileView(ctk.CTkFrame):
                 messagebox.showerror(
                     "Error", "New passwords do not match.", parent=dialog)
                 return
-            if len(new_pwd) < 8:
+            if len(new_pwd) < 8 or not any(c.isdigit() for c in new_pwd) or not any(c.isupper() for c in new_pwd) or not any(c in r"!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in new_pwd):
                 messagebox.showerror(
-                    "Weak Password", "Password must be at least 8 characters long.", parent=dialog)
+                    "Weak Password", "Password must meet all strength guidelines.", parent=dialog)
                 return
 
             if messagebox.askyesno("Confirm", "Change password?", parent=dialog):
