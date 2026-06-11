@@ -226,13 +226,38 @@ class ProjectsView(ctk.CTkFrame):
             except ValueError:
                 pass
                 
-        cal = Calendar(top, selectmode='day', date_pattern='y-mm-dd',
-                       year=sel_date.year, month=sel_date.month, day=sel_date.day,
-                       background='#1E4528', foreground='white', borderwidth=0,
-                       headersbackground='#F9FAFB', headersforeground='black',
-                       normalbackground='white', normalforeground='black',
-                       weekendbackground='white', weekendforeground='black',
-                       othermonthforeground='gray', othermonthweforeground='gray')
+        cal_kwargs = {
+            'selectmode': 'day', 'date_pattern': 'y-mm-dd',
+            'year': sel_date.year, 'month': sel_date.month, 'day': sel_date.day,
+            'background': '#1E4528', 'foreground': 'white', 'borderwidth': 0,
+            'headersbackground': '#F9FAFB', 'headersforeground': 'black',
+            'normalbackground': 'white', 'normalforeground': 'black',
+            'weekendbackground': 'white', 'weekendforeground': 'black',
+            'othermonthforeground': 'gray', 'othermonthweforeground': 'gray'
+        }
+        
+        if entry_widget == getattr(self, "p_end", None):
+            start_val = self.p_start.get().strip()
+            if start_val:
+                try:
+                    min_dt = datetime.strptime(start_val, "%Y-%m-%d")
+                    cal_kwargs['mindate'] = min_dt.date()
+                    if sel_date < min_dt:
+                        cal_kwargs.update({'year': min_dt.year, 'month': min_dt.month, 'day': min_dt.day})
+                except ValueError:
+                    pass
+        elif entry_widget == getattr(self, "p_start", None):
+            end_val = self.p_end.get().strip()
+            if end_val:
+                try:
+                    max_dt = datetime.strptime(end_val, "%Y-%m-%d")
+                    cal_kwargs['maxdate'] = max_dt.date()
+                    if sel_date > max_dt:
+                        cal_kwargs.update({'year': max_dt.year, 'month': max_dt.month, 'day': max_dt.day})
+                except ValueError:
+                    pass
+
+        cal = Calendar(top, **cal_kwargs)
         cal.pack(fill="both", expand=True, padx=10, pady=(10, 5))
         
         def set_date():
@@ -498,6 +523,11 @@ class ProjectsView(ctk.CTkFrame):
         if not name or not client: return messagebox.showerror("Error", "Project Name and Client are required.", parent=self.winfo_toplevel())
         if not self._validate_date(start_date, "Start Date"): return
         if not self._validate_date(end_date, "End Date"): return
+        
+        if start_date and end_date:
+            if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(start_date, "%Y-%m-%d"):
+                return messagebox.showerror("Invalid Date Range", "The End Date cannot be earlier than the Start Date.", parent=self.draft_modal)
+                
         if not self.req_cart: return messagebox.showerror("Error", "Please add at least one tool requirement.", parent=self.draft_modal)
 
         conn = get_connection()
