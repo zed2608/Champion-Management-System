@@ -492,7 +492,7 @@ class InventoryView(ctk.CTkFrame):
 
             if qty < 0 or price < 0:
                 messagebox.showerror(
-                    "Validation Error", "Price and Quantity cannot be negative values.", parent=self.winfo_toplevel())
+                    "Validation Error", "Price and Quantity cannot be negative values.", parent=self.add_modal)
                 return
 
         except ValueError:

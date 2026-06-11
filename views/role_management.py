@@ -30,7 +30,7 @@ class RoleManagementView(ctk.CTkFrame):
         self.build_table_panel()
 
     # ==========================================
-    # Register / Add User Form
+    # LEFT: Register / Add User Form
     # ==========================================
     def open_register_modal(self):
         self.reg_modal = ctk.CTkToplevel(self)
@@ -277,7 +277,7 @@ class RoleManagementView(ctk.CTkFrame):
             if conn.is_connected(): cursor.close(); conn.close()
 
     # ==========================================
-    # User Management Table
+    # RIGHT: User Management Table
     # ==========================================
     def build_table_panel(self):
         table_card = ctk.CTkFrame(
@@ -291,17 +291,18 @@ class RoleManagementView(ctk.CTkFrame):
         ctk.CTkLabel(top, text="Registered Users",
                      font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
 
-        self.user_search_var = ctk.StringVar()
         self.user_search = ctk.CTkEntry(
-            top, placeholder_text="Search name or ID...", width=200, textvariable=self.user_search_var)
+            top, placeholder_text="Search name or ID...", width=200)
         self.user_search.pack(side="right", padx=(5, 0))
-
-        self._user_timer = None
-        def on_user_search(*args):
-            if self._user_timer:
-                self.after_cancel(self._user_timer)
-            self._user_timer = self.after(300, self.load_user_table)
-        self.user_search_var.trace_add("write", on_user_search)
+        self.user_search.bind("<Return>", lambda e: self.load_user_table())
+        ctk.CTkButton(top, text="Search", width=70,
+                      fg_color="#1E4528", hover_color="#14301C",
+                      font=("Inter", 11, "bold"),
+                      command=self.load_user_table).pack(side="right", padx=5)
+        ctk.CTkButton(top, text="↻", width=40,
+                      fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
+                      command=lambda: [self.user_search.delete(0, "end"),
+                                       self.load_user_table()]).pack(side="right")
                                        
         ctk.CTkButton(top, text="+ Register New User", width=150, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_register_modal).pack(side="right", padx=(10, 5))
 
@@ -334,87 +335,84 @@ class RoleManagementView(ctk.CTkFrame):
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         q = self.user_search.get().strip() if hasattr(self, "user_search") else ""
+        conn = get_connection()
+        if not conn:
+            return
+        try:
+            cursor = conn.cursor(dictionary=True)
+            sql = """
+                SELECT user_id, employee_id, full_name,
+                       IFNULL(email,'—') as email, role, IFNULL(status, 'Active') as status,
+                       IFNULL(failed_attempts, 0) as failed_attempts, IFNULL(reset_requested, 0) as reset_requested
+                FROM user WHERE IFNULL(status, 'Active') != 'Archived'
+            """
+            params = []
+            if q:
+                sql += " AND (full_name LIKE %s OR employee_id LIKE %s)"
+                params = [f"%{q}%", f"%{q}%"]
+            sql += " ORDER BY full_name ASC"
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
 
-        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading users... Please wait", text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        def _fetch():
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: loading_lbl.configure(text="Connection failed.", text_color="red"))
+            if not rows:
+                ctk.CTkLabel(table_inner, text="No users found.",
+                             text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
                 return
-            try:
-                cursor = conn.cursor(dictionary=True)
-                sql = """
-                    SELECT user_id, employee_id, full_name,
-                           IFNULL(email,'—') as email, role, IFNULL(status, 'Active') as status,
-                           IFNULL(failed_attempts, 0) as failed_attempts, IFNULL(reset_requested, 0) as reset_requested
-                    FROM user WHERE IFNULL(status, 'Active') != 'Archived'
-                """
-                params = []
-                if q:
-                    sql += " AND (full_name LIKE %s OR employee_id LIKE %s)"
-                    params = [f"%{q}%", f"%{q}%"]
-                sql += " ORDER BY full_name ASC"
-                cursor.execute(sql, params)
-                rows = cursor.fetchall()
-                self.after(0, lambda: self._render_user_table(rows, table_inner, loading_lbl, headers, min_sizes))
-            except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(text=f"Error: {err}", text_color="red", wraplength=600))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
 
-        import threading
-        threading.Thread(target=_fetch, daemon=True).start()
+            for i, row in enumerate(rows):
+                r_idx = i + 1
+                bg = "#F9FAFB" if i % 2 == 0 else "white"
 
-    def _render_user_table(self, rows, table_inner, loading_lbl, headers, min_sizes):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-        loading_lbl.destroy()
+                is_locked = row["status"] == "Locked" or row["reset_requested"] == 1
+                display_name = f"🔒 {row['full_name']}" if is_locked else row["full_name"]
 
-        if not rows:
-            ctk.CTkLabel(table_inner, text="No users found.",
-                         text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-            return
+                vals = [row["employee_id"], display_name, row["email"], row["role"]]
+                
+                for col, val in enumerate(vals):
+                    cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
+                    cell.grid(row=r_idx, column=col, sticky="nsew")
 
-        for i, row in enumerate(rows):
-            r_idx = i + 1
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
-            is_locked = row["status"] == "Locked" or row["reset_requested"] == 1
-            display_name = f"🔒 {row['full_name']}" if is_locked else row["full_name"]
-            vals = [row["employee_id"], display_name, row["email"], row["role"]]
+                    color = "#1A1A1A"
+                    if is_locked and col in (0, 1, 2):
+                        color = "#D8000C"
+                    elif col == 3:
+                        if val == "Admin": color = "#2ECC71"
+                        elif val == "Worker": color = "#D35400"
 
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-                color = "#1A1A1A"
-                if is_locked and col in (0, 1, 2):
-                    color = "#D8000C"
-                elif col == 3:
-                    if val == "Admin": color = "#2ECC71"
-                    elif val == "Worker": color = "#D35400"
-                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11), text_color=color, justify="center", anchor="center")
-                lbl.configure(wraplength=min_sizes[col] - 10)
-                lbl.pack(fill="both", expand=True, padx=4, pady=12)
+                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11), text_color=color, justify="center", anchor="center")
+                    
+                    lbl.configure(wraplength=min_sizes[col] - 10)
+                    lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
-            btn_cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-            btn_cell.grid(row=r_idx, column=4, sticky="nsew")
-            action_frame = ctk.CTkFrame(btn_cell, fg_color="transparent")
-            action_frame.pack(expand=True, pady=6)
-            ctk.CTkButton(action_frame, text="Edit", width=56, height=28,
-                          fg_color="#F1C40F", text_color="black",
-                          hover_color="#D4AC0D", font=("Inter", 10, "bold"),
-                          command=lambda r=row: self.open_edit_modal(r)).pack(side="left", padx=(0, 4))
-            ctk.CTkButton(action_frame, text="🔖 Badge", width=80, height=28,
-                          fg_color="#3498DB", text_color="white",
-                          hover_color="#2980B9", font=("Inter", 10, "bold"),
-                          command=lambda r=row: self.print_user_badge(r)).pack(side="left", padx=(0, 4))
-            ctk.CTkButton(action_frame, text="Archive", width=56, height=28,
-                          fg_color="#FFEAEA", text_color="#D8000C",
-                          hover_color="#FFC0C0", font=("Inter", 10, "bold"),
-                          command=lambda r=row: self.delete_user(r)).pack(side="left")
+                # Action Cell (Contains all 3 Buttons)
+                btn_cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
+                btn_cell.grid(row=r_idx, column=4, sticky="nsew")
+                
+                action_frame = ctk.CTkFrame(btn_cell, fg_color="transparent")
+                action_frame.pack(expand=True, pady=6)
+                
+                ctk.CTkButton(action_frame, text="Edit", width=56, height=28,
+                              fg_color="#F1C40F", text_color="black",
+                              hover_color="#D4AC0D", font=("Inter", 10, "bold"),
+                              command=lambda r=row: self.open_edit_modal(r)).pack(side="left", padx=(0, 4))
+                              
+                ctk.CTkButton(action_frame, text="🔖 Badge", width=80, height=28,
+                              fg_color="#3498DB", text_color="white",
+                              hover_color="#2980B9", font=("Inter", 10, "bold"),
+                              command=lambda r=row: self.print_user_badge(r)).pack(side="left", padx=(0, 4))
+                              
+                ctk.CTkButton(action_frame, text="Archive", width=56, height=28,
+                              fg_color="#FFEAEA", text_color="#D8000C",
+                              hover_color="#FFC0C0", font=("Inter", 10, "bold"),
+                              command=lambda r=row: self.delete_user(r)).pack(side="left")
+
+        except Exception as e:
+            ctk.CTkLabel(self.user_scroll,
+                         text=f"Error: {e}", text_color="red").pack(pady=10)
+        finally:
+            if conn.is_connected():
+                cursor.close()
+                conn.close()
 
     def delete_user(self, row):
         if messagebox.askyesno("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
@@ -624,51 +622,46 @@ class RoleManagementView(ctk.CTkFrame):
     def print_user_badge(self, row):
         try:
             qr_payload = f"Employee ID: {row['employee_id']}\nName: {row['full_name']}\nRole: {row['role']}"
-            qr = qrcode.QRCode(version=1, box_size=10, border=2)
+            qr = qrcode.QRCode(version=1, box_size=6, border=1)
             qr.add_data(qr_payload)
             qr.make(fit=True)
             qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
             
-            canvas_width, canvas_height = 400, 600
+            canvas_width, canvas_height = 450, 300
             canvas = Image.new('RGB', (canvas_width, canvas_height), 'white')
             draw = ImageDraw.Draw(canvas)
             
-            draw.rectangle([(0, 0), (canvas_width, 80)], fill="#1E4528")
             try:
-                font_title = ImageFont.truetype("arialbd.ttf", 22)
-                font_name = ImageFont.truetype("arialbd.ttf", 24)
-                font_role = ImageFont.truetype("arial.ttf", 18)
-                font_id = ImageFont.truetype("arial.ttf", 16)
+                font_title = ImageFont.truetype("arialbd.ttf", 16)
+                font_name = ImageFont.truetype("arialbd.ttf", 20)
+                font_id = ImageFont.truetype("arial.ttf", 14)
             except IOError:
-                font_title = font_name = font_role = font_id = ImageFont.load_default()
+                font_title = font_name = font_id = ImageFont.load_default()
                 
-            title_text = "CHAMPION FINE TOOLING"
+            title_text = "CHAMPION"
             bbox = draw.textbbox((0, 0), title_text, font=font_title)
-            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, 25), title_text, fill="white", font=font_title)
+            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, 10), title_text, fill="black", font=font_title)
             
             qr_x = (canvas_width - qr_img.width) // 2
-            qr_y = 120
+            qr_y = 30
             canvas.paste(qr_img, (qr_x, qr_y))
             
-            y_offset = qr_y + qr_img.height + 30
+            y_offset = qr_y + qr_img.height + 10
             
             name_text = row['full_name']
+            if len(name_text) > 30: name_text = name_text[:27] + "..."
+            
             bbox = draw.textbbox((0, 0), name_text, font=font_name)
-            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, y_offset), name_text, fill="black", font=font_name)
+            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, y_offset), name_text, fill="#1A1A1A", font=font_name)
             
-            y_offset += 40
-            role_text = f"Role: {row['role']}"
-            bbox = draw.textbbox((0, 0), role_text, font=font_role)
-            draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, y_offset), role_text, fill="#555555", font=font_role)
-            
-            y_offset += 30
+            y_offset += 24
             id_text = f"ID: {row['employee_id']}"
             bbox = draw.textbbox((0, 0), id_text, font=font_id)
             draw.text(((canvas_width - (bbox[2] - bbox[0])) // 2, y_offset), id_text, fill="#555555", font=font_id)
             
             temp_dir = tempfile.gettempdir()
             file_path = os.path.join(temp_dir, f"Badge_{row['employee_id']}.pdf")
-            canvas.save(file_path, "PDF", resolution=100.0)
+            canvas.save(file_path, "PDF", resolution=300.0)
             
             import time
             time.sleep(0.5)

@@ -829,7 +829,7 @@ class IssuanceView(ctk.CTkFrame):
     def open_scanner(self, target_entry, trigger_method):
         try: cap = cv2.VideoCapture(0, cv2.CAP_DSHOW) 
         except: cap = cv2.VideoCapture(0) 
-        if not cap.isOpened(): return messagebox.showerror("Camera Error", "No webcam detected.", parent=self.winfo_toplevel())
+        if not cap.isOpened(): return messagebox.showerror("Camera Error", "No webcam detected.", parent=target_entry.winfo_toplevel())
 
         detected_data = None
         cv2.namedWindow('Champion Scanner - Turbo Mode', cv2.WINDOW_NORMAL)
@@ -852,6 +852,9 @@ class IssuanceView(ctk.CTkFrame):
                 if "Tag ID:" in raw_data:
                     first_line = raw_data.split('\n')[0]
                     detected_data = first_line.replace("Tag ID:", "").strip()
+                elif "Employee ID:" in raw_data:
+                    first_line = raw_data.split('\n')[0]
+                    detected_data = first_line.replace("Employee ID:", "").strip()
                 else:
                     detected_data = raw_data.strip()
                 break 
@@ -990,7 +993,7 @@ class IssuanceView(ctk.CTkFrame):
 
         selected_proj = self.b_project_menu.get()
         if selected_proj not in self.active_projects_map:
-            messagebox.showerror("Unauthorized", "No valid project selected.", parent=self.winfo_toplevel())
+            messagebox.showerror("Unauthorized", "No valid project selected.", parent=self.issuance_modal)
             return
             
         conn = get_connection()
@@ -1001,18 +1004,18 @@ class IssuanceView(ctk.CTkFrame):
             tool = cursor.fetchone()
             
             if not tool:
-                messagebox.showerror("Not Found", "Invalid or Unassigned Tag ID.", parent=self.winfo_toplevel())
+                messagebox.showerror("Not Found", "Invalid or Unassigned Tag ID.", parent=self.issuance_modal)
                 return
             if tool['condition'] in ['Damaged', 'Needs Repair', 'Lost']:
-                messagebox.showerror("Unavailable", f"'{tool['name']}' cannot be issued. It is flagged as {tool['condition']}.", parent=self.winfo_toplevel())
+                messagebox.showerror("Unavailable", f"'{tool['name']}' cannot be issued. It is flagged as {tool['condition']}.", parent=self.issuance_modal)
                 return
             if tool['qty'] <= 0:
-                messagebox.showerror("Out of Stock", f"'{tool['name']}' is currently out of stock!", parent=self.winfo_toplevel())
+                messagebox.showerror("Out of Stock", f"'{tool['name']}' is currently out of stock!", parent=self.issuance_modal)
                 return
 
             req = next((r for r in self.current_project_reqs if r['tool_id'] == tool['tool_id']), None)
             if not req:
-                messagebox.showerror("Unauthorized", f"'{tool['name']}' is NOT approved for this project.", parent=self.winfo_toplevel())
+                messagebox.showerror("Unauthorized", f"'{tool['name']}' is NOT approved for this project.", parent=self.issuance_modal)
                 return
 
             allowed_qty = float(req['req_qty'])
@@ -1020,12 +1023,12 @@ class IssuanceView(ctk.CTkFrame):
             in_cart = sum(item['qty_borrowed'] for item in self.borrow_cart if item['id'] == tool['tool_id'])
 
             if (already_issued + in_cart + 1) > allowed_qty:
-                messagebox.showerror("Limit Reached", f"Cannot add '{tool['name']}'.\nApproved Limit: {allowed_qty:g}\nAlready Issued: {already_issued}\nIn Cart: {in_cart}", parent=self.winfo_toplevel())
+                messagebox.showerror("Limit Reached", f"Cannot add '{tool['name']}'.\nApproved Limit: {allowed_qty:g}\nAlready Issued: {already_issued}\nIn Cart: {in_cart}", parent=self.issuance_modal)
                 return
 
             # --- FIX B: Check real physical inventory constraints before accepting into cart ---
             if (in_cart + 1) > tool['qty']:
-                messagebox.showerror("Out of Stock", f"Cannot add '{tool['name']}'.\nOnly {tool['qty']} left in the warehouse.", parent=self.winfo_toplevel())
+                messagebox.showerror("Out of Stock", f"Cannot add '{tool['name']}'.\nOnly {tool['qty']} left in the warehouse.", parent=self.issuance_modal)
                 return
             # ---------------------------------------------------------------------------------
 
@@ -1053,9 +1056,9 @@ class IssuanceView(ctk.CTkFrame):
         already_issued = float(req['issued_qty'])
         
         if (already_issued + new_qty) > allowed_qty:
-            messagebox.showwarning("Limit Reached", f"You cannot exceed the approved limit of {allowed_qty:g}.", parent=self.winfo_toplevel())
+            messagebox.showwarning("Limit Reached", f"You cannot exceed the approved limit of {allowed_qty:g}.", parent=self.issuance_modal)
         elif new_qty > item['max_qty']:
-            messagebox.showwarning("Out of Stock", f"Only {item['max_qty']} available in warehouse.", parent=self.winfo_toplevel())
+            messagebox.showwarning("Out of Stock", f"Only {item['max_qty']} available in warehouse.", parent=self.issuance_modal)
         elif new_qty <= 0:
             self.remove_from_cart(index)
         else:
@@ -1104,7 +1107,7 @@ class IssuanceView(ctk.CTkFrame):
                 cursor.execute("SELECT quantity_available FROM inventory WHERE tool_id = %s", (item['id'],))
                 db_qty = cursor.fetchone()['quantity_available']
                 if item['qty_borrowed'] > db_qty:
-                    return messagebox.showerror("Inventory Error", f"Transaction aborted.\n'{item['name']}' only has {db_qty} remaining in stock.", parent=self.winfo_toplevel())
+                    return messagebox.showerror("Inventory Error", f"Transaction aborted.\n'{item['name']}' only has {db_qty} remaining in stock.", parent=self.issuance_modal)
             # ---------------------------------------------------------
             
             for item in self.borrow_cart:
@@ -1268,7 +1271,7 @@ class IssuanceView(ctk.CTkFrame):
 
     def verify_tool_for_return(self):
         if not self.active_return_user_id:
-            messagebox.showwarning("Authentication Required", "Please scan Employee ID first before returning a tool.", parent=self.winfo_toplevel())
+            messagebox.showwarning("Authentication Required", "Please scan Employee ID first before returning a tool.", parent=self.retrieval_modal)
             self.r_tag_id.delete(0, 'end')
             return
 

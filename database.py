@@ -66,23 +66,22 @@ def log_action(user_id, action_type, module, details):
                 conn.close()
 
 
-def generate_id_badge(emp_id, emp_name, emp_role, company_name="Champion Fine Tooling Corp.", output_dir=None):
+def generate_id_badge(emp_id, emp_name, emp_role, company_name="CHAMPION", output_dir=None):
     """
-    Generate a professional QR ID badge with company header.
+    Generate a 1.5x1.0 inch professional QR ID badge.
     
     PIXEL-PERFECT BADGE SPECIFICATION:
-    - Canvas: 420 × (QR height + 220px)
-    - Header band: 50px green (#1E4528) with company name centered
-    - QR code: Centered, 60px below header
-    - Employee info: Name (28pt bold), Role (18pt), ID (14pt) below QR
-    - Resolution: 150 DPI for crisp PDF output
+    - Canvas: 450 × 300px (1.5x1.0 inch at 300 DPI)
+    - QR code: Centered
+    - Employee info: Name and ID below QR
+    - Resolution: 300 DPI for crisp PDF label output
     - All text centered horizontally
     
     Args:
         emp_id: Employee ID (converted to string)
         emp_name: Full employee name
         emp_role: Job role/title
-        company_name: Organization name for header (default: "Champion Fine Tooling Corp.")
+        company_name: Organization name for header (default: "CHAMPION")
         output_dir: Output directory (default: temp directory)
     
     Returns:
@@ -91,24 +90,16 @@ def generate_id_badge(emp_id, emp_name, emp_role, company_name="Champion Fine To
     try:
         emp_id = str(emp_id)
         
-        # Generate QR code with professional appearance
-        qr = qrcode.QRCode(version=1, box_size=14, border=2)
+        # Generate QR code
+        qr = qrcode.QRCode(version=1, box_size=6, border=1)
         qr.add_data(emp_id)
         qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="#1E4528", back_color="white").convert("RGB")
+        qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
         
-        # Canvas dimensions
-        canvas_w = 420
-        canvas_h = qr_img.height + 220
+        # Canvas dimensions 1.5x1.0 inch @ 300 DPI
+        canvas_w = 450
+        canvas_h = 300
         canvas = Image.new("RGB", (canvas_w, canvas_h), "white")
-        
-        # Draw header band
-        draw_bg = ImageDraw.Draw(canvas)
-        draw_bg.rectangle([(0, 0), (canvas_w, 50)], fill="#1E4528")
-        
-        # Paste QR centered below header
-        qr_x = (canvas_w - qr_img.width) // 2
-        canvas.paste(qr_img, (qr_x, 60))
         
         draw = ImageDraw.Draw(canvas)
         
@@ -121,38 +112,44 @@ def generate_id_badge(emp_id, emp_name, emp_role, company_name="Champion Fine To
                 except (IOError, OSError):
                     continue
             try:
-                return ImageFont.load_default(size=size)
+                return ImageFont.load_default()
             except TypeError:
                 return ImageFont.load_default()
         
         f_company = _load_font("arialbd.ttf", 16)
-        f_name = _load_font("arialbd.ttf", 28)
-        f_role = _load_font("arial.ttf", 18)
+        f_name = _load_font("arialbd.ttf", 20)
         f_id = _load_font("arial.ttf", 14)
         
         def center_x(text, font):
             bbox = draw.textbbox((0, 0), text, font=font)
             return (canvas_w - (bbox[2] - bbox[0])) // 2
         
-        # Header text (company name)
-        draw.text((center_x(company_name, f_company), 14),
-                  company_name, fill="white", font=f_company)
+        # Header text
+        draw.text((center_x(company_name, f_company), 10),
+                  company_name, fill="black", font=f_company)
+        
+        # Paste QR
+        qr_x = (canvas_w - qr_img.width) // 2
+        qr_y = 30
+        canvas.paste(qr_img, (qr_x, qr_y))
         
         # Employee info below QR
-        y_base = qr_img.height + 75
+        y_base = qr_y + qr_img.height + 10
+        
+        name_str = emp_name
+        if len(name_str) > 30: name_str = name_str[:27] + "..."
+        
         draw.text((center_x(emp_name, f_name), y_base),
-                  emp_name, fill="#1A1A1A", font=f_name)
-        draw.text((center_x(emp_role, f_role), y_base + 42),
-                  emp_role, fill="#1E4528", font=f_role)
-        draw.text((center_x(f"ID: {emp_id}", f_id), y_base + 76),
-                  f"ID: {emp_id}", fill="gray", font=f_id)
+                  name_str, fill="#1A1A1A", font=f_name)
+        draw.text((center_x(f"ID: {emp_id}", f_id), y_base + 24),
+                  f"ID: {emp_id}", fill="#555555", font=f_id)
         
         # Save PDF
         if output_dir is None:
             output_dir = tempfile.gettempdir()
         
         file_path = os.path.join(output_dir, f"Badge_{emp_id}.pdf")
-        canvas.save(file_path, "PDF", resolution=150.0)
+        canvas.save(file_path, "PDF", resolution=300.0)
         
         return file_path
     

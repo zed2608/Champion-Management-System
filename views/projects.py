@@ -475,7 +475,7 @@ class ProjectsView(ctk.CTkFrame):
     def scan_worker(self):
         try: cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         except Exception: cap = cv2.VideoCapture(0)
-        if not cap.isOpened(): return messagebox.showerror("Camera Error", "No webcam detected.", parent=self.winfo_toplevel())
+        if not cap.isOpened(): return messagebox.showerror("Camera Error", "No webcam detected.", parent=self.draft_modal)
 
         detected_data = None
         cv2.namedWindow('Scan Worker ID', cv2.WINDOW_NORMAL)
@@ -486,20 +486,30 @@ class ProjectsView(ctk.CTkFrame):
             if not ret: break
             cv2.putText(frame, "Scan Employee ID (Press 'Q' to Cancel)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             for barcode in decode(frame, symbols=[ZBarSymbol.QRCODE]):
-                detected_data = barcode.data.decode('utf-8').strip()
+                raw_data = barcode.data.decode('utf-8').strip()
+                if "Employee ID:" in raw_data:
+                    first_line = raw_data.split('\n')[0]
+                    detected_data = first_line.replace("Employee ID:", "").strip()
+                elif "Tag ID:" in raw_data:
+                    detected_data = "INVALID_TOOL_TAG"
+                else:
+                    detected_data = raw_data
                 break
             cv2.imshow('Scan Worker ID', frame)
             if detected_data or cv2.waitKey(1) & 0xFF == ord('q'): break
 
         cap.release()
         cv2.destroyAllWindows()
+        
+        if detected_data == "INVALID_TOOL_TAG":
+            return messagebox.showwarning("Invalid Scan", "You scanned a Tool Tag. Please scan a valid Employee ID Badge.", parent=self.draft_modal)
 
         if detected_data:
             if detected_data not in self.workers_list:
                 self.workers_list.append(detected_data)
                 self._refresh_worker_tags()
 
-    def _validate_date(self, date_str, field_name):
+    def _validate_date(self, date_str, field_name, parent_win=None):
         if not date_str:
             return True
         try:
@@ -508,7 +518,7 @@ class ProjectsView(ctk.CTkFrame):
         except ValueError:
             messagebox.showerror("Invalid Date",
                 f"{field_name} must be in YYYY-MM-DD format (e.g., 2025-01-15).",
-                parent=self.winfo_toplevel())
+                parent=parent_win or self.winfo_toplevel())
             return False
 
     def save_project(self):
@@ -520,9 +530,9 @@ class ProjectsView(ctk.CTkFrame):
         start_date = self.p_start.get().strip() or None
         end_date = self.p_end.get().strip() or None
 
-        if not name or not client: return messagebox.showerror("Error", "Project Name and Client are required.", parent=self.winfo_toplevel())
-        if not self._validate_date(start_date, "Start Date"): return
-        if not self._validate_date(end_date, "End Date"): return
+        if not name or not client: return messagebox.showerror("Error", "Project Name and Client are required.", parent=self.draft_modal)
+        if not self._validate_date(start_date, "Start Date", self.draft_modal): return
+        if not self._validate_date(end_date, "End Date", self.draft_modal): return
         
         if start_date and end_date:
             if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(start_date, "%Y-%m-%d"):
