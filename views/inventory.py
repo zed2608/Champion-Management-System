@@ -78,7 +78,8 @@ class InventoryView(ctk.CTkFrame):
             self.load_inventory_data()
         elif "Tag Management Hub" in selected_tab:
             from views.tagging import TaggingView
-            self.tag_view = TaggingView(self.tab_content)
+            self.tag_view = TaggingView(
+                self.tab_content, user_info=self.user_info)
             self.tag_view.pack(fill="both", expand=True)
 
     def open_add_item_modal(self):
@@ -250,10 +251,14 @@ class InventoryView(ctk.CTkFrame):
                                        text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=self.reset_search)
         self.reset_btn.pack(side="left", padx=(0, 0))
 
-        ctk.CTkButton(search_frame, text="+ Add New Item", width=120, height=38, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 12, "bold"), command=self.open_add_item_modal).pack(side="right", padx=(10, 0))
+        is_staff = self.user_info.get("role", "").lower() == "staff"
 
-        ctk.CTkLabel(search_frame, text="💡 Click any row to View/Edit",
+        if not is_staff:
+            ctk.CTkButton(search_frame, text="+ Add New Item", width=120, height=38, fg_color="#1E4528", hover_color="#14301C",
+                          font=("Inter", 12, "bold"), command=self.open_add_item_modal).pack(side="right", padx=(10, 0))
+
+        hint_text = "💡 Click any row to View" if is_staff else "💡 Click any row to View/Edit"
+        ctk.CTkLabel(search_frame, text=hint_text,
                      font=("Inter", 12, "italic"), text_color="gray").pack(side="right", padx=10)
 
         self.data_scroll = ctk.CTkScrollableFrame(
@@ -591,6 +596,7 @@ class InventoryView(ctk.CTkFrame):
                 return
 
         is_arch = data.get('is_archived', 0)
+        is_staff_modal = self.user_info.get("role", "").lower() == "staff"
 
         modal = ctk.CTkToplevel(self)
         modal.title(f"Manage Item: {lookup_id}")
@@ -692,11 +698,9 @@ class InventoryView(ctk.CTkFrame):
             tag_entry.insert(0, smart_tag)
             update_preview()
 
-        ctk.CTkButton(tag_row, text="↻ Auto-Gen", width=80, fg_color="#F1C40F", text_color="black",
-                      hover_color="#D4AC0D", font=("Inter", 11, "bold"), command=generate_smart_tag).pack(side="left", padx=(5, 0))
-
-        tag_btn_row = ctk.CTkFrame(form_scroll, fg_color="transparent")
-        tag_btn_row.pack(fill="x", pady=10)
+        if not is_staff_modal:
+            ctk.CTkButton(tag_row, text="↻ Auto-Gen", width=80, fg_color="#F1C40F", text_color="black",
+                          hover_color="#D4AC0D", font=("Inter", 11, "bold"), command=generate_smart_tag).pack(side="left", padx=(5, 0))
 
         def save_tag():
             new_tag = tag_entry.get().strip()
@@ -730,10 +734,13 @@ class InventoryView(ctk.CTkFrame):
                 save_tag()
                 update_preview()
 
-        ctk.CTkButton(tag_btn_row, text="Save Tag Link", width=120, fg_color="#1E4528", hover_color="#14301C", font=(
-            "Inter", 11, "bold"), command=save_tag).pack(side="left", expand=True, fill="x", padx=(0, 5))
-        ctk.CTkButton(tag_btn_row, text="Unlink Current Tag", width=120, fg_color="white", border_width=1, border_color="#D8000C", text_color="#D8000C",
-                      hover_color="#FFD2D2", font=("Inter", 11, "bold"), command=unlink_tag).pack(side="right", expand=True, fill="x", padx=(5, 0))
+        if not is_staff_modal:
+            tag_btn_row = ctk.CTkFrame(form_scroll, fg_color="transparent")
+            tag_btn_row.pack(fill="x", pady=10)
+            ctk.CTkButton(tag_btn_row, text="Save Tag Link", width=120, fg_color="#1E4528", hover_color="#14301C", font=(
+                "Inter", 11, "bold"), command=save_tag).pack(side="left", expand=True, fill="x", padx=(0, 5))
+            ctk.CTkButton(tag_btn_row, text="Unlink Current Tag", width=120, fg_color="white", border_width=1, border_color="#D8000C", text_color="#D8000C",
+                          hover_color="#FFD2D2", font=("Inter", 11, "bold"), command=unlink_tag).pack(side="right", expand=True, fill="x", padx=(5, 0))
 
         preview_frame = ctk.CTkFrame(
             form_scroll, fg_color="#F9FAFB", corner_radius=10)
@@ -956,12 +963,21 @@ class InventoryView(ctk.CTkFrame):
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(side="bottom", fill="x", padx=25, pady=15)
 
-        ctk.CTkButton(btn_row, text="Update", fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=(
-            "Inter", 11, "bold"), command=execute_update).pack(side="left", padx=5)
+        if is_staff_modal:
+            # Staff: lock all fields — view-only. QR Print File button remains accessible.
+            for entry_widget in [name_entry, desc_entry, cat_entry, sup_entry,
+                                 price_entry, qty_entry, min_stock_entry, loc_entry, tag_entry]:
+                entry_widget.configure(state="disabled")
+            type_menu.configure(state="disabled")
+            uom_menu.configure(state="disabled")
+            status_menu.configure(state="disabled")
+        else:
+            ctk.CTkButton(btn_row, text="Update", fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=(
+                "Inter", 11, "bold"), command=execute_update).pack(side="left", padx=5)
 
-        arch_btn_text = "Restore" if is_arch else "Archive"
-        ctk.CTkButton(btn_row, text=arch_btn_text, fg_color="#D3B8A7", text_color="black", hover_color="#BFA595", font=(
-            "Inter", 11, "bold"), command=execute_archive).pack(side="left", padx=5)
+            arch_btn_text = "Restore" if is_arch else "Archive"
+            ctk.CTkButton(btn_row, text=arch_btn_text, fg_color="#D3B8A7", text_color="black", hover_color="#BFA595", font=(
+                "Inter", 11, "bold"), command=execute_archive).pack(side="left", padx=5)
 
         ctk.CTkButton(btn_row, text="Close", fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=(
             "Inter", 11, "bold"), command=modal.destroy).pack(side="right", padx=5)
