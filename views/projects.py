@@ -151,7 +151,7 @@ class ProjectsView(ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(20, 20))
-        ctk.CTkButton(btn_row, text="Update Project" if edit_row else "Submit for Approval", height=40, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 13, "bold"), command=self.save_project).pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ctk.CTkButton(btn_row, text="Update Project" if edit_row else "Save as Draft", height=40, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 13, "bold"), command=self.save_project).pack(side="left", fill="x", expand=True, padx=(0, 5))
         ctk.CTkButton(btn_row, text="Cancel", height=40, width=90, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 13, "bold"), command=self.draft_modal.destroy).pack(side="right")
 
         if edit_row:
@@ -597,7 +597,7 @@ class ProjectsView(ctk.CTkFrame):
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Pending')
                 ''', (name, desc_text, project_head, client, self.p_location.get(), workers_str, start_date, end_date, self.user_info['user_id']))
                 project_id = cursor.lastrowid
-                action_text = "Submitted"
+                action_text = "Drafted"
 
             for item in self.req_cart:
                 req_status = 'Warning' if item.get('needs_retrieval') else 'Clear'
@@ -710,7 +710,7 @@ class ProjectsView(ctk.CTkFrame):
                     str(row["project_id"]),
                     row["name"],
                     row["client"],
-                    (row.get("project_head") or "—", 100),
+                    row.get("project_head") or "—",
                     row["status"]
                 ]
 
