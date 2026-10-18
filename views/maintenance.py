@@ -6,6 +6,7 @@ import os
 import subprocess
 import threading
 from services.errors import friendly_message
+from services import backup_service
 from services import maintenance_service as mnt, inventory_service as inv_svc, project_service as proj_svc, user_service
 
 
@@ -271,47 +272,14 @@ class MaintenanceView(ctk.CTkFrame):
         q = self.issues_search.get().strip() if hasattr(self, "issues_search") else ""
 
         def _fetch():
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
-                return
             try:
-                cursor = conn.cursor(dictionary=True)
-
-                # [UNHAPPY-PATH] no auto-sync here any more: tickets are created inside the transaction that causes them
-                # (retrieval, manual flag) and, once, by `db.migrate` for tools the old screens had flagged.
-                sql = """
-                    SELECT ti.issue_id, t.name as tool_name, ti.reported_by,
-                           ti.condition_flag, IFNULL(ti.notes,'—') as notes,
-                       ti.flagged_at,
-                           ti.is_resolved
-                    FROM tool_issues ti
-                    JOIN tool t ON ti.tool_id = t.tool_id
-                    WHERE 1=1
-                """
-                params = []
-                if status_filter == "Open (Pending)":
-                    sql += " AND ti.is_resolved = 0"
-                elif status_filter == "Resolved":
-                    sql += " AND ti.is_resolved = 1"
-                if q:
-                    sql += " AND (t.name LIKE %s OR ti.reported_by LIKE %s OR ti.condition_flag LIKE %s)"
-                    params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
-                sql += " ORDER BY ti.is_resolved ASC, ti.flagged_at DESC"
-                cursor.execute(sql, tuple(params))
-                rows = cursor.fetchall()
-
-                self.after(0, lambda: self._render_issues(
-                    rows, table_inner, loading_lbl, headers, min_sizes))
+                rows, _total = backup_service.history_page(self.user_info, 50, 0)
             except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(
-                    text=friendly_message(err), text_color="red", wraplength=600))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
+                msg = friendly_message(e)
+                self._after_safe(lambda: loading_lbl.configure(text=msg, text_color="red", wraplength=600))
+                return
+            self._after_safe(lambda: self._render_backup_history(rows, table_inner, loading_lbl, headers, min_sizes))
 
-        import threading
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _render_issues(self, rows, table_inner, loading_lbl, headers, min_sizes):
@@ -1000,184 +968,35 @@ class MaintenanceView(ctk.CTkFrame):
         if filepath:
             self._restore_src_var.set(filepath)
 
-    def _get_mysqldump_path(self):
-        """Try to locate mysqldump. Checks common Windows MySQL install paths."""
-        candidates = [
-            "mysqldump",  # if on PATH
-            r"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe",
-            r"C:\Program Files\MySQL\MySQL Server 5.7\bin\mysqldump.exe",
-            r"C:\xampp\mysql\bin\mysqldump.exe",
-            r"C:\wamp64\bin\mysql\mysql8.0\bin\mysqldump.exe",
-            r"C:\wamp\bin\mysql\mysql8.0\bin\mysqldump.exe",
-        ]
-        for c in candidates:
-            try:
-                result = subprocess.run(
-                    [c, "--version"], capture_output=True, timeout=5)
-                if result.returncode == 0:
-                    return c
-            except Exception:
-                continue
-        return None
-
-    def _get_mysql_path(self):
-        """Try to locate mysql client. Same search logic as mysqldump."""
-        candidates = [
-            "mysql",
-            r"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
-            r"C:\Program Files\MySQL\MySQL Server 5.7\bin\mysql.exe",
-            r"C:\xampp\mysql\bin\mysql.exe",
-            r"C:\wamp64\bin\mysql\mysql8.0\bin\mysql.exe",
-            r"C:\wamp\bin\mysql\mysql8.0\bin\mysql.exe",
-        ]
-        for c in candidates:
-            try:
-                result = subprocess.run(
-                    [c, "--version"], capture_output=True, timeout=5)
-                if result.returncode == 0:
-                    return c
-            except Exception:
-                continue
-        return None
-
-    def _get_db_config(self):
-        """Pull DB credentials from environment (same as database.py)."""
-        return {
-            "host":   os.getenv("DB_HOST", "127.0.0.1"),
-            "port":   os.getenv("DB_PORT", "3306"),
-            "user":   os.getenv("DB_USER", "root"),
-            "password": os.getenv("DB_PASS", ""),
-            "db":     os.getenv("DB_NAME", "champion_db"),
-        }
-
     def _run_backup(self):
         dest_folder = self._backup_dest_var.get().strip()
         if not dest_folder or dest_folder == "(click Browse to choose folder)":
-            messagebox.showerror("No Destination",
-                                 "Please choose a folder to save the backup.",
-                                 parent=self.winfo_toplevel())
+            messagebox.showerror("No Destination", "Please choose a folder to save the backup.", parent=self.winfo_toplevel())
             return
-        if not os.path.isdir(dest_folder):
-            messagebox.showerror("Invalid Folder",
-                                 "The selected destination folder does not exist.",
-                                 parent=self.winfo_toplevel())
-            return
-
-        mysqldump = self._get_mysqldump_path()
-        if not mysqldump:
-            messagebox.showerror(
-                "mysqldump Not Found",
-                "Could not locate mysqldump.exe.\n\n"
-                "Please add the MySQL bin folder to your system PATH, then retry.\n"
-                "Example: C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin",
-                parent=self.winfo_toplevel()
-            )
-            return
-
-        self._backup_btn.configure(state="disabled", text="⏳ Backing up...")
-        self._backup_status_lbl.configure(text="⟳ Running backup, please wait...",
-                                          text_color="#C07A00")
-        self.update_idletasks()
-
+        # Tk values are read HERE, on the main thread; the worker thread never touches a widget.
         note = self._backup_note_entry.get().strip()
         custom_fname = self._backup_fname_entry.get().strip()
+        self._backup_btn.configure(state="disabled", text="⏳ Backing up...")
+        self._backup_status_lbl.configure(text="⟳ Running backup, please wait...", text_color="#C07A00")
 
         def _do_backup():
-            cfg = self._get_db_config()
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            if custom_fname:
-                # Sanitize: replace spaces with underscores, strip unsafe chars
-                safe_name = "".join(
-                    c if c.isalnum() or c in ("-", "_") else "_"
-                    for c in custom_fname.replace(" ", "_")
-                )
-                filename = f"{safe_name}_{timestamp}.sql"
-            else:
-                filename = f"champion_db_backup_{timestamp}.sql"
-            filepath = os.path.join(dest_folder, filename)
-
             try:
-                cmd = [
-                    mysqldump,
-                    f"--host={cfg['host']}",
-                    f"--port={cfg['port']}",
-                    f"--user={cfg['user']}",
-                    f"--password={cfg['password']}",
-                    "--single-transaction",
-                    "--routines",
-                    "--triggers",
-                    "--set-gtid-purged=OFF",
-                    cfg["db"],
-                ]
-                with open(filepath, "w", encoding="utf-8") as f:
-                    result = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE,
-                                            timeout=120)
-
-                if result.returncode != 0:
-                    err_msg = result.stderr.decode(
-                        "utf-8", errors="replace").strip()
-                    # mysqldump prints password warning to stderr but still succeeds;
-                    # only treat it as a real error if the file is empty/tiny.
-                    if os.path.getsize(filepath) < 512:
-                        raise RuntimeError(f"mysqldump error: {err_msg}")
-
-                # Compute human-readable file size
-                size_bytes = os.path.getsize(filepath)
-                if size_bytes >= 1_048_576:
-                    size_str = f"{size_bytes / 1_048_576:.2f} MB"
-                elif size_bytes >= 1024:
-                    size_str = f"{size_bytes / 1024:.1f} KB"
-                else:
-                    size_str = f"{size_bytes} B"
-
-                # Log to DB
-                conn = get_connection()
-                if conn:
-                    try:
-                        cursor = conn.cursor()
-                        uid = self.user_info.get("user_id")
-                        cursor.execute("""
-                            INSERT INTO backup_logs
-                                (filename, filepath, file_size, note, created_by, status, type)
-                            VALUES (%s, %s, %s, %s, %s, 'Success', 'Backup')
-                        """, (filename, filepath, size_str, note or None, uid))
-                        conn.commit()
-                        if uid:
-                            log_action(uid, "Backup", "Maintenance",
-                                       f"Database backup created: {filename} ({size_str})")
-                    except Exception:
-                        pass
-                    finally:
-                        if conn.is_connected():
-                            cursor.close()
-                            conn.close()
-
-                self.after(0, lambda: self._on_backup_done(
-                    True, filepath, size_str))
-
+                out = backup_service.create_backup(self.user_info, dest_folder, custom_fname, note)
             except Exception as e:
-                # Log failure
-                conn2 = get_connection()
-                if conn2:
-                    try:
-                        cursor2 = conn2.cursor()
-                        uid = self.user_info.get("user_id")
-                        cursor2.execute("""
-                            INSERT INTO backup_logs
-                                (filename, filepath, file_size, note, created_by, status, type)
-                            VALUES (%s, %s, %s, %s, %s, 'Failed', 'Backup')
-                        """, (filename, filepath, "—", note or None, uid))
-                        conn2.commit()
-                    except Exception:
-                        pass
-                    finally:
-                        if conn2.is_connected():
-                            cursor2.close()
-                            conn2.close()
-                self.after(0, lambda err=e: self._on_backup_done(
-                    False, None, None, str(err)))
+                msg = friendly_message(e)
+                self._after_safe(lambda: self._on_backup_done(False, None, None, msg))
+                return
+            self._after_safe(lambda: self._on_backup_done(True, out["path"], out["size"]))
 
         threading.Thread(target=_do_backup, daemon=True).start()
+
+    def _after_safe(self, fn):
+        """Hand a result back to the Tk thread; ignore it if the screen has been closed meanwhile."""
+        try:
+            if self.winfo_exists():
+                self.after(0, fn)
+        except Exception:
+            pass
 
     def _on_backup_done(self, success, filepath, size_str, error_msg=None):
         self._backup_btn.configure(state="normal", text="⬇  Run Backup Now")
@@ -1211,143 +1030,36 @@ class MaintenanceView(ctk.CTkFrame):
     def _run_restore(self):
         src_file = self._restore_src_var.get().strip()
         if not src_file or src_file == "(no file selected)":
-            messagebox.showerror("No File Selected",
-                                 "Please select a .sql backup file to restore from.",
-                                 parent=self.winfo_toplevel())
+            messagebox.showerror("No File Selected", "Please select a .sql backup file to restore from.", parent=self.winfo_toplevel())
             return
         if not os.path.isfile(src_file):
-            messagebox.showerror("File Not Found",
-                                 "The selected backup file no longer exists.",
-                                 parent=self.winfo_toplevel())
+            messagebox.showerror("File Not Found", "The selected backup file no longer exists.", parent=self.winfo_toplevel())
             return
-
-        mysql_client = self._get_mysql_path()
-        if not mysql_client:
-            messagebox.showerror(
-                "mysql Not Found",
-                "Could not locate the mysql client executable.\n\n"
-                "Please add the MySQL bin folder to your system PATH, then retry.",
-                parent=self.winfo_toplevel()
-            )
-            return
-
         confirmed = messagebox.askyesno(
             "⚠ Confirm Restore",
-            f"This will OVERWRITE all current data in the database with the contents of:\n\n"
-            f"{os.path.basename(src_file)}\n\n"
-            "This action CANNOT be undone.\n\n"
-            "Are you absolutely sure you want to proceed?",
-            parent=self.winfo_toplevel()
-        )
+            f"This will REPLACE all current data with the contents of:\n\n{os.path.basename(src_file)}\n\n"
+            "Before anything is changed, the system saves an automatic safety backup of the current data.\n\n"
+            "IMPORTANT: every other computer using the system must log out first, otherwise their work may be lost or "
+            "may fail during the restore.\n\nProceed?",
+            parent=self.winfo_toplevel())
         if not confirmed:
             return
-
+        restore_note = self._restore_note_entry.get().strip()          # read on the main thread
         self._restore_btn.configure(state="disabled", text="⏳ Restoring...")
-        self._backup_status_lbl.configure(text="⟳ Restoring database, please wait...",
-                                          text_color="#C07A00")
-        self.update_idletasks()
-
-        restore_note = self._restore_note_entry.get().strip()
-
-        # Snapshot existing backup history BEFORE restore wipes the table
-        existing_logs = []
-        try:
-            _snap_conn = get_connection()
-            if _snap_conn:
-                try:
-                    _snap_cur = _snap_conn.cursor(dictionary=True)
-                    _snap_cur.execute("""
-                        SELECT filename, filepath, file_size, note,
-                               created_by, created_at, status, type
-                        FROM backup_logs
-                        ORDER BY created_at ASC
-                    """)
-                    existing_logs = _snap_cur.fetchall()
-                except Exception:
-                    existing_logs = []
-                finally:
-                    if _snap_conn.is_connected():
-                        _snap_cur.close()
-                        _snap_conn.close()
-        except Exception:
-            existing_logs = []
+        self._backup_status_lbl.configure(text="⟳ Checking the file, saving a safety backup, then restoring...", text_color="#C07A00")
 
         def _do_restore():
-            cfg = self._get_db_config()
-            src_basename = os.path.basename(src_file)
-            uid = self.user_info.get("user_id")
             try:
-                cmd = [
-                    mysql_client,
-                    f"--host={cfg['host']}",
-                    f"--port={cfg['port']}",
-                    f"--user={cfg['user']}",
-                    f"--password={cfg['password']}",
-                    cfg["db"],
-                ]
-                with open(src_file, "r", encoding="utf-8") as f:
-                    result = subprocess.run(cmd, stdin=f, stderr=subprocess.PIPE,
-                                            timeout=300)
-
-                if result.returncode != 0:
-                    err_msg = result.stderr.decode(
-                        "utf-8", errors="replace").strip()
-                    # Ignore password warning on stderr if exit code is still 0
-                    if result.returncode != 0:
-                        raise RuntimeError(f"mysql restore error: {err_msg}")
-
-                # Restore wiped backup_logs — rebuild the table and re-insert all
-                # previous history rows plus this new restore entry.
-                # Truncate first because the restored SQL may already contain old rows.
-                conn_log = get_connection()
-                if conn_log:
-                    try:
-                        cursor_log = conn_log.cursor()
-                        cursor_log.execute("TRUNCATE TABLE backup_logs")
-                        # Re-insert all pre-restore history rows
-                        for old_row in existing_logs:
-                            cursor_log.execute("""
-                                INSERT INTO backup_logs
-                                    (filename, filepath, file_size, note,
-                                     created_by, created_at, status, type)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                            """, (
-                                old_row["filename"],
-                                old_row["filepath"],
-                                old_row["file_size"],
-                                old_row["note"],
-                                old_row["created_by"],
-                                old_row["created_at"],
-                                old_row["status"],
-                                old_row.get("type") or "Backup",
-                            ))
-                        # Insert new restore entry
-                        cursor_log.execute("""
-                            INSERT INTO backup_logs
-                                (filename, filepath, file_size, note, created_by, status, type)
-                            VALUES (%s, %s, %s, %s, %s, 'Success', 'Restore')
-                        """, (src_basename, src_file, "—",
-                              restore_note or None, uid))
-                        conn_log.commit()
-                        if uid:
-                            log_action(uid, "Restore", "Maintenance",
-                                       f"Database restored from backup: {src_basename}")
-                    except Exception:
-                        pass
-                    finally:
-                        if conn_log.is_connected():
-                            cursor_log.close()
-                            conn_log.close()
-
-                self.after(0, lambda: self._on_restore_done(True))
-
+                res = backup_service.restore_backup(self.user_info, src_file, restore_note)
             except Exception as e:
-                self.after(
-                    0, lambda err=e: self._on_restore_done(False, str(err)))
+                msg = friendly_message(e)
+                self._after_safe(lambda: self._on_restore_done(False, msg))
+                return
+            self._after_safe(lambda: self._on_restore_done(True, None, res.get("safety_backup")))
 
         threading.Thread(target=_do_restore, daemon=True).start()
 
-    def _on_restore_done(self, success, error_msg=None):
+    def _on_restore_done(self, success, error_msg=None, safety=None):
         self._restore_btn.configure(state="normal", text="⬆  Restore Database")
         if success:
             self._backup_status_lbl.configure(
@@ -1356,8 +1068,9 @@ class MaintenanceView(ctk.CTkFrame):
             )
             messagebox.showinfo(
                 "Restore Successful",
-                "The database has been successfully restored from the backup file.\n\n"
-                "Please restart the application to ensure all modules reflect the restored data.",
+                "The database has been restored from the backup file.\n\n"
+                + (f"A safety copy of the data from just before the restore is here:\n{safety}\n\n" if safety else "")
+                + "Please restart the application so every screen shows the restored data.",
                 parent=self.winfo_toplevel()
             )
             self._restore_src_var.set("(no file selected)")
