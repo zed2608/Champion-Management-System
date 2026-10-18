@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS tool (
   price            DECIMAL(10,2) NULL DEFAULT 0.00,
   updated_at       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   UNIQUE KEY tag_id (tag_id),
-  KEY idx_tool_archived (is_archived, category)
+  KEY idx_tool_archived (is_archived, category),
+  KEY idx_tool_updated (updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS inventory (
@@ -64,6 +65,7 @@ CREATE TABLE IF NOT EXISTS inventory (
   quantity_lost            DECIMAL(10,2) NOT NULL DEFAULT 0,
   updated_at               TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   UNIQUE KEY uq_inventory_tool (tool_id),
+  KEY idx_inventory_updated (updated_at),
   CONSTRAINT chk_inv_total_nonneg  CHECK (quantity_total >= 0),
   CONSTRAINT chk_inv_avail_nonneg  CHECK (quantity_available >= 0),
   CONSTRAINT chk_inv_maint_nonneg  CHECK (quantity_in_maintenance >= 0),

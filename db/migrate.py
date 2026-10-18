@@ -351,18 +351,21 @@ def step_seed_transitions(ctx: Ctx):
         ctx.q("INSERT IGNORE INTO project_transitions (from_status, to_status, legacy) VALUES (%s, %s, %s)", (f, t, legacy))
 
 
+# (version, name, function, reconcile)
+#   reconcile=True  : structural + idempotent, re-run whenever schema.sql changes (so editing schema.sql reaches
+#                     databases that were migrated earlier).
+#   reconcile=False : one-shot data work (backfills). Never repeated.
 STEPS = [
-    (1, "baseline_tables", step_baseline_tables),
-    (2, "rename_requirement_id", step_rename_requirement_id),
-    (3, "add_missing_columns", step_add_missing_columns),
-    (4, "inventory_decimal", step_inventory_decimal),
-    (5, "backfill_data", step_backfill),
-    (6, "indexes", step_indexes),
-    (7, "foreign_keys_restrict", step_foreign_keys),
-    (8, "check_constraints", step_check_constraints),
-    (9, "seed_project_transitions", step_seed_transitions),
+    (1, "baseline_tables", step_baseline_tables, True),
+    (2, "rename_requirement_id", step_rename_requirement_id, True),
+    (3, "add_missing_columns", step_add_missing_columns, True),
+    (4, "inventory_decimal", step_inventory_decimal, True),
+    (5, "backfill_data", step_backfill, False),
+    (6, "indexes", step_indexes, True),
+    (7, "foreign_keys_restrict", step_foreign_keys, True),
+    (8, "check_constraints", step_check_constraints, True),
+    (9, "seed_project_transitions", step_seed_transitions, True),
 ]
-LATEST_VERSION = STEPS[-1][0]
 
 
 # ----------------------------------------------------------------------------------------------
@@ -372,11 +375,24 @@ def triggers_hash() -> str:
     return hashlib.sha256(TRIGGERS_SQL.read_bytes()).hexdigest()
 
 
+def schema_hash() -> str:
+    return hashlib.sha256(SCHEMA_SQL.read_bytes()).hexdigest()
+
+
+def _meta_get(ctx, key):
+    row = ctx.one("SELECT meta_value AS v FROM schema_meta WHERE meta_key = %s", (key,))
+    return row["v"] if row else None
+
+
+def _meta_set(ctx, key, value):
+    ctx.q("INSERT INTO schema_meta (meta_key, meta_value) VALUES (%s, %s) "
+          "ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)", (key, value))
+
+
 def apply_triggers(ctx: Ctx):
     for stmt in split_trigger_statements(TRIGGERS_SQL.read_text(encoding="utf-8")):
         ctx.q(stmt)
-    ctx.q("INSERT INTO schema_meta (meta_key, meta_value) VALUES ('triggers_sha256', %s) "
-          "ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)", (triggers_hash(),))
+    _meta_set(ctx, "triggers_sha256", triggers_hash())
 
 
 # ----------------------------------------------------------------------------------------------
@@ -465,11 +481,12 @@ def _guard_host(cfg):
 
 
 def pending(ctx: Ctx):
+    """(steps to run, triggers need applying)."""
     _ensure_meta_tables(ctx)
     done = {r["version"] for r in ctx.all("SELECT version FROM schema_migrations")}
-    steps = [s for s in STEPS if s[0] not in done]
-    row = ctx.one("SELECT meta_value AS v FROM schema_meta WHERE meta_key = 'triggers_sha256'")
-    trig = (row["v"] if row else None) != triggers_hash()
+    schema_changed = _meta_get(ctx, "schema_sha256") != schema_hash()
+    steps = [s for s in STEPS if s[0] not in done or (s[3] and schema_changed)]
+    trig = _meta_get(ctx, "triggers_sha256") != triggers_hash()
     return steps, trig
 
 
@@ -492,11 +509,11 @@ def run(database: Database, *, dry_run=False, backup_file=None, make_backup_now=
             log("Schema is up to date. Nothing to do.")
             return report
         if dry_run:
-            for v, name, _ in steps:
+            for v, name, *_ in steps:
                 log(f"[dry-run] would apply {v}: {name}")
             if trig:
                 log("[dry-run] would (re)apply triggers")
-            return [(name, None) for _, name, _ in steps]
+            return [(st[1], None) for st in steps]
         if require_backup:
             if make_backup_now:
                 backup_file = make_backup(cfg)
@@ -504,15 +521,17 @@ def run(database: Database, *, dry_run=False, backup_file=None, make_backup_now=
             if not backup_file:
                 raise MigrationRefused("A fresh backup is required. Re-run with --make-backup (or --backup-file F).")
             verify_backup(Path(backup_file), cfg["database"], max_backup_age_min)
-        for v, name, fn in steps:
+        for v, name, fn, _reconcile in steps:
             ctx.notes = []
             log(f"Applying {v}: {name} ...")
             fn(ctx)
             notes = "; ".join(ctx.notes) or None
-            ctx.q("INSERT INTO schema_migrations (version, name, notes) VALUES (%s, %s, %s)", (v, name, notes))
+            ctx.q("INSERT INTO schema_migrations (version, name, notes) VALUES (%s, %s, %s) "
+                  "ON DUPLICATE KEY UPDATE notes = VALUES(notes), applied_at = CURRENT_TIMESTAMP", (v, name, notes))
             report.append((name, notes))
             if notes:
                 log(f"   {notes}")
+        _meta_set(ctx, "schema_sha256", schema_hash())
         if trig or steps:
             log("Applying triggers ...")
             apply_triggers(ctx)
@@ -532,13 +551,14 @@ def check_schema_current(database: Database):
     """For the app at startup: (ok, message). Replaces the old runtime CREATE/ALTER/DROP TABLE in the views."""
     try:
         with database.read() as cur:
-            cur.execute("SELECT MAX(version) AS v FROM schema_migrations")
-            v = (cur.fetchone() or {}).get("v") or 0
-            cur.execute("SELECT meta_value AS h FROM schema_meta WHERE meta_key='triggers_sha256'")
-            h = (cur.fetchone() or {}).get("h")
+            cur.execute("SELECT version FROM schema_migrations")
+            done = {r["version"] for r in cur.fetchall()}
+            cur.execute("SELECT meta_key AS k, meta_value AS v FROM schema_meta")
+            meta = {r["k"]: r["v"] for r in cur.fetchall()}
     except Exception:
         return False, "The database has not been set up. Ask an administrator to run: python -m db.migrate --make-backup"
-    if v < LATEST_VERSION or h != triggers_hash():
+    if (not {s[0] for s in STEPS} <= done or meta.get("schema_sha256") != schema_hash()
+            or meta.get("triggers_sha256") != triggers_hash()):
         return False, "The database needs an upgrade. Ask an administrator to run: python -m db.migrate --make-backup"
     return True, ""
 
@@ -560,7 +580,7 @@ def main(argv=None):
             ctx = Ctx(conn)
             steps, trig = pending(ctx)
             print(f"Database: {database.config['database']} @ {database.config['host']}")
-            print("Pending steps:", ", ".join(f"{v}:{n}" for v, n, _ in steps) or "none")
+            print("Pending steps:", ", ".join(f"{st[0]}:{st[1]}" for st in steps) or "none")
             print("Triggers need (re)apply:", trig)
             conn.close()
             return 0
