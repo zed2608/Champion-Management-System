@@ -8,6 +8,8 @@ from pyzbar.pyzbar import decode, ZBarSymbol
 import os
 import tempfile
 from services.errors import friendly_message
+from services import inventory_service as inv_svc
+from database import log_action
 
 
 class TaggingView(ctk.CTkFrame):
@@ -439,18 +441,22 @@ class TaggingView(ctk.CTkFrame):
             tag_entry.insert(0, current_tag)
 
         def generate_smart_tag():
+            import re
+            tag_entry.configure(state="normal")
             tag_entry.delete(0, 'end')
-            cat_prefix = str(tool_category)[:3].upper(
-            ) if tool_category and tool_category != "None" else "GEN"
-            sup_prefix = str(tool_supplier)[:3].upper(
-            ) if tool_supplier and tool_supplier != "None" else "UNK"
-            smart_tag = f"TAG-{str(tool_id).zfill(3)}-{cat_prefix}-{sup_prefix}"
-            tag_entry.insert(0, smart_tag)
+            clean = lambda v, fallback: re.sub(r"[^A-Z0-9]", "", str(v or "").upper())[:3] or fallback     # tags allow letters, digits, dashes only
+            cat_prefix = clean(tool_category if tool_category != "None" else "", "GEN")
+            sup_prefix = clean(tool_supplier if tool_supplier != "None" else "", "UNK")
+            tag_entry.insert(0, f"TAG-{str(tool_id).zfill(3)}-{cat_prefix}-{sup_prefix}")
             update_preview()
 
-        if not self.is_staff:
+        # [RBAC] Admin: assign, relink, unlink.  Staff: may generate/assign a tag ONLY while the tool has none, and always print.
+        can_edit_tag = (not self.is_staff) or not current_tag
+        if can_edit_tag:
             ctk.CTkButton(tag_row, text="↻ Auto-Gen", width=80, height=35, fg_color="#F1C40F", text_color="black",
                           hover_color="#D4AC0D", font=("Inter", 11, "bold"), command=generate_smart_tag).pack(side="left", padx=(0, 5))
+
+        state = {"save_btn": None}
 
         def save_tag():
             new_tag = tag_entry.get().strip()
@@ -458,63 +464,52 @@ class TaggingView(ctk.CTkFrame):
                 messagebox.showerror(
                     "Error", "Tag ID cannot be empty.", parent=modal)
                 return
-
-            conn = get_connection()
-            if not conn:
-                return
             try:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT tool_id FROM tool WHERE tag_id = %s AND tool_id != %s", (new_tag, tool_id))
-                if cursor.fetchone():
-                    messagebox.showerror(
-                        "Duplicate Tag", f"The Tag ID '{new_tag}' is already assigned to another tool!", parent=modal)
-                    return
-
-                cursor.execute(
-                    "UPDATE tool SET tag_id = %s WHERE tool_id = %s", (new_tag, tool_id))
-                conn.commit()
-                messagebox.showinfo(
-                    "Success", "Tag successfully linked to tool.", parent=modal)
-                self.load_tagging_data()
+                # [RBAC] re-checked in MySQL: Staff are refused if the tool already has a tag
+                res = inv_svc.assign_tag(self.user_info, tool_id, new_tag)
             except Exception as e:
-                messagebox.showerror("Database Error", friendly_message(e), parent=modal)
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
+                messagebox.showerror("Tag not saved", friendly_message(e), parent=modal)
+                return
+            tag_entry.delete(0, 'end')
+            tag_entry.insert(0, res["tag_id"])
+            uid = self.user_info.get("user_id")
+            if uid and res["changed"]:
+                log_action(uid, "Edited", "Tagging", f"Linked tag {res['tag_id']} to '{res['name']}' (PID: {tool_id})")
+            if self.is_staff:                                   # a Staff member cannot change it again
+                tag_entry.configure(state="disabled")
+                if state["save_btn"] is not None:
+                    state["save_btn"].configure(state="disabled", text="Tag saved")
+            update_preview()
+            messagebox.showinfo("Success", "Tag successfully linked to tool.", parent=modal)
+            self.load_tagging_data()
 
         def clear_tag():
-            if messagebox.askyesno("Remove Tag", "Are you sure you want to unlink the tag from this tool?", parent=modal):
-                conn = get_connection()
-                if not conn:
-                    return
-                try:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "UPDATE tool SET tag_id = NULL WHERE tool_id = %s", (tool_id,))
-                    conn.commit()
-                    tag_entry.delete(0, 'end')
-                    update_preview()
-                    self.load_tagging_data()
-                    messagebox.showinfo(
-                        "Success", "Tag removed.", parent=modal)
-                except Exception as e:
-                    pass
-                finally:
-                    if conn.is_connected():
-                        cursor.close()
-                        conn.close()
+            if not messagebox.askyesno("Remove Tag", "Are you sure you want to unlink the tag from this tool?", parent=modal):
+                return
+            try:
+                res = inv_svc.unlink_tag(self.user_info, tool_id)           # [RBAC] Admin only
+            except Exception as e:
+                messagebox.showerror("Tag not removed", friendly_message(e), parent=modal)
+                return
+            tag_entry.delete(0, 'end')
+            uid = self.user_info.get("user_id")
+            if uid:
+                log_action(uid, "Edited", "Tagging", f"Unlinked tag {res['old_tag']} from '{res['name']}' (PID: {tool_id})")
+            update_preview()
+            self.load_tagging_data()
+            messagebox.showinfo("Success", "Tag removed.", parent=modal)
 
-        if self.is_staff:
+        if not can_edit_tag:
             tag_entry.configure(state="disabled")
+            ctk.CTkLabel(form_frame, text="This tool already has a tag. Only an administrator can change or remove it.\nYou can still print it.",
+                         font=("Inter", 10), text_color="gray", justify="left").pack(anchor="w", pady=(0, 5))
         else:
-            ctk.CTkButton(form_frame, text="Save Tag Link to Database", height=40, fg_color="#1E4528",
-                          hover_color="#14301C", font=("Inter", 12, "bold"), command=save_tag).pack(fill="x", pady=(15, 5))
-
-            if current_tag:
-                ctk.CTkButton(form_frame, text="Unlink Current Tag", height=30, fg_color="white", border_width=1, border_color="#D8000C",
-                              text_color="#D8000C", hover_color="#FFD2D2", font=("Inter", 11, "bold"), command=clear_tag).pack(fill="x", pady=5)
+            state["save_btn"] = ctk.CTkButton(form_frame, text="Save Tag Link to Database", height=40, fg_color="#1E4528",
+                                              hover_color="#14301C", font=("Inter", 12, "bold"), command=save_tag)
+            state["save_btn"].pack(fill="x", pady=(15, 5))
+        if current_tag and not self.is_staff:
+            ctk.CTkButton(form_frame, text="Unlink Current Tag", height=30, fg_color="white", border_width=1, border_color="#D8000C",
+                          text_color="#D8000C", hover_color="#FFD2D2", font=("Inter", 11, "bold"), command=clear_tag).pack(fill="x", pady=5)
 
         preview_frame = ctk.CTkFrame(
             form_frame, fg_color="#F9FAFB", corner_radius=10)
