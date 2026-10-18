@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from views.ui_thread import UiMixin
 from tkinter import messagebox
 from database import get_connection
 from services import issuance_service as iss, validators as v
@@ -22,9 +23,10 @@ def _fmt_qty(x) -> str:
         return str(x)
 
 
-class IssuanceView(ctk.CTkFrame):
+class IssuanceView(UiMixin, ctk.CTkFrame):
     def __init__(self, parent, user_info=None, navigate_to=None, *args, **kwargs):
         super().__init__(parent, fg_color="transparent")
+        self._ui_init()
 
         self.user_info = user_info or {}
         self.navigate_to = navigate_to

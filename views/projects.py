@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from views.ui_thread import UiMixin
 from tkinter import messagebox, ttk
 from database import get_connection, log_action
 from datetime import datetime
@@ -9,9 +10,10 @@ from services.errors import friendly_message
 from services import project_service as ps
 
 
-class ProjectsView(ctk.CTkFrame):
+class ProjectsView(UiMixin, ctk.CTkFrame):
     def __init__(self, parent, user_info):
         super().__init__(parent, fg_color="transparent")
+        self._ui_init()
 
         self.user_info = user_info
         self.is_admin = self.user_info.get("role", "Staff") == "Admin"

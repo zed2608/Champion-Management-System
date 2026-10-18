@@ -1,6 +1,7 @@
 import os
 import shutil
 import customtkinter as ctk
+from views.ui_thread import UiMixin
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageDraw, ImageFont
 from database import get_connection, generate_id_badge
@@ -11,9 +12,10 @@ import bcrypt
 import qrcode
 from services.errors import friendly_message
 
-class ProfileView(ctk.CTkFrame):
+class ProfileView(UiMixin, ctk.CTkFrame):
     def __init__(self, parent, user_info, dashboard_app):
         super().__init__(parent, fg_color="transparent")
+        self._ui_init()
 
         self.user_info = user_info
         self.dashboard = dashboard_app

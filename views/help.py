@@ -1,9 +1,10 @@
 import customtkinter as ctk
+from views.ui_thread import UiMixin
 from tkinter import messagebox
 from database import get_connection
 from services.errors import friendly_message
 
-class HelpView(ctk.CTkFrame):
+class HelpView(UiMixin, ctk.CTkFrame):
     """
     Help Module — Figure 4 in the procedural flowchart.
     Provides Help Guide, FAQs, and System Requirements.
@@ -186,6 +187,7 @@ class HelpView(ctk.CTkFrame):
 
     def __init__(self, parent, user_info=None):
         super().__init__(parent, fg_color="transparent")
+        self._ui_init()
 
         self.user_info = user_info or {}
         self.is_admin = self.user_info.get("role", "Staff") == "Admin"
@@ -196,7 +198,7 @@ class HelpView(ctk.CTkFrame):
         import threading
         def _init():
             self._ensure_custom_tables()
-            self.after(0, self.build_ui)
+            self.post_ui(self.build_ui)
         threading.Thread(target=_init, daemon=True).start()
 
     def _ensure_custom_tables(self):

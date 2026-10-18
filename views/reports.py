@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from views.ui_thread import UiMixin
 from tkinter import messagebox
 from database import get_connection
 import os
@@ -22,9 +23,10 @@ def _fmt(x) -> str:
         return str(x)
 
 
-class ReportsView(ctk.CTkFrame):
+class ReportsView(UiMixin, ctk.CTkFrame):
     def __init__(self, parent, navigate_to_tool=None, user_info=None):
         super().__init__(parent, fg_color="transparent")
+        self._ui_init()
 
         self.navigate_to_tool = navigate_to_tool
         self.user_info = user_info or {}
@@ -161,10 +163,30 @@ class ReportsView(ctk.CTkFrame):
 
         return sd, ed, True
 
+    def _new_fig(self, *args, **kw):
+        """A chart figure that is released (cleared) when the tab is left or the screen is closed."""
+        fig = Figure(*args, **kw)
+        self._figs = getattr(self, "_figs", [])
+        self._figs.append(fig)
+        return fig
+
+    def _release_figures(self):
+        for fig in getattr(self, "_figs", []):
+            try:
+                fig.clf()
+            except Exception:
+                pass
+        self._figs = []
+
+    def destroy(self):
+        self._release_figures()
+        super().destroy()
+
     def switch_tab(self, selected):
         sd, ed, valid = self.get_and_validate_dates()
         if not valid: return
         
+        self._release_figures()
         for widget in self.tab_content.winfo_children():
             widget.destroy()
 
@@ -229,9 +251,9 @@ class ReportsView(ctk.CTkFrame):
             try:
                 result = rs.abc_analysis(self.user_info, sd, ed)
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            self.after(0, lambda: _render_abc(result))
+            self.post_ui(lambda: _render_abc(result))
 
         def _render_abc(result):
             if not self.winfo_exists() or not scroll.winfo_exists() or not loading.winfo_exists():
@@ -408,9 +430,9 @@ class ReportsView(ctk.CTkFrame):
             try:
                 rows = rs.usage_report(self.user_info, sd, ed, search_query)
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and self._show_error(scroll, friendly_message(err)))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and self._show_error(scroll, friendly_message(err)))
                 return
-            self.after(0, lambda: _render_usage_safe(rows))
+            self.post_ui(lambda: _render_usage_safe(rows))
 
         def _render_usage_safe(rows):
             if not self.winfo_exists() or not scroll.winfo_exists() or not hasattr(self, '_current_loading') or not self._current_loading.winfo_exists():
@@ -586,9 +608,9 @@ class ReportsView(ctk.CTkFrame):
             try:
                 rows = rs.activity_report(self.user_info, sd, ed)
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            self.after(0, lambda: _render_activity(rows))
+            self.post_ui(lambda: _render_activity(rows))
 
         def _render_activity(rows):
             if not self.winfo_exists() or not scroll.winfo_exists(): return
@@ -605,7 +627,7 @@ class ReportsView(ctk.CTkFrame):
                 w.destroy()
             top_users = rows[:5]
             if self.activity_chart_frame.winfo_exists() and sum(r['total_borrows'] for r in top_users) > 0:
-                fig = Figure(figsize=(7, 2.5), dpi=90)
+                fig = self._new_fig(figsize=(7, 2.5), dpi=90)
                 fig.patch.set_facecolor('#FFFFFF')
                 ax = fig.add_subplot(111)
                 names = [str(r['full_name'] or 'Unknown').split()[0] for r in top_users]
@@ -734,9 +756,9 @@ class ReportsView(ctk.CTkFrame):
             try:
                 rows = rs.allocation_report(self.user_info, sd, ed)
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            self.after(0, lambda: _render(rows))
+            self.post_ui(lambda: _render(rows))
 
         def _render(rows):
             if not self.winfo_exists() or not scroll.winfo_exists(): return
@@ -761,7 +783,7 @@ class ReportsView(ctk.CTkFrame):
                     req = [p[1]["requested"] for p in top_projs]
                     iss = [p[1]["issued"] for p in top_projs]
                     ret = [p[1]["retrieved"] for p in top_projs]
-                    fig = Figure(figsize=(8, 2.8), dpi=90)
+                    fig = self._new_fig(figsize=(8, 2.8), dpi=90)
                     fig.patch.set_facecolor('#FFFFFF')
                     ax = fig.add_subplot(111)
                     x = range(len(labels))
@@ -830,9 +852,9 @@ class ReportsView(ctk.CTkFrame):
             try:
                 res = rs.damage_loss_report(self.user_info, sd, ed)
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            self.after(0, lambda: _render(res["rows"], res["summary"]))
+            self.post_ui(lambda: _render(res["rows"], res["summary"]))
 
         def _render(rows, summary):
             if not self.winfo_exists() or not scroll.winfo_exists(): return
@@ -859,7 +881,7 @@ class ReportsView(ctk.CTkFrame):
             c_dmg = summary['count_damaged']
             c_rep = summary['count_repair']
             if c_lost + c_dmg + c_rep > 0:
-                fig = Figure(figsize=(5, 2.5), dpi=90)
+                fig = self._new_fig(figsize=(5, 2.5), dpi=90)
                 fig.patch.set_facecolor('#FFFFFF')
                 ax = fig.add_subplot(111)
                 sizes, lbls, colors = [], [], []
@@ -921,9 +943,9 @@ class ReportsView(ctk.CTkFrame):
             try:
                 rows = rs.low_stock_report(self.user_info)
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            self.after(0, lambda: _render(rows))
+            self.post_ui(lambda: _render(rows))
 
         def _render(rows):
             if not self.winfo_exists() or not scroll.winfo_exists(): return
@@ -985,9 +1007,9 @@ class ReportsView(ctk.CTkFrame):
             try:
                 rows = rs.overdue_report(self.user_info, sd, ed)
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            self.after(0, lambda: _render(rows))
+            self.post_ui(lambda: _render(rows))
 
         def _render(rows):
             if not self.winfo_exists() or not scroll.winfo_exists() or not loading_lbl.winfo_exists(): return
@@ -1022,7 +1044,7 @@ class ReportsView(ctk.CTkFrame):
                 top_workers = sorted(worker_max.items(), key=lambda x: x[1], reverse=True)[:8]
                 names = [w[0] for w in top_workers][::-1]
                 days_vals = [w[1] for w in top_workers][::-1]
-                fig = Figure(figsize=(7, 2.5), dpi=90)
+                fig = self._new_fig(figsize=(7, 2.5), dpi=90)
                 fig.patch.set_facecolor('#FFFFFF')
                 ax = fig.add_subplot(111)
                 ax.barh(names, days_vals, color="#E74C3C")

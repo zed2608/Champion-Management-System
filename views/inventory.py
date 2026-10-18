@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from views.ui_thread import UiMixin
 from tkinter import messagebox
 from database import get_connection, log_action
 import os
@@ -17,9 +18,10 @@ from views.paged_table import PagedTable
 from services import inventory_service as inv_svc
 
 
-class InventoryView(ctk.CTkFrame):
+class InventoryView(UiMixin, ctk.CTkFrame):
     def __init__(self, parent, user_info=None, navigate_to=None, highlight_low_stock=False, highlight_tool_id=None, *args, **kwargs):
         super().__init__(parent, fg_color="transparent", *args, **kwargs)
+        self._ui_init()
 
         self.user_info = user_info or {}
         self.navigate_to = navigate_to

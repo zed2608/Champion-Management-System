@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from views.ui_thread import UiMixin
 from tkinter import messagebox, filedialog
 from database import get_connection, log_action
 from datetime import datetime
@@ -13,9 +14,10 @@ from views.paged_table import PagedTable
 from services import maintenance_service as mnt, inventory_service as inv_svc, project_service as proj_svc, user_service
 
 
-class MaintenanceView(ctk.CTkFrame):
+class MaintenanceView(UiMixin, ctk.CTkFrame):
     def __init__(self, parent, user_info=None):
         super().__init__(parent, fg_color="transparent")
+        self._ui_init()
 
         self.user_info = user_info or {}
         self.grid_columnconfigure(0, weight=1)
@@ -752,12 +754,8 @@ class MaintenanceView(ctk.CTkFrame):
         threading.Thread(target=_do_backup, daemon=True).start()
 
     def _after_safe(self, fn):
-        """Hand a result back to the Tk thread; ignore it if the screen has been closed meanwhile."""
-        try:
-            if self.winfo_exists():
-                self.after(0, fn)
-        except Exception:
-            pass
+        """Hand a result from a worker thread to the Tk thread (dropped if this screen was closed meanwhile)."""
+        self.post_ui(fn)
 
     def _on_backup_done(self, success, filepath, size_str, error_msg=None):
         self._backup_btn.configure(state="normal", text="⬇  Run Backup Now")

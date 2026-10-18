@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from views.ui_thread import UiMixin
 from tkinter import messagebox
 from database import get_connection, generate_id_badge, log_action
 import bcrypt
@@ -13,9 +14,10 @@ from services.errors import friendly_message
 from services import user_service
 
 
-class RoleManagementView(ctk.CTkFrame):
+class RoleManagementView(UiMixin, ctk.CTkFrame):
     def __init__(self, parent, user_info=None):
         super().__init__(parent, fg_color="transparent")
+        self._ui_init()
 
         self.user_info = user_info or {}
         self.grid_columnconfigure(0, weight=1)

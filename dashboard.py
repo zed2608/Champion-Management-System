@@ -1,6 +1,7 @@
 import os
 import time
 import customtkinter as ctk
+from views.ui_thread import UiMixin
 import sys
 from tkinter import messagebox
 from datetime import datetime
@@ -32,9 +33,10 @@ _EMPTY_METRICS = {
 }
 
 
-class DashboardApp(ctk.CTkToplevel):
+class DashboardApp(UiMixin, ctk.CTkToplevel):
     def __init__(self, parent, user_info):
         super().__init__(master=parent)
+        self._ui_init()
 
         self.user_info = user_info
         self.title("Champion Fine Tooling - Automated Management System")
@@ -276,7 +278,7 @@ class DashboardApp(ctk.CTkToplevel):
 
         def on_status(online):               # called from whichever thread noticed: hop to the Tk thread
             try:
-                self.after(0, lambda: self._apply_db_status(online))
+                self.post_ui(lambda: self._apply_db_status(online))
             except Exception:
                 pass                          # window is closing
         self._db_status_cb = on_status
@@ -309,6 +311,7 @@ class DashboardApp(ctk.CTkToplevel):
     def destroy(self):
         try:
             self._cancel_timers()
+            self._close_figures()
         except Exception:
             pass
         try:
@@ -318,6 +321,22 @@ class DashboardApp(ctk.CTkToplevel):
         except Exception:
             pass
         super().destroy()
+
+    def _track_fig(self, fig):
+        self._figs = getattr(self, "_figs", [])
+        self._figs.append(fig)
+        return fig
+
+    def _close_figures(self):
+        for fig in getattr(self, "_figs", []):
+            try:
+                plt.close(fig)
+            except Exception:
+                pass
+        self._figs = []
+        for name in ("dash_fig", "dash_ax", "dash_canvas"):
+            if hasattr(self, name):
+                delattr(self, name)
 
     def _cancel_timers(self):
         for name in ("_clock_job", "dashboard_refresh_job", "_idle_job", "_warning_job"):
@@ -495,6 +514,7 @@ class DashboardApp(ctk.CTkToplevel):
                 btn.configure(fg_color="transparent", text_color="white")
 
         if self.current_frame is not None:
+            self._close_figures()                            # pyplot keeps every figure alive until it is closed
             self.current_frame.destroy()
 
         # Show spinner overlay while the new frame is built
@@ -774,13 +794,14 @@ class DashboardApp(ctk.CTkToplevel):
 
         def _initial_load():
             m, a, c, dr, mi = self.get_live_metrics()
-            self.after(0, lambda: self._apply_dashboard_data(m, a, c, dr, mi))
+            self.post_ui(lambda: self._apply_dashboard_data(m, a, c, dr, mi))
         threading.Thread(target=_initial_load, daemon=True).start()
 
         return frame
 
     def _embed_trend_chart(self, parent, chart_data):
         fig, ax = plt.subplots(figsize=(5.2, 2.6), dpi=100)  # Slightly wider
+        self._track_fig(fig)
         fig.patch.set_facecolor("#FFFFFF")
         ax.set_facecolor("#FFFFFF")
 
@@ -1073,7 +1094,7 @@ class DashboardApp(ctk.CTkToplevel):
 
         def _fetch():
             m, a, c, dr, mi = self.get_live_metrics()
-            self.after(0, lambda: self._on_refresh_done(m, a, c, dr, mi))
+            self.post_ui(lambda: self._on_refresh_done(m, a, c, dr, mi))
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _on_refresh_done(self, metrics, activities, chart_data, deployed_rows=None, my_issuances=None):
@@ -1088,6 +1109,7 @@ class DashboardApp(ctk.CTkToplevel):
 
     def embed_chart(self, parent_frame, chart_data):
         fig, ax = plt.subplots(figsize=(4.5, 2.6), dpi=90)
+        self._track_fig(fig)
         fig.patch.set_facecolor("#FFFFFF")
         ax.set_facecolor("#FFFFFF")
 
