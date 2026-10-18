@@ -6,7 +6,7 @@ import os
 import subprocess
 import threading
 from services.errors import friendly_message
-from services import maintenance_service as mnt, inventory_service as inv_svc
+from services import maintenance_service as mnt, inventory_service as inv_svc, project_service as proj_svc
 
 
 class MaintenanceView(ctk.CTkFrame):
@@ -838,31 +838,18 @@ class MaintenanceView(ctk.CTkFrame):
             btn.pack(expand=True, pady=10)
 
     def restore_project(self, project_id):
-        if not messagebox.askyesno("Confirm Restore", f"Restore Project ID: {project_id} to Active status?"):
-            return
-        conn = get_connection()
-        if not conn:
+        if not messagebox.askyesno("Confirm Restore", f"Restore Project ID: {project_id}? It returns to the status it had before it was archived."):
             return
         try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE projects SET status = 'Approved', archived_at = NULL WHERE project_id = %s", (project_id,))
-            conn.commit()
-
-            uid = self.user_info.get("user_id")
-            if uid:
-                log_action(uid, "Edited", "Maintenance",
-                           f"Restored Project ID: {project_id} from Archive")
-
-            messagebox.showinfo(
-                "Success", "Project marked as Approved and restored from archive.")
-            self.load_archived_projects()
+            res = proj_svc.restore_project(self.user_info, project_id)     # back to the status it had before archiving
         except Exception as e:
-            messagebox.showerror("Error", friendly_message(e))
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+            messagebox.showerror("Could not restore", friendly_message(e))
+            return
+        uid = self.user_info.get("user_id")
+        if uid:
+            log_action(uid, "Edited", "Maintenance", f"Restored Project '{res['name']}' (PID: {project_id}) to {res['status']}")
+        messagebox.showinfo("Success", f"Project restored as {res['status']}.")
+        self.load_archived_projects()
 
     # ------------------------------------------
     # TAB 5: Backup & Restore

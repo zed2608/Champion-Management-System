@@ -6,6 +6,7 @@ import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 import difflib
 from services.errors import friendly_message
+from services import project_service as ps
 
 
 class ProjectsView(ctk.CTkFrame):
@@ -186,7 +187,7 @@ class ProjectsView(ctk.CTkFrame):
             self.req_cart = [{'tool_id': r['tool_id'], 'name': r['name'], 'uom': r['unit_of_measure'], 'qty': r['quantity'], 'needs_retrieval': r['status'] == 'Warning'} for r in reqs]
             
             raw_status = edit_row['status'].replace(' (OVERDUE)', '')
-            if raw_status in ['Ongoing', 'Completed', 'Cancelled']:
+            if raw_status in ['Ongoing', 'Completed', 'Cancelled', 'Declined']:
                 self.p_name.configure(state="disabled", fg_color="#F9FAFB")
                 self.p_client.configure(state="disabled", fg_color="#F9FAFB")
                 self.p_head.configure(state="disabled", fg_color="#F9FAFB")
@@ -643,114 +644,60 @@ class ProjectsView(ctk.CTkFrame):
         if not self.req_cart:
             return messagebox.showerror("Error", "Please add at least one tool requirement.", parent=self.draft_modal)
 
-        conn = get_connection()
-        if not conn:
-            return
+        editing_id = getattr(self, "editing_project_id", None)
         try:
-            cursor = conn.cursor()
-            editing_id = getattr(self, "editing_project_id", None)
-
-            # --- DUPLICATE & TYPO CHECK ---
-            cursor.execute(
-                "SELECT project_id, name FROM projects WHERE archived_at IS NULL")
-            existing_projects = cursor.fetchall()
-            exact_match = False
-            similar_names = []
-
-            for ep in existing_projects:
-                ep_id, ep_name = ep[0], ep[1]
-                if editing_id and ep_id == editing_id:
-                    continue
-
-                if ep_name.lower() == name.lower():
-                    exact_match = True
-                    break
-                if difflib.SequenceMatcher(None, name.lower(), ep_name.lower()).ratio() > 0.85:
-                    similar_names.append(ep_name)
-
-            if exact_match:
-                messagebox.showerror(
-                    "Duplicate Name", f"An active project named '{name}' already exists.", parent=self.draft_modal)
+            exact, similar = ps.find_similar_names(name, exclude_project_id=editing_id)
+        except Exception as e:
+            return messagebox.showerror("Error", friendly_message(e), parent=self.draft_modal)
+        if exact:
+            return messagebox.showerror("Duplicate Name", f"An active project named '{name}' already exists.", parent=self.draft_modal)
+        if similar:
+            sim_list = "\n".join([f"• {sn}" for sn in similar])
+            msg = f"Similar active project names already exist:\n\n{sim_list}\n\nAre you sure you want to save '{name}'?"
+            if not messagebox.askyesno("Similar Name Detected", msg, parent=self.draft_modal):
                 return
 
-            if similar_names:
-                sim_list = "\n".join([f"• {sn}" for sn in similar_names[:3]])
-                msg = f"Similar active project names already exist:\n\n{sim_list}\n\nAre you sure you want to save '{name}'?"
-                if not messagebox.askyesno("Similar Name Detected", msg, parent=self.draft_modal):
-                    return
-            # -----------------------------
-
+        data = {
+            "name": name, "client": client, "project_head": project_head, "location": self.p_location.get(),
+            "description": desc_text, "start_date": start_date, "end_date": end_date,
+            "workers": list(self.workers_list),
+            "requirements": [{"tool_id": it["tool_id"], "qty": it["qty"], "needs_retrieval": it.get("needs_retrieval")}
+                             for it in self.req_cart],
+        }
+        try:
+            # [STATE-MACHINE][RBAC] Admin only; validated server-side; edit DIFFS the requirement lines (no delete-and-reinsert);
+            # an Admin-created project is auto-approved (no separate approve step).
             if editing_id:
-                old_status = getattr(self, "editing_project_status", "Pending")
-                new_status = old_status.replace(' (OVERDUE)', '')
-                if new_status == 'Declined': new_status = 'Cancelled'
-                if 'Approved' in old_status and not self.is_admin:
-                    new_status = 'Pending'
-                    messagebox.showwarning("Notice", "Modifying an approved project reverts it to Pending status for Admin review.", parent=self.draft_modal)
-                
-                cursor.execute('''
-                    UPDATE projects
-                    SET name=%s, description=%s, project_head=%s, client=%s, location=%s, workers_assigned=%s, start_date=%s, end_date=%s, status=%s
-                    WHERE project_id=%s
-                ''', (name, desc_text, project_head, client, self.p_location.get(), workers_str, start_date, end_date, new_status, editing_id))
-
-                cursor.execute(
-                    "DELETE FROM project_requirements WHERE project_id=%s", (editing_id,))
-                project_id = editing_id
+                expected = (getattr(self, "editing_project_status", None) or "Pending").replace(" (OVERDUE)", "")
+                res = ps.update_project(self.user_info, editing_id, data, expected)
                 action_text = "Updated"
             else:
-                if self.is_admin:
-                    cursor.execute('''
-                        INSERT INTO projects (name, description, project_head, client, location, workers_assigned, start_date, end_date, manager_id, status, approved_by)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Approved', %s)
-                    ''', (name, desc_text, project_head, client, self.p_location.get(), workers_str, start_date, end_date, self.user_info['user_id'], self.user_info['user_id']))
-                    action_text = "Drafted & Approved"
-                else:
-                    cursor.execute('''
-                        INSERT INTO projects (name, description, project_head, client, location, workers_assigned, start_date, end_date, manager_id, status)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Pending')
-                    ''', (name, desc_text, project_head, client, self.p_location.get(), workers_str, start_date, end_date, self.user_info['user_id']))
-                    action_text = "Drafted"
-                project_id = cursor.lastrowid
-
-            for item in self.req_cart:
-                req_status = 'Warning' if item.get(
-                    'needs_retrieval') else 'Clear'
-                cursor.execute('''
-                    INSERT INTO project_requirements (project_id, tool_id, quantity, status)
-                    VALUES (%s, %s, %s, %s)
-                ''', (project_id, item['tool_id'], item['qty'], req_status))
-
-            conn.commit()
-            if self.user_info.get("user_id"):
-                log_action(self.user_info['user_id'], action_text, "Projects",
-                           f"{action_text} project '{name}' (ID: {project_id}).")
-
-            messagebox.showinfo(
-                "Success", f"Project successfully {action_text.lower()}!", parent=self.draft_modal)
-
-            self.p_name.delete(0, 'end')
-            self.p_desc.delete("1.0", "end")
-            self.p_head.delete(0, 'end')
-            self.p_client.delete(0, 'end')
-            self.p_location.delete(0, 'end')
-            self.p_start.delete(0, 'end')
-            self.p_end.delete(0, 'end')
-            self.workers_list.clear()
-            self._refresh_worker_tags()
-            self.req_cart.clear()
-            self.refresh_req_cart()
-            self.editing_project_id = None
-            self.editing_project_status = None
-            self.draft_modal.destroy()
-            self.load_projects()
-
+                res = ps.create_project(self.user_info, data)
+                action_text = "Drafted & Approved" if res["status"] == "Approved" else "Drafted"
         except Exception as e:
-            messagebox.showerror("DB Error", friendly_message(e), parent=self.draft_modal)
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+            return messagebox.showerror("Could not save project", friendly_message(e), parent=self.draft_modal)
+        project_id = res["project_id"]
+
+        if self.user_info.get("user_id"):
+            log_action(self.user_info['user_id'], action_text, "Projects",
+                       f"{action_text} project '{name}' (ID: {project_id}).")
+        messagebox.showinfo("Success", f"Project successfully {action_text.lower()}!", parent=self.draft_modal)
+
+        self.p_name.delete(0, 'end')
+        self.p_desc.delete("1.0", "end")
+        self.p_head.delete(0, 'end')
+        self.p_client.delete(0, 'end')
+        self.p_location.delete(0, 'end')
+        self.p_start.delete(0, 'end')
+        self.p_end.delete(0, 'end')
+        self.workers_list.clear()
+        self._refresh_worker_tags()
+        self.req_cart.clear()
+        self.refresh_req_cart()
+        self.editing_project_id = None
+        self.editing_project_status = None
+        self.draft_modal.destroy()
+        self.load_projects()
 
     def build_table_panel(self):
         table_card = ctk.CTkFrame(
@@ -819,7 +766,6 @@ class ProjectsView(ctk.CTkFrame):
                 SELECT p.*, a.full_name as admin_approver,
                        CASE
                            WHEN p.status IN ('Approved', 'Ongoing') AND p.end_date < CURDATE() THEN CONCAT(p.status, ' (OVERDUE)')
-                           WHEN p.status = 'Cancelled' THEN 'Declined'
                            ELSE p.status
                        END as display_status
                 FROM projects p
@@ -977,39 +923,22 @@ class ProjectsView(ctk.CTkFrame):
         btn_frame.pack(side="bottom", fill="x", padx=20, pady=15)
 
         def update_proj_status(new_status):
-            db_status = 'Cancelled' if new_status == 'Declined' else new_status
-            
-            if db_status in ['Cancelled', 'Completed']:
-                conn = get_connection()
-                if conn:
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT COUNT(*) FROM transaction WHERE project_id=%s AND status='Active'", (row['project_id'],))
-                        active_tools = cursor.fetchone()[0]
-                        if active_tools > 0:
-                            action_name = "declining/canceling" if db_status == 'Cancelled' else "completing"
-                            return messagebox.showerror("Active Tools Found", f"This project currently has {active_tools} active tool(s) deployed.\n\nPlease retrieve all tools before {action_name} the project.", parent=modal)
-                    finally:
-                        conn.close()
-
+            current = row['status'].replace(' (OVERDUE)', '')
             has_warnings = any(r['status'] == 'Warning' for r in reqs)
             msg = f"Mark this project as {new_status}?"
-            if db_status == 'Approved' and has_warnings:
+            if new_status == 'Approved' and has_warnings:
                 msg = "⚠️ WARNING: Some required tools are deployed elsewhere and currently out of stock.\n\nMark as Ready for Deployment anyway?"
-                
-            if messagebox.askyesno("Confirm Status", msg, parent=modal):
-                conn = get_connection()
-                if conn:
-                    c = conn.cursor()
-                    if db_status == 'Approved':
-                        c.execute("UPDATE projects SET status=%s, approved_by=%s WHERE project_id=%s", (db_status, self.user_info['user_id'], row['project_id']))
-                    else:
-                        c.execute("UPDATE projects SET status=%s WHERE project_id=%s", (db_status, row['project_id']))
-                    conn.commit()
-                    c.close(); conn.close()
-                    if self.user_info.get("user_id"): log_action(self.user_info['user_id'], "Updated", "Projects", f"Project '{row['name']}' status changed to {db_status}.")
-                    modal.destroy()
-                    self.load_projects()
+            if not messagebox.askyesno("Confirm Status", msg, parent=modal):
+                return
+            try:
+                # [STATE-MACHINE] only allowed edges, and only if the project is still in the status this screen showed
+                res = ps.transition(self.user_info, row['project_id'], new_status, current)
+            except Exception as e:
+                return messagebox.showerror("Could not change status", friendly_message(e), parent=modal)
+            if self.user_info.get("user_id"):
+                log_action(self.user_info['user_id'], "Updated", "Projects", f"Project '{row['name']}' status changed to {res['status']}.")
+            modal.destroy()
+            self.load_projects()
 
         def trigger_edit_mode():
             modal.destroy()
@@ -1034,38 +963,23 @@ class ProjectsView(ctk.CTkFrame):
             ctk.CTkButton(btn_frame, text=btn_text, fg_color="#E74C3C", hover_color="#C0392B", font=("Inter", 11, "bold"), command=lambda s=cmd_status: update_proj_status(s)).pack(side="left", padx=5)
             
         if raw_status in ['Completed', 'Declined', 'Cancelled'] and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Archive", fg_color="#95A5A6", hover_color="#7F8C8D", font=("Inter", 11, "bold"), command=lambda: self.archive_project(row['project_id'], row['name'], modal)).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text="Archive", fg_color="#95A5A6", hover_color="#7F8C8D", font=("Inter", 11, "bold"), command=lambda: self.archive_project(row['project_id'], row['name'], modal, raw_status)).pack(side="left", padx=5)
             
         ctk.CTkButton(btn_frame, text="Close", width=70, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=modal.destroy).pack(side="right", padx=5)
 
-    def archive_project(self, project_id, project_name, modal):
+    def archive_project(self, project_id, project_name, modal, current_status=None):
         if not messagebox.askyesno("Confirm Archive", f"Archive project '{project_name}' to the archive vault?\n\nIt will be moved to Maintenance > Archived Projects.", parent=modal):
             return
-
-        conn = get_connection()
-        if not conn:
-            return
-
         try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """UPDATE projects SET archived_at = NOW() WHERE project_id = %s""", (project_id,))
-            conn.commit()
-
-            uid = self.user_info.get("user_id")
-            if uid:
-                log_action(uid, "Archived", "Projects",
-                           f"Archived project '{project_name}' (PID: {project_id})")
-
-            modal.destroy()
-            self.load_projects()
-
-            dashboard = self.winfo_toplevel()
-            if hasattr(dashboard, "show_toast"):
-                dashboard.show_toast(f"✓ Project '{project_name}' archived.")
+            ps.archive_project(self.user_info, project_id, (current_status or "").replace(" (OVERDUE)", ""))
         except Exception as e:
-            messagebox.showerror("Database Error", friendly_message(e), parent=modal)
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+            messagebox.showerror("Could not archive", friendly_message(e), parent=modal)
+            return
+        uid = self.user_info.get("user_id")
+        if uid:
+            log_action(uid, "Archived", "Projects", f"Archived project '{project_name}' (PID: {project_id})")
+        modal.destroy()
+        self.load_projects()
+        dashboard = self.winfo_toplevel()
+        if hasattr(dashboard, "show_toast"):
+            dashboard.show_toast(f"✓ Project '{project_name}' archived.")

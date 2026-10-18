@@ -607,7 +607,7 @@ class DashboardApp(ctk.CTkToplevel):
 
             try:
                 cursor.execute(
-                    "SELECT COUNT(*) as cnt FROM projects WHERE status NOT IN ('Completed', 'Cancelled') AND end_date < CURDATE()")
+                    "SELECT COUNT(*) as cnt FROM projects WHERE status NOT IN ('Completed', 'Cancelled', 'Declined') AND archived_at IS NULL AND end_date < CURDATE()")
                 metrics["overdue_projects"] = int(
                     cursor.fetchone()["cnt"] or 0)
             except Exception:

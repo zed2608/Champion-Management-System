@@ -35,7 +35,7 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 | 23 | Tagging module (Fig. 118 "Tagging Module (Staff)"; User Manual and Admin Quick Start send users to it) | a Tagging module exists | `views/tagging.py` was orphaned (no sidebar entry, no route) and committed with unresolved merge conflicts | **Decided (you)**: its own sidebar entry for **Admin and Staff**; the print-tag button also stays in the Inventory item panel. **Staff can generate and print tags but cannot change a tool's tag ID once assigned; only Admin can relink or unlink.** Syntax repaired (done); route + the tag-ID permission: step 2g | syntax done; routing + rule todo (2g) |
 | 24 | "Cancel Project" on a running project | not described in the workflow lists | Admin can cancel an Ongoing project (only when no tool is deployed) | **Keep** (removing it would remove a feature); allowed as `Ongoing -> Cancelled` in `project_transitions`. **Manuscript**: add the edge to the workflow | done in schema |
 | 25 | Time zone | not stated | cloud DB stored UTC and the screens added 8 h; the local server stores Manila time | **Change code**: session time zone +08:00, hacks removed (done). **Manuscript**: state "server time, Asia/Manila". **Data**: shift imported Aiven timestamps +8 h once | done (code); your data move |
-| 26 | "Declined" | a status in the workflow | stored as `Cancelled`, displayed "Declined" | **Change code**: `Declined` exists in `project_transitions`; old rows stay `Cancelled` (cannot tell which were declines). Screens switch in Phase 2 | todo |
+| 26 | "Declined" | a status in the workflow | stored as `Cancelled`, displayed "Declined" | **Change code**: `Declined` exists in `project_transitions`; old rows stay `Cancelled` (cannot tell which were declines). Screens now use it (2e) | done |
 
 ## A3. Behaviour decisions made while rebuilding Issuance & Retrieval (Phase 2a/2b)
 | # | Topic | Old behaviour | New behaviour | Manuscript / manual impact |
@@ -64,6 +64,19 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 | 44 | Editing total quantity | "cannot go below deployed" computed from the values the panel loaded | checked against the locked, current values; also counts units in maintenance | none |
 | 45 | Restoring a tool | set `is_archived = 0` only | also clears `archived_at` | none |
 | 46 | Tag ID | Admin could edit it freely, no format rule | new tags must be 3-32 letters/digits/dashes; an unchanged legacy tag is kept; **Staff may assign a tag only to an untagged tool; only Admin can relink or unlink** | revise the Tagging section (Fig. 118) |
+
+## A5. Project lifecycle (Phase 2e)
+| # | Topic | Old behaviour | New behaviour | Manuscript / manual impact |
+|---|---|---|---|---|
+| 47 | Approval of an Admin-created project | created as Approved (kept) | **Kept, and now stated as a rule: a project created by an Admin is auto-approved, so there is no separate "approve" step.** This is the manuscript's "remove double validation" recommendation. An existing Pending project (from the old Staff drafts) can still be approved by an Admin | state the single-step creation in the Project Management chapter and the flowchart |
+| 48 | Workflow | four different lists in the documents | Pending > Approved > Ongoing > Completed, plus Declined and Cancelled, then Archived. `Ongoing > Cancelled` (Admin "Cancel Project" on a running project) is kept | use this one list everywhere |
+| 49 | "Declined" | stored as `Cancelled` and shown as "Declined" | a real status: only from Pending. `Cancelled` is only Approved/Ongoing projects that were cancelled. Projects declined in the old system remain `Cancelled` (cannot be told apart) | note it for imported data |
+| 50 | Editing a project | any Pending/Approved project, delete-and-reinsert of all requirement lines (wiped the Fulfilled flags) | only Pending/Approved; lines are diffed (unchanged lines keep their Fulfilled flag); once ANY tool has been issued only name/client/head/location/description can change | add to the manual |
+| 51 | Stale screens | last save won | a change made from a screen that shows an out-of-date status is refused ("changed by someone else, reload") | none |
+| 52 | Cancel / Complete | tool-deployed check on the screen only | checked in the service under lock | none |
+| 53 | Restoring an archived project | always set to Approved (re-opening Completed/Cancelled projects for issuance) | back to the status it had before archiving | revise Maintenance > Archived Projects |
+| 54 | Workers on a project | free text, matched by `LIKE` | each ID must belong to an Active employee; stored in `project_workers` (exact match) | none |
+| 55 | Staff and Project Management | Staff blocked from the module, but the screen still had Staff branches | **Staff get read-only Project Management (your decision), so Staff can no longer save drafts.** `DRAFT_ROLES = ("Admin",)` in `services/project_service.py` is the single switch if drafting should return | the "Save as Draft" step in the Staff guide goes away |
 
 ## B. ERD (Fig. 92) vs code (AUDIT_FINDINGS 1.12)
 | Item | ERD | Code | Decision |

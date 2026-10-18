@@ -114,7 +114,7 @@ class IssuanceView(ctk.CTkFrame):
             cursor.execute("""
                 SELECT project_id, name, client, start_date, end_date, status
                 FROM projects
-                WHERE status NOT IN ('Cancelled', 'Completed')
+                WHERE status NOT IN ('Cancelled', 'Completed', 'Declined') AND archived_at IS NULL
                   AND start_date <= %s AND end_date >= %s
                 ORDER BY start_date
             """, (last, first))

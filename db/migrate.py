@@ -349,14 +349,12 @@ def step_check_constraints(ctx: Ctx):
         ctx.note("checks SKIPPED: " + ", ".join(skipped))
 
 
-# Allowed project status edges. legacy=1 rows are tolerated only until project_service owns every write.
+# Allowed project status edges (the only ones project_service and the trigger accept).
 TRANSITIONS = [
     ("Pending", "Approved", 0), ("Pending", "Declined", 0),
     ("Approved", "Ongoing", 0), ("Approved", "Cancelled", 0),
     ("Ongoing", "Completed", 0),
     ("Ongoing", "Cancelled", 0),     # existing Admin feature "Cancel Project" on a running project: kept, not removed
-    ("Pending", "Cancelled", 1),     # old UI stores "Declined" as Cancelled
-    ("Approved", "Pending", 1),      # old UI: a Staff edit of an Approved project sends it back to Pending
 ]
 
 
@@ -369,6 +367,19 @@ def step_seed_transitions(ctx: Ctx):
 #   reconcile=True  : structural + idempotent, re-run whenever schema.sql changes (so editing schema.sql reaches
 #                     databases that were migrated earlier).
 #   reconcile=False : one-shot data work (backfills). Never repeated.
+def step_sync_transitions(ctx: Ctx):
+    """project_service now owns every project write, so the two edges the old screens needed (Pending->Cancelled used to mean
+    "declined", Approved->Pending was a Staff edit) are removed. Makes the table EXACTLY equal to TRANSITIONS."""
+    wanted = {(f, t) for f, t, _ in TRANSITIONS}
+    removed = []
+    for r in ctx.all("SELECT from_status AS f, to_status AS t FROM project_transitions"):
+        if (r["f"], r["t"]) not in wanted:
+            ctx.q("DELETE FROM project_transitions WHERE from_status = %s AND to_status = %s", (r["f"], r["t"]))
+            removed.append(f"{r['f']}->{r['t']}")
+    if removed:
+        ctx.note("removed legacy project status edges: " + ", ".join(removed))
+
+
 STEPS = [
     (1, "baseline_tables", step_baseline_tables, True),
     (2, "rename_requirement_id", step_rename_requirement_id, True),
@@ -379,6 +390,7 @@ STEPS = [
     (7, "foreign_keys_restrict", step_foreign_keys, True),
     (8, "check_constraints", step_check_constraints, True),
     (9, "seed_project_transitions", step_seed_transitions, True),
+    (10, "project_transitions_exact", step_sync_transitions, False),
 ]
 
 

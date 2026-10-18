@@ -83,7 +83,7 @@ stateDiagram-v2
 ```
 `Archived` is not a status: it is `projects.archived_at` on a Completed/Declined/Cancelled project. The trigger remembers
 `status_before_archive` and restoring puts the project back to exactly that status (the old screen always set `Approved`).
-Two legacy edges (`Pending->Cancelled`, `Approved->Pending`) are tolerated (`legacy = 1`) only until `project_service` owns every write.
+`project_service` owns every project write, so the two edges the old screens needed (`Pending->Cancelled` as "declined", `Approved->Pending` as a Staff edit) are gone; "Declined" is now a real status.
 Once a project is Ongoing/Completed, or any tool was ever issued to it: dates and workers are read-only (trigger), requirements
 cannot be inserted/changed/deleted (marking a line `Fulfilled` is still allowed).
 
