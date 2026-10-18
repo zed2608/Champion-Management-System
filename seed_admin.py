@@ -1,62 +1,64 @@
-import bcrypt
-from database import get_connection
+"""Create the first Admin account on an empty database, or unlock/reset the existing one.
+
+    python seed_admin.py
+
+The password is NEVER hard-coded: set ADMIN_INITIAL_PASSWORD, or you are prompted (twice, hidden). It must meet the same
+strength rules as the registration screen. Run `python -m db.migrate --make-backup` first so the tables exist.
+"""
 import datetime
+import getpass
+import os
+import sys
 
-def seed_admin():
-    print("Connecting to the database...")
-    conn = get_connection()
-    if not conn:
-        print("❌ Failed to connect to the database.")
-        return
+from db import db, user_message
+from services.validators import ValidationError, hash_password, validate_email, validate_new_password
 
+
+def _password() -> str:
+    pw = os.getenv("ADMIN_INITIAL_PASSWORD")
+    if pw:
+        return validate_new_password(pw)
+    while True:
+        a = getpass.getpass("New Admin password: ")
+        try:
+            validate_new_password(a)
+        except ValidationError as exc:
+            print(f"  {exc}")
+            continue
+        if a != getpass.getpass("Repeat password: "):
+            print("  Passwords do not match.")
+            continue
+        return a
+
+
+def seed_admin() -> int:
+    year = datetime.datetime.now().year
+    emp_id = f"ADM-{year}-001"
     try:
-        cursor = conn.cursor()
-        
-        # Default Admin Credentials
-        current_year = datetime.datetime.now().year
-        emp_id = f"ADM-{current_year}-001"
-        name = "System Admin"
-        raw_password = "admin123"
-        role = "Admin"
+        email = validate_email(os.getenv("ADMIN_EMAIL", ""), required=False)
+        hashed = hash_password(_password())
+    except ValidationError as exc:
+        print(f"ERROR: {exc}")
+        return 2
+    try:
+        with db.transaction() as cur:
+            cur.execute("SELECT user_id FROM `user` WHERE employee_id = %s", (emp_id,))
+            if cur.fetchone():
+                cur.execute("UPDATE `user` SET password_hash = %s, status = 'Active', failed_attempts = 0, "
+                            "reset_requested = 0 WHERE employee_id = %s", (hashed, emp_id))
+                print(f"Account {emp_id} existed: password reset and account unlocked.")
+            else:
+                cur.execute("INSERT INTO `user` (employee_id, full_name, email, role, password_hash, status) "
+                            "VALUES (%s, 'System Admin', %s, 'Admin', %s, 'Active')", (emp_id, email, hashed))
+                cur.execute("INSERT INTO id_sequences (prefix, yr, last_seq) VALUES ('ADM', %s, 1) "
+                            "ON DUPLICATE KEY UPDATE last_seq = GREATEST(last_seq, 1)", (year,))
+                print(f"Account {emp_id} created.")
+    except Exception as exc:
+        print("ERROR: " + user_message(exc))
+        return 1
+    print(f"Log in with Employee ID {emp_id} and the password you just set.")
+    return 0
 
-        print("Generating secure password hash...")
-        hashed_pw = bcrypt.hashpw(raw_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-        # Check if the admin account already exists
-        cursor.execute("SELECT * FROM user WHERE employee_id = %s", (emp_id,))
-        existing_user = cursor.fetchone()
-
-        if existing_user:
-            print(f"⚠️ Account '{emp_id}' found! Forcing password reset and unlocking...")
-            # FORCE UPDATE THE PASSWORD, RESET ATTEMPTS, AND UNLOCK
-            cursor.execute("""
-                UPDATE user SET password_hash = %s, status = 'Active', failed_attempts = 0, reset_requested = 0 
-                WHERE employee_id = %s
-            """, (hashed_pw, emp_id))
-            print("✅ Account unlocked and password successfully overridden!")
-        else:
-            print(f"Injecting new '{emp_id}' account...")
-            # INSERT NEW ACCOUNT
-            cursor.execute("""
-                INSERT INTO user (employee_id, full_name, password_hash, role, status, failed_attempts, reset_requested)
-                VALUES (%s, %s, %s, %s, 'Active', 0, 0)
-            """, (emp_id, name, hashed_pw, role))
-            print("✅ Account injected successfully!")
-
-        conn.commit()
-        print("-" * 30)
-        print("LOGIN CREDENTIALS")
-        print(f"Employee ID (Username): {emp_id}")
-        print(f"Password:               {raw_password}")
-        print("-" * 30)
-        print("You can now log in to the system!")
-
-    except Exception as e:
-        print(f"\n❌ Database Error: {e}")
-    finally:
-        if conn.is_connected():
-            cursor.close()
-            conn.close()
 
 if __name__ == "__main__":
-    seed_admin()
+    sys.exit(seed_admin())
