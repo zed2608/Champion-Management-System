@@ -1,4 +1,5 @@
 import os
+import time
 import customtkinter as ctk
 import sys
 from tkinter import messagebox
@@ -14,7 +15,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from views.projects import ProjectsView
 from views.inventory import InventoryView
 from views.profile import ProfileView
-from services import dashboard_service
+from services import dashboard_service, session_settings
 from services.errors import friendly_message
 from views.borrowing import IssuanceView
 from views.tracking import TrackingView
@@ -64,11 +65,10 @@ class DashboardApp(ctk.CTkToplevel):
         self.current_frame = None
         self.current_page_name = None
         self.dashboard_refresh_job = None
-        self._inactivity_job = None
         self._warning_dialog = None
 
         self.show_frame("Dashboard")
-        self._start_inactivity_timer()
+        self._setup_inactivity()
         self.dashboard_refresh_job = self.after(
             15000, self._auto_refresh_dashboard)
 
@@ -77,9 +77,9 @@ class DashboardApp(ctk.CTkToplevel):
         tool_cache.start()
 
         # Reset inactivity timer on any user interaction
-        self.bind_all("<Motion>", self._reset_inactivity_timer)
-        self.bind_all("<Key>", self._reset_inactivity_timer)
-        self.bind_all("<Button>", self._reset_inactivity_timer)
+        self.bind_all("<Motion>", self._on_activity, add="+")
+        self.bind_all("<Key>", self._on_activity, add="+")
+        self.bind_all("<Button>", self._on_activity, add="+")
 
     def build_sidebar(self):
         self.sidebar_frame = ctk.CTkFrame(
@@ -308,6 +308,10 @@ class DashboardApp(ctk.CTkToplevel):
 
     def destroy(self):
         try:
+            self._cancel_timers()
+        except Exception:
+            pass
+        try:
             self._db.remove_status_listener(self._db_status_cb)
             from services.tool_cache import tool_cache
             tool_cache.stop(join=False)
@@ -315,51 +319,66 @@ class DashboardApp(ctk.CTkToplevel):
             pass
         super().destroy()
 
+    def _cancel_timers(self):
+        for name in ("_clock_job", "dashboard_refresh_job", "_idle_job", "_warning_job"):
+            job = getattr(self, name, None)
+            if job:
+                try:
+                    self.after_cancel(job)
+                except Exception:
+                    pass
+                setattr(self, name, None)
+
     def confirm_logout(self):
-        if hasattr(self, "_clock_job"):
-            self.after_cancel(self._clock_job)
-        if hasattr(self, "dashboard_refresh_job") and self.dashboard_refresh_job:
-            self.after_cancel(self.dashboard_refresh_job)
-        if hasattr(self, "_inactivity_job") and self._inactivity_job:
-            self.after_cancel(self._inactivity_job)
-            self._inactivity_job = None
+        # [UNHAPPY-PATH] Ask FIRST. The old code cancelled the clock, the dashboard refresh and the inactivity timer before asking, so
+        # answering "No" left the session with no timeout and a frozen dashboard.
+        if not messagebox.askyesno("Confirm Logout", "Are you sure you want to log out of your account?"):
+            self._on_activity()                                  # the dialog was activity too
+            return
+        self._cancel_timers()
+        log_action(self.user_info.get("user_id"), "Logout", "Authentication",
+                   f"User {self.user_info.get('full_name')} logged out.")
+        self._return_to_login()
 
-        if messagebox.askyesno("Confirm Logout", "Are you sure you want to log out of your account?"):
-            log_action(self.user_info.get("user_id"), "Logout", "Authentication",
-                       f"User {self.user_info.get('full_name')} logged out.")
-            self.destroy()
-            self.master.deiconify()
-            self.master.pass_entry.delete(0, "end")
+    def _return_to_login(self):
+        self.destroy()
+        self.master.deiconify()
+        self.master.pass_entry.delete(0, "end")
 
-            self.master.pass_entry.configure(show="•")
-            self.master.eye_btn.configure(text="👁")
-            self.master.show_pwd = False
+        self.master.pass_entry.configure(show="•")
+        self.master.eye_btn.configure(text="👁")
+        self.master.show_pwd = False
 
-            self.master.error_banner.configure(text="", fg_color="transparent")
-            self.master.failed_attempts = 0
+        self.master.error_banner.configure(text="", fg_color="transparent")
+        self.master.failed_attempts = 0
 
     # ── Inactivity Auto-Logout ───────────────────────────────────────────────
-    _INACTIVITY_MS = 5 * 60 * 1000   # 5 minutes
-    _WARNING_MS = 30               # 30-second countdown in the warning dialog
+    # 15 minutes idle (configurable, see services/session_settings.py), then a 30-second warning. The clock is a wall-time deadline
+    # checked once a second, so a sleeping laptop or a busy UI cannot stretch the session, and mouse movement costs one assignment.
+    def _setup_inactivity(self):
+        self._idle_limit_s = session_settings.idle_minutes() * 60
+        self._warn_s = session_settings.warning_seconds()
+        self._last_activity = time.monotonic()
+        self._idle_job = None
+        self._warning_job = None
+        self._warning_deadline = None
+        self._idle_job = self.after(1000, self._idle_check)
 
-    def _start_inactivity_timer(self):
-        if self._inactivity_job:
-            self.after_cancel(self._inactivity_job)
-        self._inactivity_job = self.after(
-            self._INACTIVITY_MS, self._show_inactivity_warning)
-
-    def _reset_inactivity_timer(self, event=None):
-        if self._warning_dialog and self._warning_dialog.winfo_exists():
+    def _on_activity(self, event=None):
+        if self._warning_dialog is not None:                     # once the warning is up only "Stay Logged In" counts
             return
-        self._start_inactivity_timer()
+        self._last_activity = time.monotonic()
 
-    def _show_inactivity_warning(self):
+    def _idle_check(self):
+        self._idle_job = None
         if not self.winfo_exists():
             return
+        if self._warning_dialog is None and time.monotonic() - self._last_activity >= self._idle_limit_s:
+            self._show_inactivity_warning()
+        if self._idle_job is None and self._warning_dialog is None:
+            self._idle_job = self.after(1000, self._idle_check)
 
-        if self._warning_dialog and self._warning_dialog.winfo_exists():
-            return
-
+    def _show_inactivity_warning(self):
         dialog = ctk.CTkToplevel(self)
         dialog.title("Inactivity Warning")
         dialog.resizable(False, False)
@@ -372,67 +391,66 @@ class DashboardApp(ctk.CTkToplevel):
         dialog.geometry(f"360x200+{dx}+{dy}")
 
         self._warning_dialog = dialog
-        self._warning_remaining = self._WARNING_MS
+        self._warning_deadline = time.monotonic() + self._warn_s
+        dialog.protocol("WM_DELETE_WINDOW", self._stay_logged_in)
 
         ctk.CTkLabel(dialog, text="⚠ Session Inactivity",
                      font=("Inter", 15, "bold"), text_color="#C0392B").pack(pady=(20, 4))
-        ctk.CTkLabel(dialog, text="You have been inactive for 5 minutes.",
+        minutes = self._idle_limit_s // 60
+        ctk.CTkLabel(dialog, text=f"You have been inactive for {minutes} minute{'s' if minutes != 1 else ''}.",
                      font=("Inter", 11), text_color="#555555").pack()
 
-        self._countdown_label = ctk.CTkLabel(dialog,
-                                             text=f"Logging out in {self._warning_remaining} seconds…",
+        self._countdown_label = ctk.CTkLabel(dialog, text=f"Logging out in {self._warn_s} seconds…",
                                              font=("Inter", 12), text_color="#333333")
         self._countdown_label.pack(pady=(10, 16))
 
         ctk.CTkButton(dialog, text="Stay Logged In", width=160,
                       fg_color="#1E4528", hover_color="#14301C",
                       font=("Inter", 12, "bold"),
-                      command=lambda: self._cancel_inactivity_logout(dialog)).pack()
+                      command=self._stay_logged_in).pack()
+        self._warning_check()
 
-        self._tick_warning()
-
-    def _tick_warning(self):
-        if not self.winfo_exists():
+    def _warning_check(self):
+        self._warning_job = None
+        if not self.winfo_exists() or self._warning_dialog is None:
             return
-
-        if not (self._warning_dialog and self._warning_dialog.winfo_exists()):
-            return
-
-        if self._warning_remaining <= 0:
-            self._warning_dialog.destroy()
+        remaining = self._warning_deadline - time.monotonic()
+        if remaining <= 0:
+            try:
+                self._warning_dialog.destroy()
+            except Exception:
+                pass
             self._warning_dialog = None
             self._force_logout()
             return
+        try:
+            self._countdown_label.configure(text=f"Logging out in {int(remaining) + 1} seconds…")
+        except Exception:
+            pass
+        self._warning_job = self.after(500, self._warning_check)
 
-        self._countdown_label.configure(
-            text=f"Logging out in {self._warning_remaining} seconds…")
-        self._warning_remaining -= 1
-        self._inactivity_job = self.after(1000, self._tick_warning)
-
-    def _cancel_inactivity_logout(self, dialog):
-        if dialog.winfo_exists():
-            dialog.destroy()
-        self._warning_dialog = None
-        self._start_inactivity_timer()
+    def _stay_logged_in(self):
+        dialog, self._warning_dialog = self._warning_dialog, None
+        if self._warning_job:
+            try:
+                self.after_cancel(self._warning_job)
+            except Exception:
+                pass
+            self._warning_job = None
+        if dialog is not None:
+            try:
+                dialog.destroy()
+            except Exception:
+                pass
+        self._last_activity = time.monotonic()
+        if self._idle_job is None:
+            self._idle_job = self.after(1000, self._idle_check)
 
     def _force_logout(self):
-        if hasattr(self, "_clock_job"):
-            self.after_cancel(self._clock_job)
-        if hasattr(self, "dashboard_refresh_job") and self.dashboard_refresh_job:
-            self.after_cancel(self.dashboard_refresh_job)
-            self.dashboard_refresh_job = None
+        self._cancel_timers()
         log_action(self.user_info.get("user_id"), "Auto-Logout", "Authentication",
                    f"Session expired due to inactivity — {self.user_info.get('full_name')}.")
-        self.destroy()
-        self.master.deiconify()
-        self.master.pass_entry.delete(0, "end")
-
-        self.master.pass_entry.configure(show="•")
-        self.master.eye_btn.configure(text="👁")
-        self.master.show_pwd = False
-
-        self.master.error_banner.configure(text="", fg_color="transparent")
-        self.master.failed_attempts = 0
+        self._return_to_login()
 
     def _show_loading_overlay(self):
         """Show a spinner overlay on the main container while switching frames."""

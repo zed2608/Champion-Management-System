@@ -157,3 +157,12 @@ The Scope already reads "Products and Inventory Module (with integrated Tagging)
 
 ## D. Error codes and the log file (Inventory fix)
 Unexpected errors now show `(ERR-<AREA>-<4 digits>) <short reason>` and are logged with a traceback in `logs\app.log`. The User Manual's troubleshooting page should tell users to send that file and code to an administrator. Text ids from screens are converted centrally (no manuscript change).
+
+## E. Inactivity timeout (Phase 3 B3)
+Auto-logout is now **15 minutes** idle with a **30-second** warning (it was 5 minutes in code). Per-computer override in `.env`: `CHAMPION_IDLE_MINUTES` (1-240) and `CHAMPION_IDLE_WARNING_SECONDS` (5-300). Manuscript/User Manual: state 15 minutes. Answering "No" to "Log out?" no longer stops the timers.
+
+## F. Backup and restore (Phase 3 B2)
+Restore now (1) validates the file (mysqldump header for THIS database, "Dump completed" trailer), (2) saves an automatic safety backup in `backups\` named `before_restore_<db>_<time>.sql`, (3) then loads the file; the backup history is kept across a restore. Each backup stores a SHA-256 checksum. User Manual: tell Admins that other computers must log out before a restore.
+
+## G. Scanner (Phase 3 B1)
+One shared scanner window for login, issuance, retrieval and inventory. The working camera is remembered in `scanner_config.json` (per computer, not in git). A code is ignored for 2 seconds after it was read.
