@@ -37,7 +37,10 @@ from db.errors import (DatabaseOffline, PoolExhausted, is_connection_error,
 SESSION_TIME_ZONE = "+08:00"
 STRICT_SQL_MODE = ("STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,"
                    "ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION")
-_SESSION_SQL = f"SET SESSION time_zone='{SESSION_TIME_ZONE}', SESSION sql_mode='{STRICT_SQL_MODE}'"
+# autocommit is set in SQL, not via ``conn.autocommit = ...``: pooled connections are proxies and the attribute
+# assignment never reaches the real session. COM_RESET_CONNECTION also restores the server default (ON) on every return.
+_SESSION_SQL = (f"SET SESSION time_zone='{SESSION_TIME_ZONE}', SESSION sql_mode='{STRICT_SQL_MODE}', "
+                "SESSION autocommit=0")
 
 _MAX_POOL = 32  # mysql-connector hard limit
 
@@ -156,7 +159,6 @@ class Database:
                 cur = conn.cursor()
                 cur.execute(_SESSION_SQL)
                 cur.close()
-                conn.autocommit = False
             except mysql_errors.Error as exc:
                 try:
                     conn.close()
