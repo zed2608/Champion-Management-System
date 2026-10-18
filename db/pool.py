@@ -51,12 +51,19 @@ def _load_env():
     load_dotenv(base / ".env", override=False)
 
 
+def _normalise_host(host: str) -> str:
+    """[PERFORMANCE] On Windows, connecting to the NAME 'localhost' costs ~2 s per connection (it tries IPv6 ::1 first and
+    waits for the timeout). The pool opens all its connections up front, so that was 20-30 s of start-up. Using the
+    IPv4 literal is instant and means exactly the same server."""
+    return "127.0.0.1" if str(host).strip().lower() == "localhost" else host
+
+
 def config_from_env(prefix: str = "DB_") -> dict:
     """Read connection settings from environment variables. Values are never logged."""
     _load_env()
     g = lambda k, d=None: os.getenv(prefix + k, d)
     return {
-        "host": g("HOST", "localhost"),
+        "host": _normalise_host(g("HOST", "localhost")),
         "port": int(g("PORT") or 3306),
         "user": g("USER", "root"),
         "password": g("PASS", ""),
@@ -70,6 +77,8 @@ def config_from_env(prefix: str = "DB_") -> dict:
 class Database:
     def __init__(self, config: dict | None = None, pool_name: str = "champion_pool"):
         self._config = dict(config) if config else None
+        if self._config:
+            self._config["host"] = _normalise_host(self._config.get("host", "localhost"))
         self._pool_name = pool_name
         self._pool = None
         self._lock = threading.Lock()
