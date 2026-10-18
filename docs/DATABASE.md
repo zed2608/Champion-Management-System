@@ -31,11 +31,23 @@ so two terminals asking for tools in opposite orders cannot deadlock) -> re-vali
 (`UPDATE ... WHERE quantity_available >= qty`, rowcount must be 1) -> insert history -> COMMIT. Proven by
 `tests/test_stock_concurrency.py` (two threads, one last unit; 8 threads, 3 units; connection killed mid-transaction).
 
-Per-unit condition (replaces "one damaged return blocks the whole tool"):
-`quantity_available = quantity_total - deployed - quantity_in_maintenance - quantity_lost`.
-Returning one damaged unit moves one unit to `quantity_in_maintenance`; the others stay issuable. Repairing returns it to
-available (total unchanged: fixes the old inflation); writing it off shrinks total. Consumables are exact `DECIMAL(10,2)`;
-`transaction.quantity` replaces "one row per unit", so use `SUM(quantity)`, not `COUNT(*)`.
+Per-unit condition (replaces "one damaged return blocks the whole tool"). `quantity_total` is the units the company still owns:
+`quantity_available = quantity_total - deployed - quantity_in_maintenance`.
+* **Damaged / Needs Repair** return: those units move to `quantity_in_maintenance`; the other units stay issuable.
+* **Lost** return: the units leave `quantity_total` (exactly as the old screens did, so Inventory, Reports and the dashboard totals do not
+  shift) and are added to `quantity_lost`, a running count for reports. (This differs from the brief's literal "available = total -
+  deployed - in_maintenance - lost"; the same units are accounted for, just on the other side of `total`.)
+* Repairing returns units to available (total unchanged: fixes the old double-count); writing off shrinks the total.
+* `tool.condition` is now only a **display flag** derived from OPEN tickets (worst wins, else Good). It no longer blocks issuing, and a later
+  Good return can no longer hide a damaged unit.
+* Equipment is one `transaction` row per unit (`quantity = 1`) so condition is per unit; a consumable is ONE row with its exact quantity (a
+  partial return splits the row). Always use `SUM(quantity)`, not `COUNT(*)`.
+
+**Isolation level.** `db.transaction()` defaults to `READ COMMITTED`. Our writes are "lock the rows, re-check, change". Under MySQL's
+default `REPEATABLE READ`, a plain `SELECT` inside the transaction (for example the deployed-quantity check) reads the snapshot taken when
+the transaction's first plain read *started*, which can be before it finished waiting for another terminal's lock, so it misses that
+terminal's committed rows. `tests/test_issuance_service.py::test_two_terminals_cannot_together_exceed_the_project_quota` caught exactly
+this (two terminals each issuing 2 against a quota of 3 both succeeded) before the default was changed.
 
 ## Tool cache (`services/tool_cache.py`)
 `tag_id -> ToolRecord` and `tool_id -> ToolRecord` in memory for O(1) scans. **Display and lookup only, never the source of

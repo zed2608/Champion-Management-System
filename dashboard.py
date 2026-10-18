@@ -64,6 +64,8 @@ class DashboardApp(ctk.CTkToplevel):
             15000, self._auto_refresh_dashboard)
 
         self._init_offline_banner()
+        from services.tool_cache import tool_cache   # [CONCURRENCY] O(1) scan lookups, kept fresh across terminals
+        tool_cache.start()
 
         # Reset inactivity timer on any user interaction
         self.bind_all("<Motion>", self._reset_inactivity_timer)
@@ -298,6 +300,8 @@ class DashboardApp(ctk.CTkToplevel):
     def destroy(self):
         try:
             self._db.remove_status_listener(self._db_status_cb)
+            from services.tool_cache import tool_cache
+            tool_cache.stop(join=False)
         except Exception:
             pass
         super().destroy()

@@ -204,14 +204,15 @@ def test_resolving_maintenance_does_not_inflate_stock(stock):
     assert (row["quantity_total"], row["quantity_available"], row["quantity_in_maintenance"]) == (10, 10, 0)   # old bug: total became 11
 
 
-def test_written_off_units_shrink_total_and_lost_units_are_tracked(stock):
+def test_written_off_and_lost_units_leave_the_total_and_lost_is_counted(stock):
     with stock.transaction() as cur:
         take_stock(cur, 2, 2)
         return_units(cur, 2, damaged=1, lost=1)
     with stock.transaction() as cur:
         resolve_maintenance(cur, 2, 1, repaired=False)
     row = inv(stock)
-    assert (row["quantity_total"], row["quantity_available"], row["quantity_in_maintenance"], row["quantity_lost"]) == (9, 8, 0, 1)
+    # 10 owned, 2 deployed. One came back lost (leaves the total, counted in quantity_lost), one damaged then written off.
+    assert (row["quantity_total"], row["quantity_available"], row["quantity_in_maintenance"], row["quantity_lost"]) == (8, 8, 0, 1)
     with pytest.raises(StockError):
         with stock.transaction() as cur:
             resolve_maintenance(cur, 2, 1, repaired=True)                 # nothing left in maintenance

@@ -10,13 +10,19 @@
     db.run_in_transaction(work)                     # 5. COMMIT, or ROLLBACK + one retry on deadlock/lock timeout
 
 Steps 1 and 3 are belt and braces: the lock makes the re-validation valid, and the guarded UPDATE keeps stock from going
-negative even if a caller forgets step 1. Identity maintained by this module:
-    quantity_available = quantity_total - deployed - quantity_in_maintenance - quantity_lost
+negative even if a caller forgets step 1.
+
+Identity maintained by this module (``quantity_total`` = units the company still owns):
+    quantity_available = quantity_total - deployed - quantity_in_maintenance
+A LOST unit leaves ``quantity_total`` (exactly as the old screens did, so Inventory, Reports and the dashboard keep showing the
+same totals) and is also added to ``quantity_lost``, a running count kept for reports and the wear/anomaly features.
 """
 from decimal import Decimal
 
+from services.errors import ServiceError
 
-class StockError(Exception):
+
+class StockError(ServiceError):
     """Base class; the message is user-safe."""
 
 
@@ -67,14 +73,29 @@ def take_stock(cur, tool_id, qty) -> None:
 
 
 def return_units(cur, tool_id, *, good=0, damaged=0, lost=0) -> None:
-    """Retrieval, per unit: good units go back to available; damaged units move to in_maintenance; lost units to lost.
-    Total never changes here, so one damaged unit no longer blocks the other units of the same tool."""
+    """Retrieval, per unit: good units go back to available; damaged units move to in_maintenance; lost units leave the
+    total (and are counted in quantity_lost). One damaged unit no longer blocks the other units of the same tool."""
     good, damaged, lost = _d(good), _d(damaged), _d(lost)
     cur.execute("UPDATE inventory SET quantity_available = quantity_available + %s, "
-                "quantity_in_maintenance = quantity_in_maintenance + %s, quantity_lost = quantity_lost + %s "
-                "WHERE tool_id = %s", (good, damaged, lost, tool_id))
+                "quantity_in_maintenance = quantity_in_maintenance + %s, "
+                "quantity_total = quantity_total - %s, quantity_lost = quantity_lost + %s "
+                "WHERE tool_id = %s", (good, damaged, lost, lost, tool_id))
     if cur.rowcount != 1:
         raise ToolNotFound(f"Tool {tool_id} was not found in inventory.")
+
+
+_FLAG_RANK = (("Lost", 3), ("Damaged", 2), ("Needs Repair", 1))
+
+
+def refresh_tool_condition(cur, tool_id) -> str:
+    """tool.condition is now a DISPLAY flag derived from OPEN tickets (worst one wins, else 'Good'); it no longer blocks
+    issuing, because units are tracked individually. Keeps the dashboard, Inventory and Maintenance screens consistent."""
+    cur.execute("SELECT DISTINCT condition_flag AS f FROM tool_issues WHERE tool_id = %s AND status = 'Open'", (tool_id,))
+    flags = {r["f"] for r in cur.fetchall()}
+    cond = next((name for name, _ in _FLAG_RANK if name in flags), "Good")
+    cur.execute("UPDATE tool SET `condition` = %s WHERE tool_id = %s AND (`condition` IS NULL OR `condition` <> %s)",
+                (cond, tool_id, cond))
+    return cond
 
 
 def resolve_maintenance(cur, tool_id, qty, *, repaired: bool) -> None:

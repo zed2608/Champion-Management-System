@@ -32,10 +32,25 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 ## A2. Additional rows found during Phase 1
 | # | Topic | Docs say | System does | Decision | Status |
 |---|---|---|---|---|---|
-| 23 | Tagging module (QR tag printing; Staff "print tags") | a Tagging module exists | `views/tagging.py` is orphaned (no sidebar entry, no route) and was committed with unresolved merge conflicts. Tag printing otherwise exists inside the Inventory screen | **Change code**: syntax repaired (done); route it in the sidebar for Admin and Staff (Phase 2, so Staff can print tags as documented). **Open question for you**: confirm you want it as its own sidebar module rather than only inside Inventory | syntax done; routing todo |
+| 23 | Tagging module (Fig. 118 "Tagging Module (Staff)"; User Manual and Admin Quick Start send users to it) | a Tagging module exists | `views/tagging.py` was orphaned (no sidebar entry, no route) and committed with unresolved merge conflicts | **Decided (you)**: its own sidebar entry for **Admin and Staff**; the print-tag button also stays in the Inventory item panel. **Staff can generate and print tags but cannot change a tool's tag ID once assigned; only Admin can relink or unlink.** Syntax repaired (done); route + the tag-ID permission: step 2g | syntax done; routing + rule todo (2g) |
 | 24 | "Cancel Project" on a running project | not described in the workflow lists | Admin can cancel an Ongoing project (only when no tool is deployed) | **Keep** (removing it would remove a feature); allowed as `Ongoing -> Cancelled` in `project_transitions`. **Manuscript**: add the edge to the workflow | done in schema |
 | 25 | Time zone | not stated | cloud DB stored UTC and the screens added 8 h; the local server stores Manila time | **Change code**: session time zone +08:00, hacks removed (done). **Manuscript**: state "server time, Asia/Manila". **Data**: shift imported Aiven timestamps +8 h once | done (code); your data move |
 | 26 | "Declined" | a status in the workflow | stored as `Cancelled`, displayed "Declined" | **Change code**: `Declined` exists in `project_transitions`; old rows stay `Cancelled` (cannot tell which were declines). Screens switch in Phase 2 | todo |
+
+## A3. Behaviour decisions made while rebuilding Issuance & Retrieval (Phase 2a/2b)
+| # | Topic | Old behaviour | New behaviour | Manuscript / manual impact |
+|---|---|---|---|---|
+| 27 | Lost return | whole tool flagged Lost (blocked all units); total reduced | only the lost units leave the total; `quantity_lost` counts them; ticket created in the same transaction | state per-unit condition handling |
+| 28 | Damaged / Needs Repair return | whole tool flagged (blocked all units); next Good return cleared the flag; message said "Restocked" | only those units are held in maintenance; other units stay issuable; flag cannot be hidden by a later Good return; message says they are held back | revise the "Retrieval" and "Damaged routing" text |
+| 29 | Condition details | optional | **required** for Damaged, Needs Repair and Lost (screen + service) | add to manual Guide B |
+| 30 | Maintenance ticket | appeared when the Maintenance tab next ran its auto-sync | created inside the retrieval transaction (with transaction id, reporter) | matches the docs ("automatically creates an actionable ticket") |
+| 31 | Success message | shown twice on return | shown once | none |
+| 32 | Borrower check | any user, any status | Active accounts only; assigned to the project by exact match (junction table) | the manual should say archived/locked accounts cannot receive tools |
+| 33 | Quota | checked on screen, then updated without a lock | re-checked under lock at commit: two terminals cannot together exceed the approved quantity or the last unit | none (hardening) |
+| 34 | Receipt time | time the receipt was printed, on the printing PC | time of issuance from the server clock; a reprint shows the same time | state "server time" |
+| 35 | Overdue colouring | compared with the PC's date | compared with the server's date (same as the filter); uses the due date snapshot taken at issuance | none |
+| 36 | `INTERVAL 8 HOUR` | shown +8 h for the UTC cloud DB | removed; session time zone +08:00 | see row 25 |
+| 37 | Return after the project ended | n/a | still allowed (the end-date rule applies to issuing only) | add to manual |
 
 ## B. ERD (Fig. 92) vs code (AUDIT_FINDINGS 1.12)
 | Item | ERD | Code | Decision |

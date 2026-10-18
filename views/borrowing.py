@@ -1,6 +1,9 @@
 import customtkinter as ctk
 from tkinter import messagebox
 from database import get_connection
+from services import issuance_service as iss, validators as v
+from services.errors import ServiceError, NotFound, Conflict, friendly_message
+from services.tool_cache import tool_cache
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 import os
@@ -8,6 +11,14 @@ from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta, date as _date
 import calendar as _cal
 import threading
+
+def _fmt_qty(x) -> str:
+    """Exact quantity for display: 3.00 -> '3', 2.50 -> '2.5'."""
+    try:
+        return f"{float(x):g}"
+    except (TypeError, ValueError):
+        return str(x)
+
 
 class IssuanceView(ctk.CTkFrame):
     def __init__(self, parent, user_info=None, navigate_to=None, *args, **kwargs):
@@ -557,7 +568,7 @@ class IssuanceView(ctk.CTkFrame):
             try:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT tr.type, t.name as tool_name, t.tag_id, COUNT(tr.transaction_id) as grouped_qty,
+                    SELECT tr.type, t.name as tool_name, t.tag_id, SUM(tr.quantity) as grouped_qty,
                            u.full_name, tr.status,
                        -- [4-DATE] server time only: the session time zone (+08:00) is set by db.pool; no client-side hour shifts
                        MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)) as b_date,
@@ -570,7 +581,8 @@ class IssuanceView(ctk.CTkFrame):
                            IFNULL(MAX(tr.purpose), '—') as purpose,
                            MAX(tr.project_id) as project_id,
                            u.user_id as uid,
-                           MAX(p.end_date) as due_date
+                           CURDATE() as server_today,
+                           MAX(COALESCE(tr.due_date, p.end_date)) as due_date   -- [4-DATE] snapshot taken at issuance, not the live project date
                     FROM transaction tr
                     JOIN tool t ON tr.tool_id = t.tool_id
                     JOIN user u ON tr.user_id = u.user_id
@@ -581,15 +593,16 @@ class IssuanceView(ctk.CTkFrame):
                 params = []
                 
                 if search_q:
+                    like = v.like_pattern(search_q)          # [UNHAPPY-PATH] capped at 64 chars, % and _ escaped
                     where_clauses.append("(u.full_name LIKE %s OR t.tag_id LIKE %s OR t.name LIKE %s)")
-                    params.extend([f"%{search_q}%", f"%{search_q}%", f"%{search_q}%"])
+                    params.extend([like, like, like])
                     
                 if filter_val == "All Active":
                     where_clauses.append("tr.status = 'Active'")
                 elif filter_val == "All Retrieved":
                     where_clauses.append("tr.status = 'Returned'")
                 elif filter_val == "Overdue":
-                    where_clauses.append("tr.status = 'Active' AND p.end_date < CURDATE()")
+                    where_clauses.append("tr.status = 'Active' AND COALESCE(tr.due_date, p.end_date) < CURDATE()")
                 elif filter_val == "Issue (Type)":
                     where_clauses.append("tr.type = 'Issue'")
                 elif filter_val == "Retrieval (Type)":
@@ -632,6 +645,7 @@ class IssuanceView(ctk.CTkFrame):
             return
 
         for i, row in enumerate(results):
+            row['grouped_qty'] = _fmt_qty(row['grouped_qty'])
             if hasattr(row['b_date'], 'strftime'): row['b_date'] = row['b_date'].strftime('%b %d, %Y %I:%M %p')
             if hasattr(row['borrow_date_full'], 'strftime'): row['borrow_date_full'] = row['borrow_date_full'].strftime('%b %d, %Y %I:%M %p')
             if hasattr(row['borrow_date_short'], 'strftime'): row['borrow_date_short'] = row['borrow_date_short'].strftime('%b %d, %Y')
@@ -646,7 +660,7 @@ class IssuanceView(ctk.CTkFrame):
                 if row['due_date']:
                     due_date = row['due_date']
                     due_ret_text = f"Due: {due_date.strftime('%b %d, %Y')}"
-                    if due_date < _date.today():
+                    if due_date < (row.get('server_today') or _date.today()):
                         due_ret_text = f"Overdue: {due_date.strftime('%b %d, %Y')}"
                         due_ret_color = "#D8000C"
                         due_font_w = "bold"
@@ -775,7 +789,7 @@ class IssuanceView(ctk.CTkFrame):
             cursor = conn.cursor(dictionary=True)
             if row.get('project_id'):
                 cursor.execute("""
-                    SELECT t.name, COUNT(*) as qty
+                    SELECT t.name, SUM(tr.quantity) as qty
                     FROM transaction tr
                     JOIN tool t ON tr.tool_id = t.tool_id
                     WHERE tr.project_id = %s AND tr.user_id = %s AND tr.type = %s
@@ -785,6 +799,7 @@ class IssuanceView(ctk.CTkFrame):
                     GROUP BY t.name
                 """, (row['project_id'], row['uid'], row['type'], row['first_trn']))
                 items = cursor.fetchall()
+                for it in items: it['qty'] = _fmt_qty(it['qty'])
             else:
                 items = [{"name": row['tool_name'], "qty": row['grouped_qty']}]
 
@@ -807,7 +822,7 @@ class IssuanceView(ctk.CTkFrame):
                 cursor = conn.cursor(dictionary=True)
                 if row.get('project_id'):
                     cursor.execute("""
-                        SELECT t.name, COUNT(*) as qty
+                        SELECT t.name, SUM(tr.quantity) as qty
                         FROM transaction tr
                         JOIN tool t ON tr.tool_id = t.tool_id
                         WHERE tr.project_id = %s AND tr.user_id = %s AND tr.type = %s
@@ -816,7 +831,7 @@ class IssuanceView(ctk.CTkFrame):
                           )
                         GROUP BY t.name
                     """, (row['project_id'], row['uid'], row['type'], row['first_trn']))
-                    tool_names = [f"{r['name']} (Qty: {r['qty']})" for r in cursor.fetchall()]
+                    tool_names = [f"{r['name']} (Qty: {_fmt_qty(r['qty'])})" for r in cursor.fetchall()]
                 else:
                     tool_names = [f"{row['tool_name']} (Qty: {row['grouped_qty']})"]
             except Exception:
@@ -831,7 +846,7 @@ class IssuanceView(ctk.CTkFrame):
                      if row['first_trn'] != row['last_trn']
                      else str(row['first_trn']))
         purpose = row.get('purpose') or "—"
-        self.print_master_receipt(trn_range, row['full_name'], tool_names, purpose)
+        self.print_master_receipt(trn_range, row['full_name'], tool_names, purpose, issued_at=row.get('borrow_date_full'))
 
     def open_scanner(self, target_entry, trigger_method):
         try: cap = cv2.VideoCapture(0, cv2.CAP_DSHOW) 
@@ -876,56 +891,42 @@ class IssuanceView(ctk.CTkFrame):
             target_entry.insert(0, detected_data)
             trigger_method()
 
+    def _reset_borrower_ui(self, message, color="#D8000C"):
+        self.active_borrow_user_id = None
+        self.active_borrow_user_name = None
+        self.b_user_name.configure(text=message, text_color=color)
+        self.b_project_menu.configure(values=["Scan Employee ID first..."], state="disabled")
+        self.b_project_menu.set("Scan Employee ID first...")
+        self.active_projects_map.clear()
+        self._clear_proj_req_display()
+
     def verify_borrower(self):
-        emp_id = self.b_emp_id.get().strip()
-        if not emp_id: return
-        conn = get_connection()
-        if not conn: return
+        raw = self.b_emp_id.get()
+        if not raw.strip():
+            return
+        scan = v.parse_scan(raw)                       # accepts a typed ID, a badge QR, or "Employee ID: X"
+        emp_id = scan.value if scan.kind == "worker" else raw.strip()
         try:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT user_id, full_name, role FROM user WHERE employee_id = %s", (emp_id,))
-            user = cursor.fetchone()
-            
-            if user:
-                self.active_borrow_user_id = user['user_id']
-                self.active_borrow_user_name = user['full_name']
-                self.b_user_name.configure(text=f"✓ Verified: {user['full_name']} ({user['role']})", text_color="#2ECC71")
-                
-                cursor.execute("""
-                    SELECT DISTINCT p.project_id, p.name, p.client 
-                    FROM projects p
-                    JOIN project_requirements pr ON p.project_id = pr.project_id
-                    WHERE p.status IN ('Approved', 'Ongoing') 
-                    AND p.workers_assigned LIKE %s
-                    AND pr.status != 'Fulfilled'
-                """, (f"%{emp_id}%",))
-                
-                assigned_projects = cursor.fetchall()
-                if assigned_projects:
-                    self.active_projects_map.clear()
-                    dropdown_vals = ["Select a project..."]
-                    for p in assigned_projects:
-                        display_text = f"Proj {p['project_id']}: {p['name']} ({p['client']})"
-                        dropdown_vals.append(display_text)
-                        self.active_projects_map[display_text] = p['project_id']
-                        
-                    self.b_project_menu.configure(values=dropdown_vals, state="normal")
-                    self.b_project_menu.set(dropdown_vals[0])
-                    self._clear_proj_req_display()
-                else:
-                    self.b_project_menu.configure(values=["No projects needing tools"], state="disabled")
-                    self.b_project_menu.set("No projects needing tools")
-                    self.active_projects_map.clear()
-                    self._clear_proj_req_display()
-            else:
-                self.active_borrow_user_id = None
-                self.active_borrow_user_name = None
-                self.b_user_name.configure(text="❌ Employee ID not found.", text_color="#D8000C")
-                self.b_project_menu.configure(values=["Scan Employee ID first..."], state="disabled")
-                self.b_project_menu.set("Scan Employee ID first...")
-                self._clear_proj_req_display()
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
+            b = iss.verify_borrower(self.user_info, emp_id)   # [RBAC] role + status re-checked in MySQL; archived/locked refused
+        except Exception as e:
+            self._reset_borrower_ui(f"❌ {friendly_message(e)}")
+            return
+        self.active_borrow_user_id = b['user_id']
+        self.active_borrow_user_name = b['full_name']
+        self.b_user_name.configure(text=f"✓ Verified: {b['full_name']} ({b['role']})", text_color="#2ECC71")
+        self.active_projects_map.clear()
+        if b['projects']:
+            dropdown_vals = ["Select a project..."]
+            for p in b['projects']:
+                display_text = f"Proj {p['project_id']}: {p['name']} ({p['client']})"
+                dropdown_vals.append(display_text)
+                self.active_projects_map[display_text] = p['project_id']
+            self.b_project_menu.configure(values=dropdown_vals, state="normal")
+            self.b_project_menu.set(dropdown_vals[0])
+        else:
+            self.b_project_menu.configure(values=["No projects needing tools"], state="disabled")
+            self.b_project_menu.set("No projects needing tools")
+        self._clear_proj_req_display()
 
     def _clear_proj_req_display(self):
         for w in self.proj_req_frame.winfo_children(): w.destroy()
@@ -938,121 +939,92 @@ class IssuanceView(ctk.CTkFrame):
         if choice == "Select a project...":
             self._clear_proj_req_display()
             return
-            
+
         proj_id = self.active_projects_map.get(choice)
         if not proj_id: return
-        
-        conn = get_connection()
-        if not conn: return
+
         try:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("""
-                SELECT pr.tool_id, t.name, pr.quantity as req_qty, pr.status,
-                       (SELECT COUNT(*) FROM transaction WHERE project_id = %s AND tool_id = pr.tool_id AND type = 'Issue' AND status = 'Active') as issued_qty,
-                       p.name as p_name, p.client as p_client, p.location as p_location
-                FROM project_requirements pr
-                JOIN tool t ON pr.tool_id = t.tool_id
-                JOIN projects p ON pr.project_id = p.project_id
-                WHERE pr.project_id = %s
-            """, (proj_id, proj_id))
-            
-            reqs = cursor.fetchall()
-            self.current_project_reqs = reqs 
-            
-            for w in self.proj_req_frame.winfo_children(): w.destroy()
-            
-            if reqs:
-                p_name = reqs[0]['p_name']
-                p_client = reqs[0]['p_client']
-                p_loc = reqs[0]['p_location']
-                header_text = f"📍 Project: {p_name}\n🏢 Client: {p_client}  |  Site: {p_loc}"
-                ctk.CTkLabel(self.proj_req_frame, text=header_text, font=("Inter", 11, "bold"), text_color="#1E4528", justify="left").pack(anchor="w", padx=10, pady=(10, 5))
-                ctk.CTkFrame(self.proj_req_frame, height=1, fg_color="#E0E0E0").pack(fill="x", padx=10, pady=(0, 5))
-            
-            all_fulfilled = True
-            for r in reqs:
-                needed = float(r['req_qty'])
-                issued = float(r['issued_qty'])
-                remaining = needed - issued
-                if remaining > 0: all_fulfilled = False
-                
-                txt_color = "#D8000C" if remaining > 0 else "#2ECC71"
-                status_txt = f"Needs {remaining:g}" if remaining > 0 else "✓ Fulfilled"
-                row_str = f"• {r['name']}  |  Approved: {needed:g}  |  {status_txt}"
-                ctk.CTkLabel(self.proj_req_frame, text=row_str, font=("Inter", 11, "bold" if remaining > 0 else "normal"), text_color=txt_color).pack(anchor="w", padx=10, pady=2)
-            
+            proj = iss.project_requirements(self.user_info, proj_id)
+        except Exception as e:
+            self._clear_proj_req_display()
+            messagebox.showerror("Project", friendly_message(e), parent=self.issuance_modal)
+            return
+        reqs = proj['reqs']
+        self.current_project_reqs = reqs
+
+        for w in self.proj_req_frame.winfo_children(): w.destroy()
+
+        if reqs:
+            header_text = f"📍 Project: {proj['name']}\n🏢 Client: {proj['client']}  |  Site: {proj['location']}"
+            ctk.CTkLabel(self.proj_req_frame, text=header_text, font=("Inter", 11, "bold"), text_color="#1E4528", justify="left").pack(anchor="w", padx=10, pady=(10, 5))
+            ctk.CTkFrame(self.proj_req_frame, height=1, fg_color="#E0E0E0").pack(fill="x", padx=10, pady=(0, 5))
+
+        all_fulfilled = True
+        for r in reqs:
+            needed = float(r['req_qty'])
+            issued = float(r['issued_qty'])
+            remaining = needed - issued
+            if remaining > 0: all_fulfilled = False
+
+            txt_color = "#D8000C" if remaining > 0 else "#2ECC71"
+            status_txt = f"Needs {remaining:g}" if remaining > 0 else "✓ Fulfilled"
+            row_str = f"• {r['name']}  |  Approved: {needed:g}  |  {status_txt}"
+            ctk.CTkLabel(self.proj_req_frame, text=row_str, font=("Inter", 11, "bold" if remaining > 0 else "normal"), text_color=txt_color).pack(anchor="w", padx=10, pady=2)
+
+        state = "disabled" if all_fulfilled else "normal"
+        if hasattr(self, 'b_tag_id') and self.b_tag_id.winfo_exists():
+            self.b_tag_id.configure(state=state)
+            self.b_scan_btn.configure(state=state)
             if not all_fulfilled:
-                if hasattr(self, 'b_tag_id') and self.b_tag_id.winfo_exists():
-                    self.b_tag_id.configure(state="normal")
-                    self.b_scan_btn.configure(state="normal")
-                    self.b_tag_id.focus_set()
-            else:
-                if hasattr(self, 'b_tag_id') and self.b_tag_id.winfo_exists():
-                    self.b_tag_id.configure(state="disabled")
-                    self.b_scan_btn.configure(state="disabled")
-                
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
+                self.b_tag_id.focus_set()
 
     def add_tool_to_cart(self):
-        tag_id = self.b_tag_id.get().strip()
-        if not tag_id: return
+        raw = self.b_tag_id.get().strip()
+        if not raw: return
 
         selected_proj = self.b_project_menu.get()
         if selected_proj not in self.active_projects_map:
             messagebox.showerror("Unauthorized", "No valid project selected.", parent=self.issuance_modal)
             return
-            
-        conn = get_connection()
-        if not conn: return
-        try:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT t.tool_id, t.name, t.condition, IFNULL(i.quantity_available, 0) as qty FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id WHERE t.tag_id = %s AND t.is_archived = 0", (tag_id,))
-            tool = cursor.fetchone()
-            
-            if not tool:
-                messagebox.showerror("Not Found", "Invalid or Unassigned Tag ID.", parent=self.issuance_modal)
-                return
-            if tool['condition'] in ['Damaged', 'Needs Repair', 'Lost']:
-                messagebox.showerror("Unavailable", f"'{tool['name']}' cannot be issued. It is flagged as {tool['condition']}.", parent=self.issuance_modal)
-                return
-            if tool['qty'] <= 0:
-                messagebox.showerror("Out of Stock", f"'{tool['name']}' is currently out of stock!", parent=self.issuance_modal)
-                return
 
-            req = next((r for r in self.current_project_reqs if r['tool_id'] == tool['tool_id']), None)
-            if not req:
-                messagebox.showerror("Unauthorized", f"'{tool['name']}' is NOT approved for this project.", parent=self.issuance_modal)
-                return
+        try:                                           # O(1) from the tool cache; DB fallback; re-checked under lock at commit
+            tool = iss.lookup_tool(self.user_info, raw)
+        except NotFound as e:
+            messagebox.showerror("Not Found", friendly_message(e), parent=self.issuance_modal)
+            return
+        except Exception as e:
+            messagebox.showerror("Unavailable", friendly_message(e), parent=self.issuance_modal)
+            return
 
-            allowed_qty = float(req['req_qty'])
-            already_issued = float(req['issued_qty'])
-            in_cart = sum(item['qty_borrowed'] for item in self.borrow_cart if item['id'] == tool['tool_id'])
+        req = next((r for r in self.current_project_reqs if r['tool_id'] == tool.tool_id), None)
+        if not req:
+            messagebox.showerror("Unauthorized", f"'{tool.name}' is NOT approved for this project.", parent=self.issuance_modal)
+            return
 
-            if (already_issued + in_cart + 1) > allowed_qty:
-                messagebox.showerror("Limit Reached", f"Cannot add '{tool['name']}'.\nApproved Limit: {allowed_qty:g}\nAlready Issued: {already_issued}\nIn Cart: {in_cart}", parent=self.issuance_modal)
-                return
+        allowed_qty = float(req['req_qty'])
+        already_issued = float(req['issued_qty'])
+        in_cart = sum(item['qty_borrowed'] for item in self.borrow_cart if item['id'] == tool.tool_id)
+        available = float(tool.available)
 
-            # --- FIX B: Check real physical inventory constraints before accepting into cart ---
-            if (in_cart + 1) > tool['qty']:
-                messagebox.showerror("Out of Stock", f"Cannot add '{tool['name']}'.\nOnly {tool['qty']} left in the warehouse.", parent=self.issuance_modal)
-                return
-            # ---------------------------------------------------------------------------------
+        if (already_issued + in_cart + 1) > allowed_qty:
+            messagebox.showerror("Limit Reached", f"Cannot add '{tool.name}'.\nApproved Limit: {allowed_qty:g}\nAlready Issued: {already_issued:g}\nIn Cart: {in_cart:g}", parent=self.issuance_modal)
+            return
+        if (in_cart + 1) > available:
+            messagebox.showerror("Out of Stock", f"Cannot add '{tool.name}'.\nOnly {available:g} left in the warehouse.", parent=self.issuance_modal)
+            return
 
-            existing = next((item for item in self.borrow_cart if item['id'] == tool['tool_id']), None)
-            if existing:
-                existing['qty_borrowed'] += 1
-            else:
-                self.borrow_cart.append({
-                    "id": tool['tool_id'], "name": tool['name'], "cond": tool['condition'], 
-                    "tag": tag_id, "qty_borrowed": 1, "max_qty": tool['qty']
-                })
-                
-            self.refresh_cart_ui()
-            self.b_tag_id.delete(0, 'end') 
-            
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
+        existing = next((item for item in self.borrow_cart if item['id'] == tool.tool_id), None)
+        if existing:
+            existing['qty_borrowed'] += 1
+            existing['max_qty'] = available
+        else:
+            self.borrow_cart.append({
+                "id": tool.tool_id, "name": tool.name, "cond": tool.condition,
+                "tag": tool.tag_id, "qty_borrowed": 1, "max_qty": available
+            })
+
+        self.refresh_cart_ui()
+        self.b_tag_id.delete(0, 'end')
 
     def update_cart_qty(self, index, change):
         item = self.borrow_cart[index]
@@ -1101,65 +1073,31 @@ class IssuanceView(ctk.CTkFrame):
             return messagebox.showerror("Error", "Please select a target project.", parent=self.issuance_modal)
         if len(self.borrow_cart) == 0:
             return messagebox.showerror("Error", "The cart is empty! Scan at least one tool.", parent=self.issuance_modal)
-            
-        conn = get_connection()
-        if not conn: return
+
+        cart = [{"tool_id": it['id'], "qty": it['qty_borrowed']} for it in self.borrow_cart]
         try:
-            cursor = conn.cursor(dictionary=True)
-            transaction_ids = []; receipt_tool_list = []
-            purpose = selected_proj
-            
-            # --- FIX B: Hard Block Database Check Before Execution ---
-            for item in self.borrow_cart:
-                cursor.execute("SELECT quantity_available FROM inventory WHERE tool_id = %s", (item['id'],))
-                db_qty = cursor.fetchone()['quantity_available']
-                if item['qty_borrowed'] > db_qty:
-                    return messagebox.showerror("Inventory Error", f"Transaction aborted.\n'{item['name']}' only has {db_qty} remaining in stock.", parent=self.issuance_modal)
-            # ---------------------------------------------------------
-            
-            for item in self.borrow_cart:
-                cursor.execute("UPDATE inventory SET quantity_available = quantity_available - %s WHERE tool_id = %s", (item['qty_borrowed'], item['id']))
-                rows_to_insert = int(item['qty_borrowed']) + (1 if item['qty_borrowed'] % 1 > 0 else 0)
-                for _ in range(rows_to_insert):
-                    cursor.execute("""
-                        INSERT INTO transaction (user_id, tool_id, type, borrow_date, purpose, status, condition_at_borrow, project_id) 
-                        VALUES (%s, %s, 'Issue', NOW(), %s, 'Active', %s, %s)
-                    """, (self.active_borrow_user_id, item['id'], purpose, item['cond'], proj_id))
-                    transaction_ids.append(str(cursor.lastrowid))
-                receipt_tool_list.append(f"{item['name']} (Qty: {item['qty_borrowed']})")
-                
-            cursor.execute("""
-                SELECT pr.req_id, pr.tool_id, pr.quantity as req_qty,
-                       (SELECT COUNT(*) FROM transaction WHERE project_id = %s AND tool_id = pr.tool_id AND type = 'Issue' AND status = 'Active') as total_issued
-                FROM project_requirements pr WHERE pr.project_id = %s
-            """, (proj_id, proj_id))
-            reqs = cursor.fetchall()
-            
-            all_fulfilled = True
-            for r in reqs:
-                if float(r['total_issued']) >= float(r['req_qty']):
-                    cursor.execute("UPDATE project_requirements SET status = 'Fulfilled' WHERE req_id = %s", (r['req_id'],))
-                else: all_fulfilled = False
-                    
-            if all_fulfilled:
-                cursor.execute("UPDATE projects SET status = 'Ongoing' WHERE project_id = %s", (proj_id,))
-            
-            conn.commit()
-            
-            total_items = sum(item['qty_borrowed'] for item in self.borrow_cart)
-            msg = f"{total_items} items issued successfully! Generating receipt..."
-            if all_fulfilled: msg += "\n\nAll tools fulfilled! Project status automatically updated to 'Ongoing'."
-            messagebox.showinfo("Success", msg, parent=self.issuance_modal)
-            
-            master_trans_id = f"{transaction_ids[0]}-{transaction_ids[-1]}" if len(transaction_ids) > 1 else str(transaction_ids[0])
-            self.print_master_receipt(master_trans_id, self.active_borrow_user_name, receipt_tool_list, purpose)
-            
-            self.issuance_modal.destroy()
-            self.load_transaction_history()
+            # [CONCURRENCY] ONE transaction: lock stock + project quota, re-validate, decrement, record, commit (or roll back all)
+            res = iss.issue(self.user_info, self.active_borrow_user_id, proj_id, cart, selected_proj)
         except Exception as e:
-            messagebox.showerror("Database Error", str(e), parent=self.issuance_modal)
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
+            return messagebox.showerror("Could not issue", friendly_message(e), parent=self.issuance_modal)
+
+        threading.Thread(target=lambda: tool_cache.refresh_changed(), daemon=True).start()   # other screens see the new stock at once
+        receipt_tool_list = [f"{name} (Qty: {_fmt_qty(qty)})" for name, qty in res.receipt_lines]
+        total_items = sum(qty for _, qty in res.receipt_lines)
+        msg = f"{_fmt_qty(total_items)} item(s) issued successfully! Generating receipt..."
+        if res.all_fulfilled:
+            msg += "\n\nAll tools fulfilled!"
+            if res.project_now_ongoing:
+                msg += " Project status automatically updated to 'Ongoing'."
+        messagebox.showinfo("Success", msg, parent=self.issuance_modal)
+
+        ids = res.transaction_ids
+        master_trans_id = f"{ids[0]}-{ids[-1]}" if len(ids) > 1 else str(ids[0])
+        self.print_master_receipt(master_trans_id, self.active_borrow_user_name, receipt_tool_list, selected_proj,
+                                  issued_at=res.issued_at)
+
+        self.issuance_modal.destroy()
+        self.load_transaction_history()
 
     # ── Receipt helpers ────────────────────────────────────────────
     def _load_receipt_font(self, filename, size):
@@ -1174,7 +1112,7 @@ class IssuanceView(ctk.CTkFrame):
         except TypeError:
             return ImageFont.load_default()
 
-    def _build_receipt_image(self, trans_id_range, b_name, tool_names, purpose):
+    def _build_receipt_image(self, trans_id_range, b_name, tool_names, purpose, issued_at=None):
         W = 800
         LINE = 40
         H = 280 + max(60, len(tool_names) * LINE) + 120
@@ -1195,7 +1133,12 @@ class IssuanceView(ctk.CTkFrame):
         draw.text((30, 56), "MASTER DEPLOYMENT RECEIPT", fill="#A8D5BA", font=f_sub)
 
         # Transaction metadata
-        current_time = datetime.now().strftime("%B %d, %Y  —  %I:%M %p")
+        # [4-DATE] the receipt shows when the tools were ISSUED (server clock, from the transaction), never the clock of
+        # the PC that prints it, so a reprint always matches the record and LAN PCs with drifting clocks cannot disagree.
+        if hasattr(issued_at, "strftime"):
+            current_time = issued_at.strftime("%B %d, %Y  —  %I:%M %p")
+        else:
+            current_time = str(issued_at) if issued_at else "—"
         y = 110
         meta = [
             ("Transaction:",  f"TRN-[{trans_id_range}]"),
@@ -1226,9 +1169,9 @@ class IssuanceView(ctk.CTkFrame):
 
         return img
 
-    def print_master_receipt(self, trans_id_range, b_name, tool_names, purpose):
+    def print_master_receipt(self, trans_id_range, b_name, tool_names, purpose, issued_at=None):
         try:
-            img = self._build_receipt_image(trans_id_range, b_name, tool_names, purpose)
+            img = self._build_receipt_image(trans_id_range, b_name, tool_names, purpose, issued_at)
 
             # ── Instant in-app preview ────────────────────────────
             preview = ctk.CTkToplevel(self)
@@ -1282,121 +1225,64 @@ class IssuanceView(ctk.CTkFrame):
             self.r_tag_id.delete(0, 'end')
             return
 
-        tag_input = self.r_tag_id.get().strip()
-        if not tag_input: return
-        
-        search_val = tag_input
-        if tag_input.upper().startswith("TRN-"):
-            search_val = tag_input.upper().replace("TRN-", "").split("-")[0]
-
-        conn = get_connection()
-        if not conn: return
+        raw = self.r_tag_id.get().strip()
+        if not raw: return
         try:
-            cursor = conn.cursor(dictionary=True)
-            if search_val.isdigit():
-                cursor.execute("SELECT tool_id FROM transaction WHERE transaction_id = %s AND user_id = %s AND status = 'Active'", (search_val, self.active_return_user_id))
-            else:
-                cursor.execute("SELECT tool_id FROM tool WHERE tag_id = %s", (search_val,))
-                
-            target_tool = cursor.fetchone()
-            if not target_tool:
-                self.r_record_info.configure(text="❌ No active records found for this Tag/TRN combo.", text_color="#D8000C")
-                return
-
-            query = """
-                SELECT t.tool_id, t.name, IFNULL(t.item_type, 'Equipment') as item_type, COUNT(tr.transaction_id) as active_borrows
-                FROM transaction tr
-                JOIN tool t ON tr.tool_id = t.tool_id
-                WHERE tr.tool_id = %s AND tr.status = 'Active' AND tr.user_id = %s
-                GROUP BY t.tool_id, t.name, t.item_type
-            """
-            cursor.execute(query, (target_tool['tool_id'], self.active_return_user_id))
-            record = cursor.fetchone()
-            
-            if record:
-                self.active_return_tool_id = record['tool_id']
-                self.active_return_item_type = record['item_type']
-                self.max_returnable = record['active_borrows']
-                self.r_record_info.configure(text=f"✓ Tool Identified: {record['name']}\nCurrently Deployed Out: {record['active_borrows']}", text_color="#2ECC71")
-                self.r_qty.delete(0, 'end'); self.r_qty.insert(0, "1")
-            else:
-                self.active_return_tool_id = None; self.active_return_item_type = None; self.max_returnable = 0
-                self.r_record_info.configure(text="❌ No active records found.", text_color="#D8000C")
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
+            rec = iss.find_deployed(self.user_info, self.active_return_user_id, raw)
+        except Exception as e:
+            self.active_return_tool_id = None; self.active_return_item_type = None; self.max_returnable = 0
+            self.r_record_info.configure(text=f"❌ {friendly_message(e)}", text_color="#D8000C")
+            return
+        self.active_return_tool_id = rec['tool_id']
+        self.active_return_item_type = rec['item_type']
+        self.max_returnable = float(rec['deployed'])
+        self.r_record_info.configure(text=f"✓ Tool Identified: {rec['name']}\nCurrently Deployed Out: {_fmt_qty(rec['deployed'])}", text_color="#2ECC71")
+        self.r_qty.delete(0, 'end'); self.r_qty.insert(0, "1")
 
     def verify_return_employee(self):
-        emp_id = self.r_emp_id.get().strip()
-        if not emp_id: return
-        conn = get_connection()
-        if not conn: return
+        raw = self.r_emp_id.get()
+        if not raw.strip(): return
+        scan = v.parse_scan(raw)
+        emp_id = scan.value if scan.kind == "worker" else raw.strip()
         try:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT user_id, full_name, role FROM user WHERE employee_id = %s", (emp_id,))
-            user = cursor.fetchone()
-            if user:
-                self.active_return_user_id = user['user_id']
-                self.r_user_name.configure(text=f"✓ Verified: {user['full_name']} ({user['role']})", text_color="#2ECC71")
-            else:
-                self.active_return_user_id = None
-                self.r_user_name.configure(text="❌ Employee ID not found.", text_color="#D8000C")
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
+            user = iss.verify_returner(self.user_info, emp_id)
+        except Exception as e:
+            self.active_return_user_id = None
+            self.r_user_name.configure(text=f"❌ {friendly_message(e)}", text_color="#D8000C")
+            return
+        self.active_return_user_id = user['user_id']
+        note = "" if user['status'] == 'Active' else f" - account {user['status']}"
+        self.r_user_name.configure(text=f"✓ Verified: {user['full_name']} ({user['role']}){note}", text_color="#2ECC71")
 
     def execute_return(self):
         if not self.active_return_tool_id or not self.active_return_user_id:
             return messagebox.showerror("Error", "Please scan and verify both Employee ID and Tag ID/TRN.", parent=self.retrieval_modal)
-        try:
-            return_qty = float(self.r_qty.get())
-            if return_qty <= 0: raise ValueError
-            
-            if getattr(self, 'active_return_item_type', 'Equipment') != 'Consumable' and not return_qty.is_integer():
-                return messagebox.showerror("Error", "Equipment items must be returned in whole numbers.", parent=self.retrieval_modal)
-        except ValueError:
-            return messagebox.showerror("Error", "Quantity must be a positive number.", parent=self.retrieval_modal)
-            
-        if return_qty > self.max_returnable:
-            return messagebox.showerror("Error", f"Cannot retrieve {return_qty}. You only have {self.max_returnable} deployed.", parent=self.retrieval_modal)
 
         new_cond = self.r_condition.get()
         condition_notes = self.r_condition_desc.get("1.0", "end").strip()
-        conn = get_connection()
-        if not conn: return
+        if new_cond != "Good" and not condition_notes:
+            return messagebox.showwarning("Condition Details Required",
+                                          f"Please describe what is wrong before returning an item as '{new_cond}'.",
+                                          parent=self.retrieval_modal)
         try:
-            cursor = conn.cursor(dictionary=True)
-            rows_to_close = int(return_qty) + (1 if return_qty % 1 > 0 else 0)
-            cursor.execute("SELECT transaction_id FROM transaction WHERE tool_id = %s AND status = 'Active' AND user_id = %s ORDER BY borrow_date ASC LIMIT %s", (self.active_return_tool_id, self.active_return_user_id, rows_to_close))
-            transactions_to_close = cursor.fetchall()
-            
-            for trans in transactions_to_close:
-                cursor.execute("""
-                    UPDATE transaction 
-                    SET status = 'Returned', return_date = NOW(), type = 'Retrieval', condition_at_return = %s, condition_return_notes = %s 
-                    WHERE transaction_id = %s
-                """, (new_cond, condition_notes or None, trans['transaction_id']))
-            
-            if new_cond == "Lost":
-                cursor.execute("UPDATE inventory SET quantity_total = quantity_total - %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
-            elif new_cond in ["Damaged", "Needs Repair"]:
-                # Do NOT restock available quantity, keeping it out of circulation until Maintenance resolves it.
-                pass
-            else:
-                cursor.execute("UPDATE inventory SET quantity_available = quantity_available + %s WHERE tool_id = %s", (return_qty, self.active_return_tool_id))
-            cursor.execute("UPDATE tool SET `condition` = %s WHERE tool_id = %s", (new_cond, self.active_return_tool_id))
-            conn.commit()
-            messagebox.showinfo("Success", f"Successfully retrieved {return_qty} item(s) and restocked inventory!", parent=self.retrieval_modal)
-            
-            msg = f"Successfully retrieved {return_qty:g} item(s)!"
-            if new_cond == "Lost":
-                msg += f"\n\nMarked as 'Lost'. Deducted from Total Inventory.\nAn action item has been created in Maintenance > Issues & Repairs."
-            elif new_cond != "Good":
-                msg += f"\n\nMarked as '{new_cond}'. Restocked but flagged in Maintenance > Issues & Repairs for resolution."
-            else:
-                msg += "\n\nRestocked successfully!"
-                
-            messagebox.showinfo("Success", msg, parent=self.retrieval_modal)
-            
-            self.retrieval_modal.destroy()
-            self.load_transaction_history()
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
+            # [CONCURRENCY][UNHAPPY-PATH] one transaction: close the issuance rows, move the units (stock / maintenance / lost),
+            # create the Maintenance ticket for anything that is not Good, commit. Any failure rolls all of it back.
+            res = iss.retrieve(self.user_info, self.active_return_user_id, self.active_return_tool_id,
+                               self.r_qty.get(), new_cond, condition_notes)
+        except Exception as e:
+            return messagebox.showerror("Could not retrieve", friendly_message(e), parent=self.retrieval_modal)
+
+        threading.Thread(target=lambda: tool_cache.refresh_changed(), daemon=True).start()
+        qty = _fmt_qty(res.quantity)
+        if new_cond == "Good":
+            msg = f"Successfully retrieved {qty} item(s)!\n\nRestocked successfully."
+        elif new_cond == "Lost":
+            msg = (f"Retrieved {qty} item(s) recorded as 'Lost'.\n\nDeducted from Total Inventory. "
+                   f"A ticket (#{res.ticket_id}) was created in Maintenance > Issues & Repairs.")
+        else:
+            msg = (f"Retrieved {qty} item(s) recorded as '{new_cond}'.\n\nThese units are held back from stock; the other units "
+                   f"remain available. A ticket (#{res.ticket_id}) was created in Maintenance > Issues & Repairs.")
+        messagebox.showinfo("Success", msg, parent=self.retrieval_modal)      # shown ONCE
+
+        self.retrieval_modal.destroy()
+        self.load_transaction_history()

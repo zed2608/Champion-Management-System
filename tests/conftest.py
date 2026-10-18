@@ -107,3 +107,18 @@ def legacy_db(make_db):
     cur.close()
     conn.close()
     return d
+
+
+@pytest.fixture
+def svc(fresh_db, monkeypatch):
+    """A migrated test database wired into every service module that uses the process-wide ``db``."""
+    import database
+    from services import issuance_service, security, tool_cache as tc
+    monkeypatch.setattr(security, "db", fresh_db)
+    monkeypatch.setattr(issuance_service, "db", fresh_db)
+    monkeypatch.setattr(database, "db", fresh_db)             # log_action / get_connection
+    monkeypatch.setattr(tc.tool_cache, "_db", fresh_db)
+    monkeypatch.setattr(tc.tool_cache, "_by_id", {})
+    monkeypatch.setattr(tc.tool_cache, "_by_tag", {})
+    monkeypatch.setattr(tc.tool_cache, "_high_water", None)
+    return fresh_db

@@ -36,7 +36,9 @@ def test_issuable_precheck(cached):
         cur.execute("UPDATE tool SET `condition` = 'Damaged' WHERE tool_id = 2")
         cur.execute("UPDATE tool SET is_archived = 1 WHERE tool_id = 3")
     c.refresh_changed()
-    assert not c.by_id(1).issuable and not c.by_id(2).issuable and not c.by_id(3).issuable
+    assert not c.by_id(1).issuable            # no stock
+    assert c.by_id(2).issuable                # condition is only a display flag: other units stay issuable
+    assert not c.by_id(3).issuable            # archived
 
 
 def test_refresh_changed_picks_up_another_terminals_changes_only(cached):

@@ -63,9 +63,9 @@ class ToolRecord:
 
     @property
     def issuable(self) -> bool:
-        """Cheap pre-check for the scan toast. The real check is repeated under lock at commit time."""
-        return (not self.is_archived and self.condition in (None, "", "Good", "Available")
-                and self.quantity_available > 0)
+        """Cheap pre-check for the scan toast. The real check is repeated under lock at commit time.
+        ``condition`` is a display flag only: one damaged unit must not block the other units of the same tool."""
+        return not self.is_archived and self.quantity_available > 0
 
 
 def _record(r: dict) -> ToolRecord:
@@ -170,9 +170,9 @@ class ToolCache:
         self._thread = threading.Thread(target=self._run, name="tool-cache-poller", daemon=True)
         self._thread.start()
 
-    def stop(self):
+    def stop(self, join: bool = True):
         self._stop.set()
-        if self._thread:
+        if join and self._thread:
             self._thread.join(timeout=self._poll + 2)
 
     def _run(self):

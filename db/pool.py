@@ -203,8 +203,15 @@ class Database:
             conn.close()
 
     @contextmanager
-    def transaction(self, dictionary: bool = True, isolation_level: str | None = None):
-        """One ACID unit of work: COMMIT if the block finishes, ROLLBACK on any exception (incl. KeyboardInterrupt)."""
+    def transaction(self, dictionary: bool = True, isolation_level: str | None = "READ COMMITTED"):
+        """One ACID unit of work: COMMIT if the block finishes, ROLLBACK on any exception (incl. KeyboardInterrupt).
+
+        [CONCURRENCY] Default isolation is READ COMMITTED, not MySQL's REPEATABLE READ. Our writes are "lock the rows, re-check,
+        then change them". Under REPEATABLE READ a plain SELECT (e.g. the deployed-quantity check, or the unlocked ``tool`` side of a
+        join) reads the snapshot taken when the transaction's first plain read STARTED, which can be before it finished waiting
+        for another terminal's lock, so it misses that terminal's committed rows (the project-quota race caught by
+        tests/test_issuance_service.py). READ COMMITTED makes every statement see the latest committed data, and the row locks
+        still serialise the terminals."""
         conn = self.raw_connection()
         try:
             conn.start_transaction(isolation_level=isolation_level)
@@ -231,13 +238,13 @@ class Database:
             except Exception:
                 pass
 
-    def run_in_transaction(self, fn, *, retries: int = 1, dictionary: bool = True):
+    def run_in_transaction(self, fn, *, retries: int = 1, dictionary: bool = True, isolation_level: str | None = "READ COMMITTED"):
         """Run ``fn(cursor)`` in a transaction; on deadlock (1213) or lock-wait timeout (1205) rerun it up to
         ``retries`` times. ``fn`` must therefore be safe to run again from the top (no side effects outside the DB)."""
         attempt = 0
         while True:
             try:
-                with self.transaction(dictionary=dictionary) as cur:
+                with self.transaction(dictionary=dictionary, isolation_level=isolation_level) as cur:
                     return fn(cur)
             except mysql_errors.Error as exc:
                 if is_retryable(exc) and attempt < retries:

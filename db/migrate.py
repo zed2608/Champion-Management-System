@@ -223,32 +223,29 @@ def step_backfill(ctx: Ctx):
         ctx.q("INSERT INTO id_sequences (prefix, yr, last_seq) VALUES (%s, %s, %s) "
               "ON DUPLICATE KEY UPDATE last_seq = GREATEST(last_seq, VALUES(last_seq))", (prefix, yr, last))
 
-    # (f) Per-unit condition model. Old behaviour kept damaged/lost units inside quantity_total but out of
-    # quantity_available, so  total - available - deployed  = units that are out of service. Only tools that still have an
-    # OPEN issue are reclassified (all-'Lost' issues -> quantity_lost, otherwise quantity_in_maintenance);
-    # anything else is only reported, never guessed.
+    # (f) Per-unit condition model. Old behaviour kept DAMAGED units inside quantity_total but out of quantity_available, so
+    #     total - available - deployed  = units waiting in maintenance. (Old LOST units were already deducted from the total.)
+    #     Only tools that still have an OPEN non-lost ticket are reclassified; anything else is only reported, never guessed.
     moved = anomalies = 0
     rows = ctx.all("""
         SELECT i.tool_id, i.quantity_total AS tot, i.quantity_available AS av,
                COALESCE((SELECT SUM(t.quantity) FROM `transaction` t
                          WHERE t.tool_id = i.tool_id AND t.status = 'Active'), 0) AS deployed,
-               (SELECT COUNT(*) FROM tool_issues s WHERE s.tool_id = i.tool_id AND s.status = 'Open') AS open_issues,
                (SELECT COUNT(*) FROM tool_issues s WHERE s.tool_id = i.tool_id AND s.status = 'Open'
-                    AND s.condition_flag <> 'Lost') AS open_not_lost
+                    AND s.condition_flag <> 'Lost') AS open_repair
         FROM inventory i
-        WHERE i.quantity_in_maintenance = 0 AND i.quantity_lost = 0""")
+        WHERE i.quantity_in_maintenance = 0""")
     for r in rows:
         residual = r["tot"] - r["av"] - r["deployed"]
         if residual <= 0:
             continue
-        if r["open_issues"] == 0:
+        if r["open_repair"] == 0:
             anomalies += 1
             continue
-        col = "quantity_in_maintenance" if r["open_not_lost"] else "quantity_lost"
-        ctx.q(f"UPDATE inventory SET `{col}` = %s WHERE tool_id = %s", (residual, r["tool_id"]))
+        ctx.q("UPDATE inventory SET quantity_in_maintenance = %s WHERE tool_id = %s", (residual, r["tool_id"]))
         moved += 1
     if moved or anomalies:
-        ctx.note(f"unit-condition backfill: {moved} tools reclassified; {anomalies} tools have unexplained missing units but no open issue (review manually)")
+        ctx.note(f"unit-condition backfill: {moved} tools moved units to maintenance; {anomalies} tools have unexplained missing units but no open repair ticket (review manually)")
 
 
 def step_indexes(ctx: Ctx):
