@@ -28,40 +28,9 @@ class InventoryView(ctk.CTkFrame):
 
         self.tool_hash_table = {}
 
-        self._ensure_inventory_floats()
         self.build_top_bar()
         self.build_main_table()
         self.load_inventory_data()
-
-    def _ensure_inventory_floats(self):
-        """Ensures that the database can actually store fractional quantities for consumables."""
-        conn = get_connection()
-        if conn:
-            try:
-                c = conn.cursor()
-                c.execute(
-                    "ALTER TABLE inventory MODIFY quantity_total FLOAT, MODIFY quantity_available FLOAT, MODIFY minimum_stock FLOAT")
-                
-                # Ensure tool_issues exists before querying for last_checked_date
-                c.execute("""
-                    CREATE TABLE IF NOT EXISTS tool_issues (
-                        issue_id INT AUTO_INCREMENT PRIMARY KEY,
-                        tool_id INT NOT NULL,
-                        reported_by VARCHAR(100),
-                        condition_flag VARCHAR(100),
-                        notes TEXT,
-                        flagged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        is_resolved TINYINT(1) DEFAULT 0,
-                        FOREIGN KEY (tool_id) REFERENCES tool(tool_id)
-                    )
-                """)
-                conn.commit()
-            except Exception:
-                pass
-            finally:
-                if conn.is_connected():
-                    c.close()
-                    conn.close()
 
     def build_top_bar(self):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")

@@ -37,7 +37,6 @@ class LoginApp(ctk.CTk):
         except Exception:
             pass
 
-        self._ensure_login_columns()
 
         self.main_frame = ctk.CTkFrame(self, fg_color="white", corner_radius=10,
                                        border_width=1, border_color="#E0E0E0")
@@ -136,23 +135,17 @@ class LoginApp(ctk.CTk):
         lbl_p.bind("<Button-1>", lambda e: self.open_forgot_password())
 
         self.load_remember_me()
+        self._enforce_schema_current()
 
-    def _ensure_login_columns(self):
-        conn = get_connection()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SHOW COLUMNS FROM `user` LIKE 'failed_attempts'")
-                if not cursor.fetchone():
-                    cursor.execute("ALTER TABLE `user` ADD COLUMN failed_attempts INT DEFAULT 0")
-                cursor.execute("SHOW COLUMNS FROM `user` LIKE 'reset_requested'")
-                if not cursor.fetchone():
-                    cursor.execute("ALTER TABLE `user` ADD COLUMN reset_requested TINYINT(1) DEFAULT 0")
-                conn.commit()
-            except Exception:
-                pass
-            finally:
-                if conn.is_connected(): cursor.close(); conn.close()
+    def _enforce_schema_current(self):
+        """[UNHAPPY-PATH] Schema changes are made by `python -m db.migrate`, never by the screens. If the database is not
+        at the expected version, say so plainly and do not let anyone log in against a half-upgraded database."""
+        from db import db
+        from db.migrate import check_schema_current
+        ok, msg = check_schema_current(db)
+        if not ok and db.online is not False:
+            self.show_error(msg)
+            self.login_button.configure(state="disabled", text="Database needs upgrade")
 
     def format_emp_id(self, event, widget):
         if event.keysym in ('BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 'Tab'):

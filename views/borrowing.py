@@ -559,11 +559,12 @@ class IssuanceView(ctk.CTkFrame):
                 query = """
                     SELECT tr.type, t.name as tool_name, t.tag_id, COUNT(tr.transaction_id) as grouped_qty,
                            u.full_name, tr.status,
-                       DATE_ADD(MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)), INTERVAL 8 HOUR) as b_date,
-                       DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR) as borrow_date_full,
-                       DATE_ADD(MAX(tr.borrow_date), INTERVAL 8 HOUR) as borrow_date_short,
-                       DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR) as return_date_full,
-                       DATE_ADD(MAX(tr.return_date), INTERVAL 8 HOUR) as return_date_short,
+                       -- [4-DATE] server time only: the session time zone (+08:00) is set by db.pool; no client-side hour shifts
+                       MAX(IF(tr.type='Retrieval', tr.return_date, tr.borrow_date)) as b_date,
+                       MAX(tr.borrow_date) as borrow_date_full,
+                       MAX(tr.borrow_date) as borrow_date_short,
+                       MAX(tr.return_date) as return_date_full,
+                       MAX(tr.return_date) as return_date_short,
                            MIN(tr.transaction_id) as first_trn,
                            MAX(tr.transaction_id) as last_trn,
                            IFNULL(MAX(tr.purpose), '—') as purpose,
@@ -1363,10 +1364,6 @@ class IssuanceView(ctk.CTkFrame):
         if not conn: return
         try:
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("SHOW COLUMNS FROM transaction LIKE 'condition_return_notes'")
-            if not cursor.fetchone():
-                cursor.execute("ALTER TABLE transaction ADD COLUMN condition_return_notes TEXT NULL")
-
             rows_to_close = int(return_qty) + (1 if return_qty % 1 > 0 else 0)
             cursor.execute("SELECT transaction_id FROM transaction WHERE tool_id = %s AND status = 'Active' AND user_id = %s ORDER BY borrow_date ASC LIMIT %s", (self.active_return_tool_id, self.active_return_user_id, rows_to_close))
             transactions_to_close = cursor.fetchall()

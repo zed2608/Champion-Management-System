@@ -20,31 +20,12 @@ class ProjectsView(ctk.CTkFrame):
 
         self.req_cart = []
 
-        self._ensure_archive_column()
         self.build_top_tabs()
 
         uid = self.user_info.get("user_id")
         if uid:
             log_action(uid, "Viewed", "Projects",
                        "Opened Project Management module")
-
-    def _ensure_archive_column(self):
-        conn = get_connection()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT COUNT(*) FROM information_schema.COLUMNS 
-                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projects' AND COLUMN_NAME = 'archived_at'
-                """)
-                if cursor.fetchone()[0] == 0:
-                    cursor.execute(
-                        "ALTER TABLE projects ADD COLUMN archived_at TIMESTAMP NULL")
-                conn.commit()
-            except Exception as e:
-                print(f"Archive column check skipped: {e}")
-            finally:
-                conn.close()
 
     def build_top_tabs(self):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")

@@ -21,39 +21,8 @@ class MaintenanceView(ctk.CTkFrame):
             log_action(uid, "Viewed", "Maintenance",
                        "Opened Maintenance module")
 
-    def _ensure_user_archive_columns(self):
-        """Run schema migration in its own connection to avoid cursor state conflicts."""
-        conn = get_connection()
-        if not conn:
-            return
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SHOW COLUMNS FROM `user` LIKE 'status'")
-            has_status = cursor.fetchone() is not None
-            cursor.fetchall()  # drain any remaining rows
-            if not has_status:
-                cursor.execute(
-                    "ALTER TABLE `user` ADD COLUMN status VARCHAR(50) NOT NULL DEFAULT 'Active'"
-                )
-
-            cursor.execute("SHOW COLUMNS FROM `user` LIKE 'archived_at'")
-            has_archived = cursor.fetchone() is not None
-            cursor.fetchall()  # drain
-            if not has_archived:
-                cursor.execute(
-                    "ALTER TABLE `user` ADD COLUMN archived_at DATETIME NULL"
-                )
-            conn.commit()
-        except Exception as e:
-            print(f"[Maintenance] Schema migration warning: {e}")
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
-
     def build_view(self):
         # Run schema migration once before any tab tries to query user columns
-        self._ensure_user_archive_columns()
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=0)
@@ -257,18 +226,6 @@ class MaintenanceView(ctk.CTkFrame):
                 return
 
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tool_issues (
-                    issue_id INT AUTO_INCREMENT PRIMARY KEY,
-                    tool_id INT NOT NULL,
-                    reported_by VARCHAR(100),
-                    condition_flag VARCHAR(100),
-                    notes TEXT,
-                    flagged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    is_resolved TINYINT(1) DEFAULT 0,
-                    FOREIGN KEY (tool_id) REFERENCES tool(tool_id)
-                )
-            """)
-            cursor.execute("""
                 INSERT INTO tool_issues (tool_id, reported_by, condition_flag, notes)
                 VALUES (%s, %s, %s, %s)
             """, (tool["tool_id"], reported_by, condition, notes or "No additional details."))
@@ -339,19 +296,6 @@ class MaintenanceView(ctk.CTkFrame):
                 return
             try:
                 cursor = conn.cursor(dictionary=True)
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS tool_issues (
-                        issue_id INT AUTO_INCREMENT PRIMARY KEY,
-                        tool_id INT NOT NULL,
-                        reported_by VARCHAR(100),
-                        condition_flag VARCHAR(100),
-                        notes TEXT,
-                        flagged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        is_resolved TINYINT(1) DEFAULT 0,
-                        FOREIGN KEY (tool_id) REFERENCES tool(tool_id)
-                    )
-                """)
-                conn.commit()
 
                 # --- THE AUTO-SYNC FIX ---
                 cursor.execute("""
@@ -1209,42 +1153,6 @@ class MaintenanceView(ctk.CTkFrame):
             "db":     os.getenv("DB_NAME", "champion_db"),
         }
 
-    def _ensure_backup_log_table(self):
-        conn = get_connection()
-        if not conn:
-            return
-        try:
-            cursor = conn.cursor()
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS backup_logs (
-                    backup_id   INT AUTO_INCREMENT PRIMARY KEY,
-                    filename    VARCHAR(255),
-                    filepath    TEXT,
-                    file_size   VARCHAR(50),
-                    note        TEXT,
-                    created_by  INT,
-                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    status      VARCHAR(50) DEFAULT 'Success',
-                    type        VARCHAR(20) DEFAULT 'Backup'
-                )
-            """)
-            conn.commit()
-            # Add 'type' column if table already existed without it
-            cursor.execute("SHOW COLUMNS FROM backup_logs LIKE 'type'")
-            has_type = cursor.fetchone() is not None
-            cursor.fetchall()
-            if not has_type:
-                cursor.execute(
-                    "ALTER TABLE backup_logs ADD COLUMN type VARCHAR(20) DEFAULT 'Backup'"
-                )
-            conn.commit()
-        except Exception as e:
-            print(f"[Backup] Table init warning: {e}")
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
-
     def _run_backup(self):
         dest_folder = self._backup_dest_var.get().strip()
         if not dest_folder or dest_folder == "(click Browse to choose folder)":
@@ -1326,7 +1234,6 @@ class MaintenanceView(ctk.CTkFrame):
                     size_str = f"{size_bytes} B"
 
                 # Log to DB
-                self._ensure_backup_log_table()
                 conn = get_connection()
                 if conn:
                     try:
@@ -1353,7 +1260,6 @@ class MaintenanceView(ctk.CTkFrame):
 
             except Exception as e:
                 # Log failure
-                self._ensure_backup_log_table()
                 conn2 = get_connection()
                 if conn2:
                     try:
@@ -1449,7 +1355,6 @@ class MaintenanceView(ctk.CTkFrame):
         # Snapshot existing backup history BEFORE restore wipes the table
         existing_logs = []
         try:
-            self._ensure_backup_log_table()
             _snap_conn = get_connection()
             if _snap_conn:
                 try:
@@ -1497,7 +1402,6 @@ class MaintenanceView(ctk.CTkFrame):
                 # Restore wiped backup_logs — rebuild the table and re-insert all
                 # previous history rows plus this new restore entry.
                 # Truncate first because the restored SQL may already contain old rows.
-                self._ensure_backup_log_table()
                 conn_log = get_connection()
                 if conn_log:
                     try:
@@ -1579,7 +1483,6 @@ class MaintenanceView(ctk.CTkFrame):
         for w in self._backup_hist_scroll.winfo_children():
             w.destroy()
 
-        self._ensure_backup_log_table()
 
         table_inner = ctk.CTkFrame(
             self._backup_hist_scroll, fg_color="transparent")

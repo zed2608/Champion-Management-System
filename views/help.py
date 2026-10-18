@@ -199,39 +199,11 @@ class HelpView(ctk.CTkFrame):
         threading.Thread(target=_init, daemon=True).start()
 
     def _ensure_custom_tables(self):
+        """Seeds default Help content when the tables are empty. Tables come from db/schema.sql (db.migrate); no DDL here."""
         conn = get_connection()
         if conn:
             try:
                 c = conn.cursor()
-                
-                # 1. Clean up incompatible legacy tables (e.g. missing 'id' column)
-                for table in ["help_guides", "help_faqs", "system_requirements"]:
-                    try:
-                        c.execute(f"SHOW TABLES LIKE '{table}'")
-                        if c.fetchone():
-                            c.execute(f"SHOW COLUMNS FROM {table} LIKE 'id'")
-                            if not c.fetchone():
-                                c.execute(f"DROP TABLE {table}")
-                    except Exception as e:
-                        print(f"Cleanup error for {table}: {e}")
-
-                # 2. Create tables
-                c.execute('''CREATE TABLE IF NOT EXISTS help_guides (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255), steps TEXT, is_admin_only BOOLEAN DEFAULT 0, display_order INT DEFAULT 0)''')
-                c.execute('''CREATE TABLE IF NOT EXISTS help_faqs (id INT AUTO_INCREMENT PRIMARY KEY, question VARCHAR(255), answer TEXT, is_admin_only BOOLEAN DEFAULT 0, display_order INT DEFAULT 0)''')
-                c.execute('''CREATE TABLE IF NOT EXISTS system_requirements (id INT AUTO_INCREMENT PRIMARY KEY, req_type VARCHAR(50), component VARCHAR(255), specification TEXT, display_order INT DEFAULT 0)''')
-                
-                # 3. Add missing columns safely if they were missing from an older database state
-                for table in ["help_guides", "help_faqs"]:
-                    try:
-                        c.execute(f"ALTER TABLE {table} ADD COLUMN is_admin_only BOOLEAN DEFAULT 0")
-                    except Exception:
-                        pass
-                        
-                for table in ["help_guides", "help_faqs", "system_requirements"]:
-                    try:
-                        c.execute(f"ALTER TABLE {table} ADD COLUMN display_order INT DEFAULT 0")
-                    except Exception:
-                        pass
                 
                 # Auto-seed default Guide items if table is completely empty
                 c.execute("SELECT COUNT(*) FROM help_guides")
@@ -275,15 +247,6 @@ class HelpView(ctk.CTkFrame):
                     for i, (comp, spec) in enumerate(software_specs):
                         c.execute("INSERT INTO system_requirements (req_type, component, specification, display_order) VALUES ('Software', %s, %s, %s)", (comp, spec, i))
 
-                c.execute('''CREATE TABLE IF NOT EXISTS help_tickets (
-                    ticket_id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id INT,
-                    subject VARCHAR(255),
-                    message TEXT,
-                    admin_reply TEXT,
-                    status VARCHAR(50) DEFAULT 'Open',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )''')
                 conn.commit()
             except Exception as e:
                 print(f"help tables init error: {e}")

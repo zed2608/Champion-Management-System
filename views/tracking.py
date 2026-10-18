@@ -548,18 +548,6 @@ class TrackingView(ctk.CTkFrame):
                 return
             try:
                 cursor = conn.cursor(dictionary=True)
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS system_logs (
-                        log_id INT AUTO_INCREMENT PRIMARY KEY,
-                        user_id INT NULL,
-                        action_type VARCHAR(100),
-                        module VARCHAR(100),
-                        details TEXT,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                conn.commit()
-
                 count_sql = """
                     SELECT COUNT(*) as cnt
                     FROM system_logs sl
