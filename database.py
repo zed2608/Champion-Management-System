@@ -1,6 +1,6 @@
 import os
 import mysql.connector
-from mysql.connector import pooling
+from db import db, DatabaseUnavailable
 from dotenv import load_dotenv
 import qrcode
 import tempfile
@@ -11,24 +11,14 @@ from PIL import Image, ImageDraw, ImageFont
 # Using a LAN host preserves the app logic and only changes which database server is targeted.
 load_dotenv()
 
-_db_pool = None
-
 def get_connection():
-    global _db_pool
+    """Legacy entry point kept so existing views keep working.
+    [CONCURRENCY] Now backed by db.pool: ping + reconnect on checkout, strict session, +08:00 time zone.
+    New code should use ``from db import db`` with ``db.read()`` / ``db.transaction()``.
+    Returns None (as before) when the database cannot be reached."""
     try:
-        if _db_pool is None:
-            _db_pool = pooling.MySQLConnectionPool(
-                pool_name="champion_pool",
-                pool_size=10,
-                pool_reset_session=True,
-                host=os.getenv("DB_HOST", "localhost"),
-                port=int(os.getenv("DB_PORT") or 3306),
-                user=os.getenv("DB_USER", "root"),
-                password=os.getenv("DB_PASS", ""),
-                database=os.getenv("DB_NAME", "champion_db")
-            )
-        return _db_pool.get_connection()
-    except mysql.connector.Error as err:
+        return db.raw_connection()
+    except DatabaseUnavailable as err:
         print(f"Database Connection Error: {err}")
         return None
 
