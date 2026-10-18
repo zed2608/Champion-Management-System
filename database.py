@@ -11,13 +11,44 @@ from PIL import Image, ImageDraw, ImageFont
 # Using a LAN host preserves the app logic and only changes which database server is targeted.
 load_dotenv()
 
+class _LegacyConnection:
+    """What the older screens receive from get_connection().
+    [UNHAPPY-PATH] Their cursors are BUFFERED by default, so a query whose rows are not all fetched can no longer leave an
+    "Unread result" behind (which used to make close() raise, leak the connection, and poison the pool for the next save).
+    close() is also guaranteed to return the connection."""
+
+    def __init__(self, conn):
+        object.__setattr__(self, "_c", conn)
+
+    def cursor(self, *args, **kwargs):
+        kwargs.setdefault("buffered", True)
+        return self._c.cursor(*args, **kwargs)
+
+    def close(self):
+        try:
+            self._c.close()
+        except Exception:
+            from db.pool import _heal
+            _heal(self._c)
+            try:
+                self._c.close()
+            except Exception:
+                pass
+
+    def __getattr__(self, name):
+        return getattr(self._c, name)
+
+    def __setattr__(self, name, value):
+        setattr(self._c, name, value)
+
+
 def get_connection():
     """Legacy entry point kept so existing views keep working.
-    [CONCURRENCY] Now backed by db.pool: ping + reconnect on checkout, strict session, +08:00 time zone.
+    [CONCURRENCY] Backed by db.pool: ping + reconnect on checkout, strict session, +08:00 time zone.
     New code should use ``from db import db`` with ``db.read()`` / ``db.transaction()``.
     Returns None (as before) when the database cannot be reached."""
     try:
-        return db.raw_connection()
+        return _LegacyConnection(db.raw_connection())
     except DatabaseUnavailable as err:
         print(f"Database Connection Error: {err}")
         return None

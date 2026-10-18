@@ -135,3 +135,45 @@ def test_offline_server_raises_safe_error_and_notifies(admin_conn):
     for leak in ("127.0.0.1", "secret-should-never-leak", "2003", "HY000"):
         assert leak not in msg
     assert d.ping() is False
+
+
+# ---- connections left dirty by older screens ("Unread result found") ---------------------------------------------------
+def test_legacy_connections_cannot_leave_unread_results_or_leak_the_pool(fresh_db, monkeypatch):
+    """The old screens run a multi-row SELECT, fetch some of it, and close. That used to raise on close(), leak the connection and
+    poison the pool, so a LATER save failed with a generic error. get_connection() now hands out buffered cursors."""
+    import database
+    monkeypatch.setattr(database, "db", fresh_db)
+    with fresh_db.transaction() as cur:
+        cur.execute("INSERT INTO `user` (employee_id, full_name, role, status) VALUES ('A-1','a','Staff','Active'),('A-2','b','Staff','Active')")
+    for _ in range(30):                                   # pool_size is 8: any leak would exhaust it long before 30
+        conn = database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM `user`")
+        cur.fetchone()                                    # ONE row of two read; the other left unread
+        cur.close()
+        conn.close()
+    for _ in range(10):                                   # and the next saves are fine
+        with fresh_db.transaction() as c:
+            c.execute("UPDATE `user` SET full_name = full_name WHERE employee_id = 'A-1'")
+
+
+def test_pool_heals_a_connection_returned_with_an_unread_result(fresh_db):
+    with fresh_db.transaction() as cur:
+        cur.execute("INSERT INTO `user` (employee_id, full_name, role, status) VALUES ('B-1','a','Staff','Active'),('B-2','b','Staff','Active')")
+    try:
+        for i in range(12):
+            conn = fresh_db.raw_connection()
+            cur = conn.cursor()                               # UNBUFFERED on purpose
+            cur.execute("SELECT * FROM `user`")
+            cur.fetchone()
+            try:
+                conn.close()                                  # may raise 'Unread result found': the dirty connection goes back anyway
+            except Exception:
+                pass
+            with fresh_db.transaction() as c:                 # whichever connection this gets, it must be usable
+                c.execute("UPDATE `user` SET full_name = full_name WHERE employee_id = 'B-1'")
+            with fresh_db.read() as c:
+                c.execute("SELECT COUNT(*) AS n FROM `user`")
+                assert c.fetchone()["n"] == 2, f"iteration {i}"
+    finally:
+        fresh_db.close()                                      # release every connection (a dirty one would block DROP DATABASE)

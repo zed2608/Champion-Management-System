@@ -926,6 +926,10 @@ class IssuanceView(ctk.CTkFrame):
         else:
             self.b_project_menu.configure(values=["No projects needing tools"], state="disabled")
             self.b_project_menu.set("No projects needing tools")
+            # say WHY: an ended / unapproved / fully issued project used to just vanish from the list
+            nl = chr(10)
+            self.b_user_name.configure(text=f"✓ Verified: {b['full_name']} ({b['role']})" + nl + "ℹ " + (nl + "ℹ ").join(b['notices']),
+                                       text_color="#D35400", justify="left")
         self._clear_proj_req_display()
 
     def _clear_proj_req_display(self):

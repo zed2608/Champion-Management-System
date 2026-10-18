@@ -34,15 +34,20 @@ def find_similar_names(name, exclude_tool_id=None):
     return exact, similar[:3]
 
 
+def _blank_if_placeholder(text):
+    return None if not text or text.strip().upper() in ("N/A", "NONE", "TYPE OR SELECT...") else text
+
+
 def _clean_fields(item_type, category, name, description, supplier, location, unit_of_measure, price):
     if item_type not in ITEM_TYPES:
         raise v.ValidationError("Item type must be Equipment or Consumable.")
     return {
         "name": v.clean_text(name, max_len=v.MAX_NAME, field="Product Name"),
         "category": v.clean_text(category, max_len=100, field="Category"),
-        "supplier": v.clean_text(supplier, max_len=100, field="Supplier", required=False) or None,
+        # the item panel DISPLAYS a missing supplier/location as 'N/A'; saving it back must not turn the display text into data
+        "supplier": _blank_if_placeholder(v.clean_text(supplier, max_len=100, field="Supplier", required=False)),
         "description": v.clean_text(description, max_len=v.MAX_NOTES, field="Description", required=False, multiline=True) or None,
-        "location": v.clean_text(location, max_len=100, field="Location", required=False) or None,
+        "location": _blank_if_placeholder(v.clean_text(location, max_len=100, field="Location", required=False)),
         "unit_of_measure": v.clean_text(unit_of_measure, max_len=20, field="Unit of measure"),
         "price": v.parse_price(price if str(price or "").strip() else 0),
     }

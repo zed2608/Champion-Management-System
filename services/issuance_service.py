@@ -50,14 +50,23 @@ def verify_borrower(actor, employee_id) -> dict:
             raise Conflict(f"This account is {u['status']}, so it cannot receive tools.")
         # exact membership through the project_workers junction (the old LIKE '%WKR-2026-001%' also matched WKR-2026-0011)
         cur.execute("""
-            SELECT DISTINCT p.project_id, p.name, p.client
-            FROM projects p
-            JOIN project_workers pw ON pw.project_id = p.project_id AND pw.user_id = %s
-            JOIN project_requirements pr ON pr.project_id = p.project_id
-            WHERE p.status IN ('Approved', 'Ongoing') AND p.archived_at IS NULL
-              AND pr.status <> 'Fulfilled' AND (p.end_date IS NULL OR p.end_date >= CURDATE())
+            SELECT p.project_id, p.name, p.client, p.status, p.end_date, CURDATE() AS today,
+                   EXISTS (SELECT 1 FROM project_requirements pr WHERE pr.project_id = p.project_id AND pr.status <> 'Fulfilled') AS needs_tools
+            FROM projects p JOIN project_workers pw ON pw.project_id = p.project_id AND pw.user_id = %s
+            WHERE p.archived_at IS NULL AND p.status IN ('Pending', 'Approved', 'Ongoing')
             ORDER BY p.project_id""", (u["user_id"],))
-        u["projects"] = cur.fetchall()
+        u["projects"], u["notices"] = [], []
+        for p in cur.fetchall():
+            if p["status"] == "Pending":
+                u["notices"].append(f"'{p['name']}' is still waiting for approval.")
+            elif p["end_date"] is not None and p["end_date"] < p["today"]:
+                u["notices"].append(f"'{p['name']}' ended on {p['end_date']}, so tools can no longer be issued to it.")
+            elif not p["needs_tools"]:
+                u["notices"].append(f"'{p['name']}': all of its required tools have already been issued.")
+            else:
+                u["projects"].append({"project_id": p["project_id"], "name": p["name"], "client": p["client"]})
+        if not u["projects"] and not u["notices"]:
+            u["notices"].append("This employee is not assigned to any active project.")
     return u
 
 

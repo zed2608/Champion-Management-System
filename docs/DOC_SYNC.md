@@ -32,7 +32,7 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 ## A2. Additional rows found during Phase 1
 | # | Topic | Docs say | System does | Decision | Status |
 |---|---|---|---|---|---|
-| 23 | Tagging module (Fig. 118 "Tagging Module (Staff)"; User Manual and Admin Quick Start send users to it) | a Tagging module exists | `views/tagging.py` was orphaned (no sidebar entry, no route) and committed with unresolved merge conflicts | **Decided (you)**: its own sidebar entry for **Admin and Staff**; the print-tag button also stays in the Inventory item panel. **Staff can generate and print tags but cannot change a tool's tag ID once assigned; only Admin can relink or unlink.** Syntax repaired (done); route + the tag-ID permission: step 2g | done (2g) |
+| 23 | Tagging module (Fig. 118 "Tagging Module (Staff)"; User Manual and Admin Quick Start send users to it) | a Tagging module exists | `views/tagging.py` was orphaned (no sidebar entry, no route) and committed with unresolved merge conflicts | **Decided (you)**: its own sidebar entry for **Admin and Staff**; the print-tag button also stays in the Inventory item panel. **Staff can generate and print tags but cannot change a tool's tag ID once assigned; only Admin can relink or unlink.** Syntax repaired (done); route + the tag-ID permission: step 2g | superseded: Tagging removed, folded into Inventory (see A8 row 80) |
 | 24 | "Cancel Project" on a running project | not described in the workflow lists | Admin can cancel an Ongoing project (only when no tool is deployed) | **Keep** (removing it would remove a feature); allowed as `Ongoing -> Cancelled` in `project_transitions`. **Manuscript**: add the edge to the workflow | done in schema |
 | 25 | Time zone | not stated | cloud DB stored UTC and the screens added 8 h; the local server stores Manila time | **Change code**: session time zone +08:00, hacks removed (done). **Manuscript**: state "server time, Asia/Manila". **Data**: shift imported Aiven timestamps +8 h once | done (code); your data move |
 | 26 | "Declined" | a status in the workflow | stored as `Cancelled`, displayed "Declined" | **Change code**: `Declined` exists in `project_transitions`; old rows stay `Cancelled` (cannot tell which were declines). Screens now use it (2e) | done |
@@ -110,13 +110,22 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 | 78 | PDF export vs screen | the PDF always exported all-time data using its own copy of the queries (and ignored the screen's From/To dates) | the PDF uses the **same report service** and the screen's current From/To range; the criteria line states the period | revise the export description |
 | 79 | Tracking | consumable records showed no amount | records of quantity other than 1 show it ("Grease x2.5") | none |
 
-## A8. Tagging module (Phase 2g)
+## A8. Tagging is part of Inventory (Phase 2g, revised after your hand-test)
 | # | Topic | Old behaviour | New behaviour | Manuscript / manual impact |
 |---|---|---|---|---|
-| 80 | Where Tagging is | file existed but was not reachable (no sidebar entry) and would not even load (unresolved merge conflicts) | its own sidebar entry **"Tagging" for Admin and Staff** (Fig. 118); the print-tag button also stays in the Inventory item panel | Admin Quick Start / User Manual already point to it: correct |
-| 81 | What Staff can do there | nothing (everything disabled) | **generate and assign a tag to a tool that has none, and print**; **cannot change an assigned tag; only Admin can relink or unlink** (enforced in the service, so it holds even if the screen is bypassed) | revise Fig. 118 and the Staff guide |
+| 80 | **Separate Tagging module** | a file existed but was never reachable (no sidebar entry) and would not even load (unresolved merge conflicts). I briefly added a sidebar entry in step g because you asked for one earlier | **Removed again (your latest instruction: tagging is integrated in Inventory).** There is no Tagging sidebar entry and `views/tagging.py` is deleted. Everything it did exists in Inventory: the *Needs Tag* / *Already Tagged* filters, the per-item tag panel (generate, assign, unlink, live QR preview, print) and **Batch Print Tags** (tick the checkboxes of tagged items) | **Delete the separate Tagging module (Fig. 118) from the manuscript and from the Admin Quick Start / User Manual; describe tagging under Inventory** |
+| 81 | What Staff can do with tags | nothing (the whole item panel is read-only) | in the **Inventory item panel**: **generate and assign a tag to a tool that has none, and print**; **cannot change an assigned tag; only Admin can relink or unlink** (enforced in the service, so it holds even if the screen is bypassed) | revise the Staff guide |
 | 82 | Auto-generated tag | `TAG-<id>-<CAT>-<SUP>` with whatever characters the category had (could be illegal) | same shape, with only letters/digits kept (e.g. `TAG-007-CUT-BOS`), so it always passes the tag rules | none |
-| 83 | Tag edits | direct SQL in the screen | `inventory_service.assign_tag / unlink_tag`, logged as Tagging actions | none |
+| 83 | Batch-print checkboxes | the box is greyed out for a tool with no tag and nothing explained why | unchanged rule (**only tagged items can be ticked**), now explained in the hint above the table: tick tagged items, then Batch Print Tags | mention in the Inventory section |
+| 84 | Missing / blank supplier and location | the panel shows a blank as 'N/A'; saving an untouched panel stored the text 'N/A' | 'N/A' is never stored as data | none |
+
+## A9. Other fixes from your hand-test
+| # | Topic | Old behaviour | New behaviour |
+|---|---|---|---|
+| 85 | Date pickers | broke with 'Dependency Missing: pip install tkcalendar' in a fresh environment: **tkcalendar was never listed in requirements.txt** (it had been installed by hand) | `tkcalendar==1.6.1` (and `babel==2.18.0`) pinned; a test fails the build if any third-party import is missing from requirements.txt |
+| 86 | 'No projects needing tools' | no explanation | says why for each of the worker's projects: ended on a date, still awaiting approval, all required tools already issued, or not assigned to any active project (the end-date rule itself is unchanged: tools cannot be issued to a project whose end date has passed) |
+| 87 | Unexpected error dialog | 'Something went wrong...' hid the cause completely | the user still sees the safe sentence; the real traceback is printed to the console for the developer |
+| 88 | Connection pool | a screen that left a query result unread made `close()` fail, silently losing a connection from the pool and poisoning the next save (the likely cause of an unexplained 'Something went wrong' on Update) | legacy screens get buffered cursors, the pool replaces a lost connection and heals a dirty one; regression tests |
 
 ## B. ERD (Fig. 92) vs code (AUDIT_FINDINGS 1.12)
 | Item | ERD | Code | Decision |

@@ -74,6 +74,19 @@ def config_from_env(prefix: str = "DB_") -> dict:
     }
 
 
+def _heal(conn):
+    """[UNHAPPY-PATH] A connection can come back from legacy code with an UNREAD result ("Unread result found") or an open
+    transaction. Drain and roll back so the next borrower gets a clean connection instead of a poisoned one."""
+    raw = getattr(conn, "_cnx", conn)
+    for step in ("consume_results", "rollback"):
+        fn = getattr(raw, step, None)
+        if fn:
+            try:
+                fn()
+            except Exception:
+                pass
+
+
 class Database:
     def __init__(self, config: dict | None = None, pool_name: str = "champion_pool"):
         self._config = dict(config) if config else None
@@ -152,6 +165,7 @@ class Database:
         c = self.config
         deadline = time.monotonic() + c["pool_wait"]
         delay = 0.05
+        replaced = 0
         while True:
             try:
                 pool = self._get_pool()
@@ -160,6 +174,18 @@ class Database:
                 raise DatabaseOffline(str(exc)) from exc
             try:
                 conn = pool.get_connection()
+            except mysql_errors.InternalError:
+                # [UNHAPPY-PATH] The connector's own is_connected() check raised "Unread result found" on a connection that a
+                # previous user returned dirty, and it DISCARDED that connection, so the pool silently lost a slot (and would
+                # eventually run dry). Put a fresh connection back and try again; bounded so a real fault cannot loop forever.
+                replaced += 1
+                if replaced > c["pool_size"] + 1:
+                    raise DatabaseOffline("pool kept returning unusable connections")
+                try:
+                    pool.add_connection()
+                except Exception:
+                    pass
+                continue
             except mysql_errors.PoolError as exc:    # all connections busy
                 if time.monotonic() >= deadline:
                     raise PoolExhausted("connection pool exhausted") from exc
@@ -171,9 +197,15 @@ class Database:
                 raise DatabaseOffline(str(exc)) from exc
             try:
                 conn.ping(reconnect=True, attempts=2, delay=1)
-                cur = conn.cursor()
-                cur.execute(_SESSION_SQL)
-                cur.close()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(_SESSION_SQL)
+                    cur.close()
+                except mysql_errors.InternalError:       # "Unread result found": a previous user left it dirty
+                    _heal(conn)
+                    cur = conn.cursor()
+                    cur.execute(_SESSION_SQL)
+                    cur.close()
             except mysql_errors.Error as exc:
                 try:
                     conn.close()

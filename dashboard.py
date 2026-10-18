@@ -13,7 +13,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 # Import Views
 from views.projects import ProjectsView
 from views.inventory import InventoryView
-from views.tagging import TaggingView
 from views.profile import ProfileView
 from services import dashboard_service
 from services.errors import friendly_message
@@ -114,7 +113,6 @@ class DashboardApp(ctk.CTkToplevel):
         ]
 
         nav_items.insert(1, "Project Management")            # Staff see it too, read-only (the screen hides every action)
-        nav_items.insert(3, "Tagging")                       # Admin and Staff: Staff may tag untagged tools and print; only Admin relinks/unlinks
         if is_admin:
             nav_items += ["Reports", "Maintenance", "Role Management"]
 
@@ -503,8 +501,6 @@ class DashboardApp(ctk.CTkToplevel):
                     highlight_low_stock=highlight_low_stock,
                     highlight_tool_id=highlight_tool_id,
                 )
-            elif page_name == "Tagging":
-                self.current_frame = TaggingView(self.main_container, self.user_info)
             elif page_name == "Issuance & Retrieval":
                 self.current_frame = IssuanceView(
                     self.main_container, self.user_info, navigate_to=self.navigate_to_project)

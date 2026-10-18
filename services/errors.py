@@ -9,6 +9,7 @@ import re
 from mysql.connector import errors as mysql_errors
 
 from db import user_message
+from db.errors import is_connection_error
 from services.validators import ValidationError
 
 
@@ -47,4 +48,11 @@ def friendly_message(exc: BaseException) -> str:
             return "This record is linked to other records, so that change is not allowed."
         if errno in (3819, 4025, 1264, 1366, 1406):       # CHECK violated / out of range / bad or too-long value
             return "A value is outside the allowed range."
+    # Anything else is a bug or an unexpected failure: the USER gets the safe sentence, the DEVELOPER gets the real traceback
+    # on the console (otherwise "Something went wrong" would hide the cause forever).
+    if not is_connection_error(exc):
+        import sys
+        import traceback
+        print("UNEXPECTED ERROR (shown to the user as a generic message):", file=sys.stderr)
+        traceback.print_exception(type(exc), exc, exc.__traceback__, file=sys.stderr)
     return user_message(exc)

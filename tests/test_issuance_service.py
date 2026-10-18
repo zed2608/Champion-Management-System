@@ -358,3 +358,29 @@ def test_friendly_messages_never_leak_driver_text(w):
         msg = friendly_message(e.value)
         assert expect in msg and "CHAMPION" not in msg and "1451" not in msg and "(23000)" not in msg
     assert "nothing was saved" in friendly_message(RuntimeError("x")).lower()
+
+
+# ---- "No projects needing tools" must say WHY --------------------------------------------------------------------------
+def test_verify_borrower_explains_why_a_project_is_not_offered(w):
+    d, u, staff, cal, grs, pid = w
+    ended = run(d, "INSERT INTO projects (name, start_date, end_date, status, workers_assigned) VALUES ('Old Job',%s,%s,'Ongoing','WKR-2026-0011')",
+                (TODAY - timedelta(days=60), TODAY - timedelta(days=30)))
+    pending = run(d, "INSERT INTO projects (name, start_date, end_date, status, workers_assigned) VALUES ('Draft Job',%s,%s,'Pending','WKR-2026-0011')",
+                  (TODAY, TODAY + timedelta(days=9)))
+    done = run(d, "INSERT INTO projects (name, start_date, end_date, status, workers_assigned) VALUES ('Done Job',%s,%s,'Approved','WKR-2026-0011')",
+               (TODAY - timedelta(days=2), TODAY + timedelta(days=9)))
+    run(d, "INSERT INTO project_requirements (project_id, tool_id, quantity, status) VALUES (%s,%s,1,'Fulfilled')", (done, cal))
+    run(d, "UPDATE projects SET status='Ongoing' WHERE project_id=%s", (done,))                 # lines are locked once it is Ongoing
+    b = iss.verify_borrower(staff, "WKR-2026-0011")
+    assert b["projects"] == []
+    text = " | ".join(b["notices"])
+    assert f"'Old Job' ended on {TODAY - timedelta(days=30)}" in text
+    assert "'Draft Job' is still waiting for approval" in text
+    assert "'Done Job': all of its required tools have already been issued" in text
+
+
+def test_verify_borrower_for_someone_on_no_project_at_all(w):
+    d, u, staff, cal, grs, pid = w
+    run(d, "INSERT INTO `user` (employee_id, full_name, role, status) VALUES ('WKR-2026-077','Nobody','Worker','Active')")
+    b = iss.verify_borrower(staff, "WKR-2026-077")
+    assert b["projects"] == [] and b["notices"] == ["This employee is not assigned to any active project."]

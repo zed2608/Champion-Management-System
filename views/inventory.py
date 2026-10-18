@@ -223,7 +223,8 @@ class InventoryView(ctk.CTkFrame):
         self.batch_print_btn = ctk.CTkButton(search_frame, text="⎙ Batch Print Tags", width=140, height=38, fg_color="#F1C40F", hover_color="#D4AC0D", text_color="black", font=("Inter", 12, "bold"), command=self.execute_batch_print)
         self.batch_print_btn.pack(side="right", padx=(10, 0))
 
-        hint_text = "💡 Click any row to View" if is_staff else "💡 Click any row to View/Edit"
+        hint_text = ("💡 Click a row to View  ·  tick ☑ tagged items, then Batch Print Tags" if is_staff
+                     else "💡 Click a row to View/Edit  ·  tick ☑ tagged items, then Batch Print Tags")
         ctk.CTkLabel(search_frame, text=hint_text,
                      font=("Inter", 12, "italic"), text_color="gray").pack(side="right", padx=10)
 
@@ -825,17 +826,20 @@ class InventoryView(ctk.CTkFrame):
         current_tag = data.get('tag_id') or ''
         tag_entry.insert(0, current_tag)
 
+        # [RBAC] Admin: assign, relink, unlink.  Staff: may generate/assign a tag ONLY while the tool has none (and can always print).
+        staff_can_tag = is_staff_modal and not current_tag
+        tag_ui = {"save_btn": None}
+
         def generate_smart_tag():
+            import re
+            tag_entry.configure(state="normal")
             tag_entry.delete(0, 'end')
-            cat_prefix = str(cat_entry.get())[
-                :3].upper() if cat_entry.get() else "GEN"
-            sup_prefix = str(sup_entry.get())[
-                :3].upper() if sup_entry.get() else "UNK"
-            smart_tag = f"TAG-{str(lookup_id).zfill(3)}-{cat_prefix}-{sup_prefix}"
+            clean = lambda v, fallback: re.sub(r"[^A-Z0-9]", "", str(v or "").upper())[:3] or fallback   # tags allow letters, digits, dashes
+            smart_tag = f"TAG-{str(lookup_id).zfill(3)}-{clean(cat_entry.get(), 'GEN')}-{clean(sup_entry.get(), 'UNK')}"
             tag_entry.insert(0, smart_tag)
             update_preview()
 
-        if not is_staff_modal:
+        if not is_staff_modal or staff_can_tag:
             ctk.CTkButton(tag_row, text="↻ Auto-Gen", width=80, fg_color="#F1C40F", text_color="black",
                           hover_color="#D4AC0D", font=("Inter", 11, "bold"), command=generate_smart_tag).pack(side="left", padx=(5, 0))
 
@@ -852,6 +856,11 @@ class InventoryView(ctk.CTkFrame):
             uid = self.user_info.get("user_id")
             if uid and res['changed']:
                 log_action(uid, "Edited", "Inventory", f"Linked tag {res['tag_id']} to '{res['name']}' (PID: {lookup_id})")
+            if is_staff_modal:                                   # a Staff member cannot change it again
+                tag_entry.configure(state="disabled")
+                if tag_ui["save_btn"] is not None:
+                    tag_ui["save_btn"].configure(state="disabled", text="Tag saved")
+            update_preview()
             messagebox.showinfo("Success", "Tag successfully linked to tool.", parent=modal)
             self.load_inventory_data()
 
@@ -869,13 +878,18 @@ class InventoryView(ctk.CTkFrame):
                 update_preview()
                 self.load_inventory_data()
 
-        if not is_staff_modal:
+        if not is_staff_modal or staff_can_tag:
             tag_btn_row = ctk.CTkFrame(form_scroll, fg_color="transparent")
             tag_btn_row.pack(fill="x", pady=10)
-            ctk.CTkButton(tag_btn_row, text="Save Tag Link", width=120, fg_color="#1E4528", hover_color="#14301C", font=(
-                "Inter", 11, "bold"), command=save_tag).pack(side="left", expand=True, fill="x", padx=(0, 5))
-            ctk.CTkButton(tag_btn_row, text="Unlink Current Tag", width=120, fg_color="white", border_width=1, border_color="#D8000C", text_color="#D8000C",
-                          hover_color="#FFD2D2", font=("Inter", 11, "bold"), command=unlink_tag).pack(side="right", expand=True, fill="x", padx=(5, 0))
+            tag_ui["save_btn"] = ctk.CTkButton(tag_btn_row, text="Save Tag Link", width=120, fg_color="#1E4528", hover_color="#14301C", font=(
+                "Inter", 11, "bold"), command=save_tag)
+            tag_ui["save_btn"].pack(side="left", expand=True, fill="x", padx=(0, 5))
+            if not is_staff_modal:                               # unlinking is Admin only
+                ctk.CTkButton(tag_btn_row, text="Unlink Current Tag", width=120, fg_color="white", border_width=1, border_color="#D8000C", text_color="#D8000C",
+                              hover_color="#FFD2D2", font=("Inter", 11, "bold"), command=unlink_tag).pack(side="right", expand=True, fill="x", padx=(5, 0))
+        elif is_staff_modal and current_tag:
+            ctk.CTkLabel(form_scroll, text="This tool already has a tag. Only an administrator can change or remove it. You can still print it.",
+                         font=("Inter", 10), text_color="gray", justify="left", wraplength=450).pack(anchor="w", pady=(0, 5))
 
         preview_frame = ctk.CTkFrame(
             form_scroll, fg_color="#F9FAFB", corner_radius=10)
@@ -1036,8 +1050,8 @@ class InventoryView(ctk.CTkFrame):
         if is_staff_modal:
             # Staff: lock all fields — view-only. QR Print File button remains accessible.
             for entry_widget in [name_entry, desc_entry, cat_entry, sup_entry,
-                                 price_entry, qty_entry, min_stock_entry, loc_entry, tag_entry]:
-                entry_widget.configure(state="disabled")
+                                 price_entry, qty_entry, min_stock_entry, loc_entry] + ([] if staff_can_tag else [tag_entry]):
+                entry_widget.configure(state="disabled")      # (an untagged tool's tag box stays open for Staff: see staff_can_tag)
             type_menu.configure(state="disabled")
             uom_menu.configure(state="disabled")
             status_menu.configure(state="disabled")
