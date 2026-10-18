@@ -302,12 +302,19 @@ def step_foreign_keys(ctx: Ctx):
         if cur and cur["rule"] in wanted:
             continue
         rt = f"`{rtable}`"
-        add = f"ADD CONSTRAINT `{name}` FOREIGN KEY (`{col}`) REFERENCES {rt} (`{rcol}`) ON DELETE {rule}"
-        drop = f"DROP FOREIGN KEY `{cur['cname']}`, " if cur else ""
+        add = f"ADD CONSTRAINT `{{n}}` FOREIGN KEY (`{col}`) REFERENCES {rt} (`{rcol}`) ON DELETE {{r}}"
         try:
-            ctx.q(f"ALTER TABLE `{table}` {drop}{add}")
-            changed.append(f"{table}.{col}->{rule}")
-        except Exception as exc:  # orphan rows etc.: report, never fail the whole upgrade
+            if cur:
+                # MySQL refuses DROP and ADD of the same constraint name inside one ALTER, so two statements.
+                ctx.q(f"ALTER TABLE `{table}` DROP FOREIGN KEY `{cur['cname']}`")
+            try:
+                ctx.q(f"ALTER TABLE `{table}` " + add.format(n=name, r=rule))
+                changed.append(f"{table}.{col}->{rule}")
+            except Exception:
+                if cur:   # could not add the stricter rule (orphan rows): put the original constraint back
+                    ctx.q(f"ALTER TABLE `{table}` " + add.format(n=cur["cname"], r=cur["rule"]))
+                raise
+        except Exception as exc:  # report, never fail the whole upgrade
             failed.append(f"{table}.{col}: {exc}")
     if changed:
         ctx.note("foreign keys set: " + ", ".join(changed))
@@ -481,13 +488,15 @@ def _guard_host(cfg):
 
 
 def pending(ctx: Ctx):
-    """(steps to run, triggers need applying)."""
-    _ensure_meta_tables(ctx)
-    done = {r["version"] for r in ctx.all("SELECT version FROM schema_migrations")}
-    schema_changed = _meta_get(ctx, "schema_sha256") != schema_hash()
+    """(steps to run, triggers need applying). Read-only: creates nothing."""
+    done, h_schema, h_trig = set(), None, None
+    if ctx.table_exists("schema_migrations"):
+        done = {r["version"] for r in ctx.all("SELECT version FROM schema_migrations")}
+    if ctx.table_exists("schema_meta"):
+        h_schema, h_trig = _meta_get(ctx, "schema_sha256"), _meta_get(ctx, "triggers_sha256")
+    schema_changed = h_schema != schema_hash()
     steps = [s for s in STEPS if s[0] not in done or (s[3] and schema_changed)]
-    trig = _meta_get(ctx, "triggers_sha256") != triggers_hash()
-    return steps, trig
+    return steps, h_trig != triggers_hash()
 
 
 def run(database: Database, *, dry_run=False, backup_file=None, make_backup_now=False,
@@ -521,6 +530,7 @@ def run(database: Database, *, dry_run=False, backup_file=None, make_backup_now=
             if not backup_file:
                 raise MigrationRefused("A fresh backup is required. Re-run with --make-backup (or --backup-file F).")
             verify_backup(Path(backup_file), cfg["database"], max_backup_age_min)
+        _ensure_meta_tables(ctx)     # first change to the database happens only after every safety check passed
         for v, name, fn, _reconcile in steps:
             ctx.notes = []
             log(f"Applying {v}: {name} ...")
