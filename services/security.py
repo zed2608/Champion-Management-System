@@ -21,7 +21,7 @@ from services.validators import parse_id
 ALL_ROLES = ("Admin", "Staff", "Worker")
 
 # Parameters that are DATABASE ids. (tag_id and employee_id are NOT: they are text like 'CAL-001' / 'ADM-2026-001'.)
-DB_ID_PARAMS = frozenset({"tool_id", "project_id", "user_id", "issue_id", "borrower_id", "transaction_id", "req_id"})
+DB_ID_PARAMS = frozenset({"tool_id", "project_id", "user_id", "issue_id", "borrower_id", "transaction_id", "req_id", "guide_id", "faq_id", "ticket_id"})
 
 
 def load_actor(user_id):

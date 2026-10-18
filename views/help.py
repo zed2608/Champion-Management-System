@@ -1,7 +1,7 @@
 import customtkinter as ctk
 from views.ui_thread import UiMixin
 from tkinter import messagebox
-from database import get_connection
+from services import help_service as help_svc
 from services.errors import friendly_message
 
 class HelpView(UiMixin, ctk.CTkFrame):
@@ -29,7 +29,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "The 'Tool Condition Metrics' bar chart breaks down assets by condition (Good, Repair, Damaged, Lost).",
             "The Action Items card is clickable and opens Maintenance directly.",
             "The dashboard auto-refreshes every 5 seconds.",
-            "For security, inactivity for 5 minutes triggers a warning; if ignored for 30 seconds, auto-logout executes.",
+            "For security, inactivity for 15 minutes triggers a warning; if ignored for 30 seconds, auto-logout executes.",
         ]),
         (True, "3. Products / Inventory (Admin)", [
             "Use the left form to register new tools or consumables into the system.",
@@ -201,60 +201,34 @@ class HelpView(UiMixin, ctk.CTkFrame):
             self.post_ui(self.build_ui)
         threading.Thread(target=_init, daemon=True).start()
 
-    def _ensure_custom_tables(self):
-        """Seeds default Help content when the tables are empty. Tables come from db/schema.sql (db.migrate); no DDL here."""
-        conn = get_connection()
-        if conn:
-            try:
-                c = conn.cursor()
-                
-                # Auto-seed default Guide items if table is completely empty
-                c.execute("SELECT COUNT(*) FROM help_guides")
-                if c.fetchone()[0] == 0:
-                    for i, (admin_only, title, points) in enumerate(self.GUIDE_SECTIONS):
-                        steps = "|||".join(points)
-                        c.execute("INSERT INTO help_guides (title, steps, is_admin_only, display_order) VALUES (%s, %s, %s, %s)", (title, steps, admin_only, i))
-                
-                # Auto-seed default FAQs if table is completely empty
-                c.execute("SELECT COUNT(*) FROM help_faqs")
-                if c.fetchone()[0] == 0:
-                    for i, (admin_only, q, a) in enumerate(self.FAQS):
-                        c.execute("INSERT INTO help_faqs (question, answer, is_admin_only, display_order) VALUES (%s, %s, %s, %s)", (q, a, admin_only, i))
-                
-                # Auto-seed default System Requirements if table is completely empty
-                c.execute("SELECT COUNT(*) FROM system_requirements")
-                if c.fetchone()[0] == 0:
-                    hardware_specs = [
-                        ("Processor",        "Intel Core i3 or equivalent (64-bit)"),
-                        ("RAM",              "Minimum 8 GB"),
-                        ("Storage",          "At least 500 MB free disk space"),
-                        ("Operating System", "Windows 10 (64-bit) — recommended and tested"),
-                        ("Display",          "Minimum 1280×720 resolution (1920×1080 recommended)"),
-                        ("Webcam",           "HD Webcam 1080P — required for QR scanning features"),
-                        ("Printer",          "Any standard printer — required for label and receipt printing"),
-                        ("Network",          "LAN connection for database access (no internet required)"),
-                    ]
-                    for i, (comp, spec) in enumerate(hardware_specs):
-                        c.execute("INSERT INTO system_requirements (req_type, component, specification, display_order) VALUES ('Hardware', %s, %s, %s)", (comp, spec, i))
-                        
-                    software_specs = [
-                        ("Python",            "3.11"),
-                        ("Database",          "MySQL 8.0"),
-                        ("GUI Framework",     "Tkinter 8.6 + CustomTkinter 5.2.2"),
-                        ("IDE (Dev)",         "PyCharm Community Edition 2023.3"),
-                        ("QR Code Library",   "qrcode, pyzbar"),
-                        ("Image Processing",  "Pillow (PIL)"),
-                        ("CV Scanner",        "OpenCV (cv2)"),
-                        ("Password Hashing",  "bcrypt"),
-                    ]
-                    for i, (comp, spec) in enumerate(software_specs):
-                        c.execute("INSERT INTO system_requirements (req_type, component, specification, display_order) VALUES ('Software', %s, %s, %s)", (comp, spec, i))
+    HARDWARE_SPECS = [
+    ("Processor",        "Intel Core i3 or equivalent (64-bit)"),
+    ("RAM",              "Minimum 8 GB"),
+    ("Storage",          "At least 500 MB free disk space"),
+    ("Operating System", "Windows 10 (64-bit) — recommended and tested"),
+    ("Display",          "Minimum 1280×720 resolution (1920×1080 recommended)"),
+    ("Webcam",           "HD Webcam 1080P — required for QR scanning features"),
+    ("Printer",          "Any standard printer — required for label and receipt printing"),
+    ("Network",          "LAN connection for database access (no internet required)"),
+    ]
+    SOFTWARE_SPECS = [
+    ("Python",            "3.11"),
+    ("Database",          "MySQL 8.0"),
+    ("GUI Framework",     "Tkinter 8.6 + CustomTkinter 5.2.2"),
+    ("IDE (Dev)",         "PyCharm Community Edition 2023.3"),
+    ("QR Code Library",   "qrcode, pyzbar"),
+    ("Image Processing",  "Pillow (PIL)"),
+    ("CV Scanner",        "OpenCV (cv2)"),
+    ("Password Hashing",  "bcrypt"),
+    ]
 
-                conn.commit()
-            except Exception as e:
-                print(f"help tables init error: {e}")
-            finally:
-                if conn.is_connected(): c.close(); conn.close()
+    def _ensure_custom_tables(self):
+        """Fills EMPTY help tables from the built-in text. Tables come from db/schema.sql (db.migrate); no DDL and no SQL here."""
+        try:
+            help_svc.seed_defaults(self.user_info, self.GUIDE_SECTIONS, self.FAQS, self.HARDWARE_SPECS, self.SOFTWARE_SPECS)
+        except Exception as e:
+            from services.errors import get_logger
+            get_logger().warning("Help content could not be seeded: %s", friendly_message(e))
 
     def build_ui(self):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
@@ -353,59 +327,47 @@ class HelpView(UiMixin, ctk.CTkFrame):
 
         found_any = False
 
-        conn = get_connection()
-        if conn:
-            try:
-                c = conn.cursor(dictionary=True)
-                c.execute("SELECT * FROM help_guides ORDER BY display_order ASC, id ASC")
-                db_guides = c.fetchall()
-                for row in db_guides:
-                    if row["is_admin_only"] and not self.is_admin:
-                        continue
-                    points_db = [p.strip() for p in row["steps"].split("|||") if p.strip()]
-                    if keyword and not self._section_matches(row["title"], points_db, keyword):
-                        continue
+        try:
+            db_guides = help_svc.list_guides(self.user_info)
+            for row in db_guides:
+                if row["is_admin_only"] and not self.is_admin:
+                    continue
+                points_db = [p.strip() for p in row["steps"].split("|||") if p.strip()]
+                if keyword and not self._section_matches(row["title"], points_db, keyword):
+                    continue
 
-                    found_any = True
-                    card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
-                    card.pack(fill="x", padx=10, pady=(0, 6))
+                found_any = True
+                card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
+                card.pack(fill="x", padx=10, pady=(0, 6))
 
-                    title_row = ctk.CTkFrame(card, fg_color="transparent")
-                    title_row.pack(fill="x", padx=14, pady=(8, 3))
-                    
-                    admin_tag = "[Admin Only] " if row["is_admin_only"] else ""
-                    ctk.CTkLabel(title_row, text=f"{admin_tag}{row['title']}", font=("Inter", 12, "bold"), text_color="#1E4528").pack(side="left")
-                    
-                    if self.is_admin:
-                        btn_frame = ctk.CTkFrame(title_row, fg_color="transparent")
-                        btn_frame.pack(side="right")
-                        ctk.CTkButton(btn_frame, text="✎ Edit", width=60, height=24, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), command=lambda r=row: self.open_guide_modal(r)).pack(side="left", padx=(0, 5))
-                        ctk.CTkButton(btn_frame, text="🗑 Remove", width=60, height=24, fg_color="#D8000C", hover_color="#B00000", font=("Inter", 10, "bold"), command=lambda r_id=row['id']: self.delete_guide(r_id)).pack(side="left")
+                title_row = ctk.CTkFrame(card, fg_color="transparent")
+                title_row.pack(fill="x", padx=14, pady=(8, 3))
+                
+                admin_tag = "[Admin Only] " if row["is_admin_only"] else ""
+                ctk.CTkLabel(title_row, text=f"{admin_tag}{row['title']}", font=("Inter", 12, "bold"), text_color="#1E4528").pack(side="left")
+                
+                if self.is_admin:
+                    btn_frame = ctk.CTkFrame(title_row, fg_color="transparent")
+                    btn_frame.pack(side="right")
+                    ctk.CTkButton(btn_frame, text="✎ Edit", width=60, height=24, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), command=lambda r=row: self.open_guide_modal(r)).pack(side="left", padx=(0, 5))
+                    ctk.CTkButton(btn_frame, text="🗑 Remove", width=60, height=24, fg_color="#D8000C", hover_color="#B00000", font=("Inter", 10, "bold"), command=lambda r_id=row['id']: self.delete_guide(r_id)).pack(side="left")
 
-                    for point in points_db:
-                        ctk.CTkLabel(card, text=f"  •  {point}", font=("Inter", 11), text_color="#1A1A1A", wraplength=780, justify="left").pack(anchor="w", padx=14, pady=1)
-                    ctk.CTkFrame(card, height=6, fg_color="transparent").pack()
-            except Exception as e:
-                print(f"Error loading custom guides: {e}")
-            finally:
-                if conn.is_connected(): c.close(); conn.close()
+                for point in points_db:
+                    ctk.CTkLabel(card, text=f"  •  {point}", font=("Inter", 11), text_color="#1A1A1A", wraplength=780, justify="left").pack(anchor="w", padx=14, pady=1)
+                ctk.CTkFrame(card, height=6, fg_color="transparent").pack()
+        except Exception as e:
+            ctk.CTkLabel(scroll, text=friendly_message(e), text_color="red").pack(pady=10)
 
         if not found_any:
             ctk.CTkLabel(scroll, text=f'No sections found for "{keyword}".', text_color="gray").pack(pady=20)
             
     def delete_guide(self, guide_id):
         if not messagebox.askyesno("Confirm Delete", "Are you sure you want to remove this guide?", parent=self.winfo_toplevel()): return
-        conn = get_connection()
-        if conn:
-            try:
-                c = conn.cursor()
-                c.execute("DELETE FROM help_guides WHERE id=%s", (guide_id,))
-                conn.commit()
-                self._render_guide_sections(self._guide_search_entry.get().strip() if hasattr(self, '_guide_search_entry') else "")
-            except Exception as e:
-                messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
-            finally:
-                if conn.is_connected(): c.close(); conn.close()
+        try:
+            help_svc.delete_guide(self.user_info, guide_id)
+            self._render_guide_sections(self._guide_search_entry.get().strip() if hasattr(self, '_guide_search_entry') else "")
+        except Exception as e:
+            messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
 
     def open_guide_modal(self, existing_row=None):
         modal = ctk.CTkToplevel(self)
@@ -467,22 +429,13 @@ class HelpView(UiMixin, ctk.CTkFrame):
             if not t or not steps:
                 return messagebox.showerror("Error", "Title and at least one step are required.", parent=modal)
                 
-            conn = get_connection()
-            if conn:
-                try:
-                    c = conn.cursor()
-                    if existing_row:
-                        c.execute("UPDATE help_guides SET title=%s, steps=%s, is_admin_only=%s, display_order=%s WHERE id=%s", (t, steps, admin_var.get(), s, existing_row['id']))
-                    else:
-                        c.execute("INSERT INTO help_guides (title, steps, is_admin_only, display_order) VALUES (%s, %s, %s, %s)", (t, steps, admin_var.get(), s))
-                    conn.commit()
-                    modal.destroy()
-                    if hasattr(self, '_guide_search_entry'):
-                        self._render_guide_sections(self._guide_search_entry.get().strip())
-                except Exception as e:
-                    messagebox.showerror("Error", friendly_message(e), parent=modal)
-                finally:
-                    if conn.is_connected(): c.close(); conn.close()
+            try:
+                help_svc.save_guide(self.user_info, existing_row['id'] if existing_row else None, t, [e.get() for e in step_entries], admin_var.get(), s)
+                modal.destroy()
+                if hasattr(self, '_guide_search_entry'):
+                    self._render_guide_sections(self._guide_search_entry.get().strip())
+            except Exception as e:
+                messagebox.showerror("Error", friendly_message(e), parent=modal)
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=20)
@@ -522,57 +475,45 @@ class HelpView(UiMixin, ctk.CTkFrame):
         idx = 1
         found_any = False
 
-        conn = get_connection()
-        if conn:
-            try:
-                c = conn.cursor(dictionary=True)
-                c.execute("SELECT * FROM help_faqs ORDER BY display_order ASC, id ASC")
-                db_faqs = c.fetchall()
-                for row in db_faqs:
-                    if row["is_admin_only"] and not self.is_admin:
-                        continue
-                    if keyword and not self._section_matches(row["question"], [row["answer"]], keyword):
-                        continue
+        try:
+            db_faqs = help_svc.list_faqs(self.user_info)
+            for row in db_faqs:
+                if row["is_admin_only"] and not self.is_admin:
+                    continue
+                if keyword and not self._section_matches(row["question"], [row["answer"]], keyword):
+                    continue
 
-                    found_any = True
-                    card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
-                    card.pack(fill="x", padx=10, pady=(0, 6))
+                found_any = True
+                card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
+                card.pack(fill="x", padx=10, pady=(0, 6))
 
-                    q_row = ctk.CTkFrame(card, fg_color="transparent")
-                    q_row.pack(fill="x", padx=14, pady=(10, 2))
-                    
-                    admin_tag = "[Admin Only] " if row["is_admin_only"] else ""
-                    ctk.CTkLabel(q_row, text=f"Q{idx}.  {admin_tag}{row['question']}", font=("Inter", 11, "bold"), text_color="#1E4528", wraplength=650, justify="left").pack(side="left")
+                q_row = ctk.CTkFrame(card, fg_color="transparent")
+                q_row.pack(fill="x", padx=14, pady=(10, 2))
+                
+                admin_tag = "[Admin Only] " if row["is_admin_only"] else ""
+                ctk.CTkLabel(q_row, text=f"Q{idx}.  {admin_tag}{row['question']}", font=("Inter", 11, "bold"), text_color="#1E4528", wraplength=650, justify="left").pack(side="left")
 
-                    if self.is_admin:
-                        btn_frame = ctk.CTkFrame(q_row, fg_color="transparent")
-                        btn_frame.pack(side="right")
-                        ctk.CTkButton(btn_frame, text="✎ Edit", width=60, height=24, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), command=lambda r=row: self.open_faq_modal(r)).pack(side="left", padx=(0, 5))
-                        ctk.CTkButton(btn_frame, text="🗑 Remove", width=60, height=24, fg_color="#D8000C", hover_color="#B00000", font=("Inter", 10, "bold"), command=lambda r_id=row['id']: self.delete_faq(r_id)).pack(side="left")
+                if self.is_admin:
+                    btn_frame = ctk.CTkFrame(q_row, fg_color="transparent")
+                    btn_frame.pack(side="right")
+                    ctk.CTkButton(btn_frame, text="✎ Edit", width=60, height=24, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), command=lambda r=row: self.open_faq_modal(r)).pack(side="left", padx=(0, 5))
+                    ctk.CTkButton(btn_frame, text="🗑 Remove", width=60, height=24, fg_color="#D8000C", hover_color="#B00000", font=("Inter", 10, "bold"), command=lambda r_id=row['id']: self.delete_faq(r_id)).pack(side="left")
 
-                    ctk.CTkLabel(card, text=f"      {row['answer']}", font=("Inter", 11), text_color="#1A1A1A", wraplength=780, justify="left").pack(anchor="w", padx=14, pady=(0, 10))
-                    idx += 1
-            except Exception as e:
-                print(f"Error loading custom FAQs: {e}")
-            finally:
-                if conn.is_connected(): c.close(); conn.close()
+                ctk.CTkLabel(card, text=f"      {row['answer']}", font=("Inter", 11), text_color="#1A1A1A", wraplength=780, justify="left").pack(anchor="w", padx=14, pady=(0, 10))
+                idx += 1
+        except Exception as e:
+            ctk.CTkLabel(scroll, text=friendly_message(e), text_color="red").pack(pady=10)
 
         if not found_any:
             ctk.CTkLabel(scroll, text=f'No FAQs found for "{keyword}".', text_color="gray").pack(pady=20)
             
     def delete_faq(self, faq_id):
         if not messagebox.askyesno("Confirm Delete", "Are you sure you want to remove this FAQ?", parent=self.winfo_toplevel()): return
-        conn = get_connection()
-        if conn:
-            try:
-                c = conn.cursor()
-                c.execute("DELETE FROM help_faqs WHERE id=%s", (faq_id,))
-                conn.commit()
-                self._render_faq_items(self._faq_search_entry.get().strip() if hasattr(self, '_faq_search_entry') else "")
-            except Exception as e:
-                messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
-            finally:
-                if conn.is_connected(): c.close(); conn.close()
+        try:
+            help_svc.delete_faq(self.user_info, faq_id)
+            self._render_faq_items(self._faq_search_entry.get().strip() if hasattr(self, '_faq_search_entry') else "")
+        except Exception as e:
+            messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
 
     def open_faq_modal(self, existing_row=None):
         modal = ctk.CTkToplevel(self)
@@ -616,22 +557,13 @@ class HelpView(UiMixin, ctk.CTkFrame):
             s = int(s) if s.isdigit() else 0
             if not q or not a: return messagebox.showerror("Error", "Question and Answer required.", parent=modal)
             
-            conn = get_connection()
-            if conn:
-                try:
-                    c = conn.cursor()
-                    if existing_row: 
-                        c.execute("UPDATE help_faqs SET question=%s, answer=%s, is_admin_only=%s, display_order=%s WHERE id=%s", (q, a, admin_var.get(), s, existing_row['id']))
-                    else: 
-                        c.execute("INSERT INTO help_faqs (question, answer, is_admin_only, display_order) VALUES (%s, %s, %s, %s)", (q, a, admin_var.get(), s))
-                    conn.commit()
-                    modal.destroy()
-                    if hasattr(self, '_faq_search_entry'):
-                        self._render_faq_items(self._faq_search_entry.get().strip())
-                except Exception as e:
-                    messagebox.showerror("Error", friendly_message(e), parent=modal)
-                finally:
-                    if conn.is_connected(): c.close(); conn.close()
+            try:
+                help_svc.save_faq(self.user_info, existing_row['id'] if existing_row else None, q, a, admin_var.get(), s)
+                modal.destroy()
+                if hasattr(self, '_faq_search_entry'):
+                    self._render_faq_items(self._faq_search_entry.get().strip())
+            except Exception as e:
+                messagebox.showerror("Error", friendly_message(e), parent=modal)
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=20)
@@ -662,13 +594,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
             w.destroy()
 
         def render_table(parent, title, req_type):
-            conn = get_connection()
-            if not conn: return
-            
             try:
-                c = conn.cursor(dictionary=True)
-                c.execute("SELECT * FROM system_requirements WHERE req_type=%s ORDER BY display_order ASC, id ASC", (req_type,))
-                db_rows = c.fetchall()
+                db_rows = help_svc.list_requirements(self.user_info, req_type)
                 if not db_rows: return
 
                 ctk.CTkLabel(parent, text=title, font=("Inter", 13, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(6, 4))
@@ -692,9 +619,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
                         ctk.CTkButton(act, text="✎ Edit", width=50, height=24, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), command=lambda r=db_row: self.open_sysreq_modal(r)).pack(side="left", padx=(0, 4))
                         ctk.CTkButton(act, text="🗑 Remove", width=50, height=24, fg_color="#D8000C", hover_color="#B00000", font=("Inter", 10, "bold"), command=lambda r_id=db_row["id"]: self.delete_sysreq(r_id)).pack(side="left")
             except Exception as e:
-                print(f"Error loading system requirements: {e}")
-            finally:
-                if conn.is_connected(): c.close(); conn.close()
+                ctk.CTkLabel(parent, text=friendly_message(e), text_color="red").pack(pady=10)
 
         render_table(frame, "Hardware Requirements", "Hardware")
         render_table(frame, "Software Requirements", "Software")
@@ -708,17 +633,11 @@ class HelpView(UiMixin, ctk.CTkFrame):
 
     def delete_sysreq(self, req_id):
         if not messagebox.askyesno("Confirm Delete", "Are you sure you want to remove this requirement?", parent=self.winfo_toplevel()): return
-        conn = get_connection()
-        if conn:
-            try:
-                c = conn.cursor()
-                c.execute("DELETE FROM system_requirements WHERE id=%s", (req_id,))
-                conn.commit()
-                self._render_sysreq_content()
-            except Exception as e:
-                messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
-            finally:
-                if conn.is_connected(): c.close(); conn.close()
+        try:
+            help_svc.delete_requirement(self.user_info, req_id)
+            self._render_sysreq_content()
+        except Exception as e:
+            messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
 
     def open_sysreq_modal(self, existing_row=None):
         dialog = ctk.CTkToplevel(self.winfo_toplevel())
@@ -767,21 +686,12 @@ class HelpView(UiMixin, ctk.CTkFrame):
             seq = int(seq) if seq.isdigit() else 0
             if not c_val or not s_val: return messagebox.showerror("Error", "All fields required.", parent=dialog)
             
-            conn = get_connection()
-            if conn:
-                try:
-                    c = conn.cursor()
-                    if existing_row: 
-                        c.execute("UPDATE system_requirements SET req_type=%s, component=%s, specification=%s, display_order=%s WHERE id=%s", (t, c_val, s_val, seq, existing_row['id']))
-                    else: 
-                        c.execute("INSERT INTO system_requirements (req_type, component, specification, display_order) VALUES (%s, %s, %s, %s)", (t, c_val, s_val, seq))
-                    conn.commit()
-                    dialog.destroy()
-                    self._render_sysreq_content()
-                except Exception as e:
-                    messagebox.showerror("Error", friendly_message(e), parent=dialog)
-                finally:
-                    if conn.is_connected(): c.close(); conn.close()
+            try:
+                help_svc.save_requirement(self.user_info, existing_row['id'] if existing_row else None, t, c_val, s_val, seq)
+                dialog.destroy()
+                self._render_sysreq_content()
+            except Exception as e:
+                messagebox.showerror("Error", friendly_message(e), parent=dialog)
 
         btn_row = ctk.CTkFrame(dialog, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=20)
@@ -812,14 +722,14 @@ class HelpView(UiMixin, ctk.CTkFrame):
                     messagebox.showerror("Error", "Subject and message required.", parent=self.winfo_toplevel())
                     return
 
-                db = get_connection()
-                if db:
-                    c = db.cursor()
-                    c.execute("INSERT INTO help_tickets (user_id, subject, message) VALUES (%s, %s, %s)", (self.user_info['user_id'], subj, msg))
-                    db.commit(); c.close(); db.close()
-                    messagebox.showinfo("Success", "Ticket submitted to the Admin.", parent=self.winfo_toplevel())
-                    subj_entry.delete(0, 'end'); msg_entry.delete("1.0", "end")
-                    load_ticket_list()
+                try:
+                    help_svc.submit_ticket(self.user_info, subj, msg)
+                except Exception as e:
+                    messagebox.showerror("Could not send", friendly_message(e), parent=self.winfo_toplevel())
+                    return
+                messagebox.showinfo("Success", "Ticket submitted to the Admin.", parent=self.winfo_toplevel())
+                subj_entry.delete(0, 'end'); msg_entry.delete("1.0", "end")
+                load_ticket_list()
 
             ctk.CTkButton(form_bg, text="Send to Admin", fg_color="#1E4528", hover_color="#14301C", command=submit_ticket).pack(anchor="e", padx=15, pady=(5, 15))
 
@@ -830,16 +740,13 @@ class HelpView(UiMixin, ctk.CTkFrame):
 
         def load_ticket_list():
             for w in scroll.winfo_children(): w.destroy()
-            db = get_connection()
-            if not db: return
             try:
-                c = db.cursor(dictionary=True)
-                if self.is_admin:
-                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id ORDER BY h.status ASC, h.created_at DESC")
-                else:
-                    c.execute("SELECT h.*, u.full_name FROM help_tickets h JOIN user u ON h.user_id = u.user_id WHERE h.user_id = %s ORDER BY h.created_at DESC", (self.user_info['user_id'],))
-
-                for t in c.fetchall():
+                tickets = help_svc.list_tickets(self.user_info)
+            except Exception as e:
+                ctk.CTkLabel(scroll, text=friendly_message(e), text_color="red").pack(pady=10)
+                return
+            try:
+                for t in tickets:
                     card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
                     card.pack(fill="x", pady=5)
 
@@ -865,15 +772,15 @@ class HelpView(UiMixin, ctk.CTkFrame):
                         def send_reply(tid=t['ticket_id'], e=reply_entry):
                             rep = e.get().strip()
                             if not rep: return
-                            cx = get_connection()
-                            cur = cx.cursor()
-                            cur.execute("UPDATE help_tickets SET admin_reply = %s, status = 'Resolved' WHERE ticket_id = %s", (rep, tid))
-                            cx.commit(); cur.close(); cx.close()
+                            try:
+                                help_svc.reply_ticket(self.user_info, tid, rep)
+                            except Exception as ex:
+                                messagebox.showerror("Could not reply", friendly_message(ex), parent=self.winfo_toplevel())
+                                return
                             load_ticket_list()
 
                         ctk.CTkButton(card, text="Reply & Resolve", width=120, height=28, fg_color="#3498DB", hover_color="#2980B9", command=send_reply).pack(anchor="e", padx=15, pady=(0, 10))
-            except Exception: pass
-            finally:
-                if db.is_connected(): c.close(); db.close()
+            except Exception as e:
+                ctk.CTkLabel(scroll, text=friendly_message(e), text_color="red").pack(pady=10)
 
         load_ticket_list()
