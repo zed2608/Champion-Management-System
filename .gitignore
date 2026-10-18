@@ -2,3 +2,14 @@ venv/
 __pycache__/
 .env
 assets/profiles/
+# --- Phase 1 additions ---
+.venv*/
+venv/
+*.pyc
+.env.*
+!.env.example
+!.env.lan.example
+remember_config.json
+*.sql.part
+backups/
+.pytest_cache/
