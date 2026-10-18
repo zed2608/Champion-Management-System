@@ -509,7 +509,7 @@ class DashboardApp(ctk.CTkToplevel):
                     self.main_container, self.user_info)
             elif page_name == "Reports":
                 self.current_frame = ReportsView(
-                    self.main_container, navigate_to_tool=self.navigate_to_tool)
+                    self.main_container, navigate_to_tool=self.navigate_to_tool, user_info=self.user_info)
             elif page_name == "Maintenance":
                 self.current_frame = MaintenanceView(
                     self.main_container, self.user_info)

@@ -5,6 +5,17 @@ from datetime import datetime
 from services.errors import friendly_message
 
 
+
+def _with_quantity(rows):
+    """[QUANTITIES] A consumable issued as 2.5 kg is ONE record: show 'Grease x2.5' so the amount is visible (equipment, quantity 1, is unchanged)."""
+    from services.validators import fmt_qty
+    for r in rows:
+        q = r.get("quantity")
+        if q is not None and q != 1:
+            r["tool_name"] = f"{r['tool_name']} x{fmt_qty(q)}"
+    return rows
+
+
 class TrackingView(ctk.CTkFrame):
     def __init__(self, parent, user_info=None):
         super().__init__(parent, fg_color="transparent")
@@ -196,7 +207,7 @@ class TrackingView(ctk.CTkFrame):
             try:
                 cursor = conn.cursor(dictionary=True)
                 sql = """
-                    SELECT tr.transaction_id, tr.type, t.name as tool_name,
+                    SELECT tr.transaction_id, tr.quantity, tr.type, t.name as tool_name,
                            IFNULL(t.tag_id,'Unassigned') as tag_id,
                            u.full_name,
                        tr.borrow_date,
@@ -213,6 +224,7 @@ class TrackingView(ctk.CTkFrame):
                 sql += " ORDER BY tr.borrow_date DESC LIMIT 200"
                 cursor.execute(sql, params)
                 rows = cursor.fetchall()
+                rows = _with_quantity(rows)
                 self.after(0, lambda: self._render_logs(rows, table_inner, loading_lbl, headers, min_sizes))
             except Exception as e:
                 self.after(0, lambda err=e: loading_lbl.configure(text=friendly_message(err), text_color="red", wraplength=600))
@@ -349,7 +361,7 @@ class TrackingView(ctk.CTkFrame):
             try:
                 cursor = conn.cursor(dictionary=True)
                 sql = """
-                    SELECT tr.transaction_id, u.full_name, t.name as tool_name,
+                    SELECT tr.transaction_id, tr.quantity, u.full_name, t.name as tool_name,
                            IFNULL(t.tag_id,'Unassigned') as tag_id,
                        tr.borrow_date,
                        tr.return_date,
@@ -372,6 +384,7 @@ class TrackingView(ctk.CTkFrame):
                 sql += " ORDER BY tr.borrow_date DESC"
                 cursor.execute(sql, params)
                 rows = cursor.fetchall()
+                rows = _with_quantity(rows)
                 self.after(0, lambda: self._render_audit(rows, table_inner, loading_lbl, headers, min_sizes))
             except Exception as e:
                 self.after(0, lambda err=e: loading_lbl.configure(text=friendly_message(err), text_color="red", wraplength=600))
@@ -726,7 +739,7 @@ class TrackingView(ctk.CTkFrame):
         try:
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
-                SELECT tr.transaction_id, t.name as tool_name,
+                SELECT tr.transaction_id, tr.quantity, t.name as tool_name,
                        IFNULL(t.tag_id,'Unassigned') as tag_id,
                    tr.borrow_date,
                    tr.return_date,
@@ -738,6 +751,7 @@ class TrackingView(ctk.CTkFrame):
                 ORDER BY tr.borrow_date DESC
             """, (user_id,))
             rows = cursor.fetchall()
+            rows = _with_quantity(rows)
 
             if not rows:
                 ctk.CTkLabel(

@@ -10,7 +10,7 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 | 2 | Python version | 3.11 | venv built on 3.14, `.pyc` committed | **Change code/env**: target 3.11 **(you)**; untrack `__pycache__` | Phase 1 / 6 | in progress |
 | 3 | Requirements | CTk, OpenCV, pyzbar, bcrypt, Pillow, Matplotlib, NumPy | also PyQt5/PyQt6; `python-dotenv`, `qrcode` unpinned | **Change code**: remove PyQt, pin both, add pytest **(you)** | Phase 1 | todo |
 | 4 | Inactivity logout | 15 min | 5 min | **Change code**: 15 min + 30 s warning, configurable **(you)** | Phase 3 | todo |
-| 5 | ABC thresholds | A=top 20% items, B=30%, C=50% (Ch. 1-3); Ch. 5 says "top 70%" | cumulative usage share A<=70%, B<=90% (`reports.py:262,1453`) | **Change code**: A = top 20% of tools by usage, B = next 30%, C = last 50% **(you)**. **Manuscript**: the Ch. 5 "top 70%" is a typo | Phase 2 (`report_service`) | todo |
+| 5 | ABC thresholds | A=top 20% items, B=30%, C=50% (Ch. 1-3); Ch. 5 says "top 70%" | cumulative usage share A<=70%, B<=90% (`reports.py:262,1453`) | **Change code**: A = top 20% of tools by usage, B = next 30%, C = last 50% **(you)**. **Manuscript**: the Ch. 5 "top 70%" is a typo | Phase 2 (`report_service`) | done (see A7) |
 | 6 | The 7 reports | brief listed "Inventory Summary" | ABC, Usage, Employee Activity, Project Allocation, Damage/Loss, Low Stock, Overdue | **No change**: the manuscript list is correct; "Inventory Summary" is not a report. Keep all 7 | n/a | done (noted) |
 | 7 | Project workflow | four different lists | Pending > Approved > Ongoing > Completed, Cancelled ("Declined" stored as Cancelled); Ongoing auto-set by issuance | **Change code** to Pending > Approved > Ongoing > Completed, plus Declined and Cancelled, then Archived **(you)**. **Manuscript revised** to this one list. Old rows keep `Cancelled` (cannot tell which were declines) | Phase 1 (enum/trigger) + 2 (state machine) | todo |
 | 8 | Requirement lock | locked once Ongoing / tools deployed | editable while Approved even with tools out; restore sets Approved | **Change code**: trigger + service lock; restore uses `status_before_archive` | Phase 1/2 | todo |
@@ -96,6 +96,19 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 | 68 | Last Admin | could be archived or demoted | **the last active Admin cannot be archived or demoted, and nobody can archive their own account** (race-safe) | add to Role Management |
 | 69 | Dashboard numbers | counted rows | sums of quantity: a consumable of 2.5 kg counts 2.5; total physical = shelf + deployed + in maintenance; "maintenance items" = open tickets; archived employees and tools are excluded | none |
 | 70 | Help editor, backup log, Tagging writes | direct SQL in the screens | **still direct SQL** (Help editor and tickets, backup log: scheduled; Tagging: step g) | n/a |
+
+## A7. Reports, ABC and quantities (Phase 2f, continued)
+| # | Topic | Old behaviour | New behaviour | Manuscript / manual impact |
+|---|---|---|---|---|
+| 71 | ABC thresholds | cumulative usage share: A <= 70%, B <= 90%, C the rest (and the PDF used the same, over all time) | **A = top 20% of tools by rank, B = next 30%, C = last 50%** **(your decision, Ch. 1-3).** The Ch. 5 "A = top 70%" is a manuscript typo. Rule detail: with N ranked tools, A = the first ceil(20% x N), B = up to ceil(50% x N); **a tool never issued in the period is always C** (otherwise a never-used tool could be "high priority" when few tools were used) | state the rule and the never-issued exception |
+| 72 | ABC and archived tools | archived tools disappeared from the totals, so every other percentage shifted when something was archived | archived tools are not ranked, but their usage stays in the **historical total**; every share is measured against that total; the screen shows the historical total, the number of ranked tools and the archived share | add to the ABC section |
+| 73 | "Times Issued" | number of transaction rows | **quantity issued** (units): 3 calipers = 3, 2.5 kg of grease = 2.5. Column renamed "Qty Issued" in the screen and the PDF | rename the column in the figures |
+| 74 | Usage report | "Currently out" = total - available, which also counted units waiting in maintenance | units actually deployed (sum of active issuance quantities) | none |
+| 75 | Employee activity / Project allocation | row counts | quantities (issued, active, retrieved, requested vs issued) | none |
+| 76 | Damage & Loss report | counted rows and valued each row at one unit's price | counts UNITS and values them as price x units; the detail list shows the units | none |
+| 77 | Overdue report | compared the live project end date, using the PC date | uses the due-date snapshot stored at issuance and the server's date; shows the units held; value at risk = price x units | none |
+| 78 | PDF export vs screen | the PDF always exported all-time data using its own copy of the queries (and ignored the screen's From/To dates) | the PDF uses the **same report service** and the screen's current From/To range; the criteria line states the period | revise the export description |
+| 79 | Tracking | consumable records showed no amount | records of quantity other than 1 show it ("Grease x2.5") | none |
 
 ## B. ERD (Fig. 92) vs code (AUDIT_FINDINGS 1.12)
 | Item | ERD | Code | Decision |

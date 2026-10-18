@@ -17,6 +17,7 @@ from services.security import ALL_ROLES
 # Read-only helpers that take no actor and expose no private data (used by the screens for "similar name" prompts).
 UNGUARDED_OK = {("inventory_service", "find_similar_names"), ("project_service", "find_similar_names"),
                 ("user_service", "find_similar_names"),
+                ("report_service", "classify_abc"),          # pure ranking arithmetic: takes rows in, returns rows out, no data access
                 # pre-login entry points: no session exists yet, so there is no role to check (they validate their own input)
                 ("auth_service", "login"), ("auth_service", "request_username_help"), ("auth_service", "request_password_reset")}
 

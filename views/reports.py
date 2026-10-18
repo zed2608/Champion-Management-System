@@ -10,13 +10,23 @@ matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from services.errors import friendly_message
+from services import report_service as rs
+
+
+def _fmt(x) -> str:
+    """Exact quantity for display: 3 -> '3', 2.5 -> '2.5' (never '3.00', never truncated to 2)."""
+    try:
+        return f"{float(x):g}"
+    except (TypeError, ValueError):
+        return str(x)
 
 
 class ReportsView(ctk.CTkFrame):
-    def __init__(self, parent, navigate_to_tool=None):
+    def __init__(self, parent, navigate_to_tool=None, user_info=None):
         super().__init__(parent, fg_color="transparent")
 
         self.navigate_to_tool = navigate_to_tool
+        self.user_info = user_info or {}
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=0)
@@ -190,8 +200,9 @@ class ReportsView(ctk.CTkFrame):
         ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
                       font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("abc")).pack(side="right")
 
-        ctk.CTkLabel(frame, text="Categorizes tools by deployment frequency using the Pareto Principle (80/20).",
-                     font=("Inter", 11), text_color="gray").grid(row=1, column=0, sticky="w", padx=30, pady=(0, 8))
+        self._abc_desc_lbl = ctk.CTkLabel(frame, text="Ranks tools by quantity issued: A = top 20%, B = next 30%, C = last 50%.",
+                                          font=("Inter", 11), text_color="gray", wraplength=900, justify="left")
+        self._abc_desc_lbl.grid(row=1, column=0, sticky="w", padx=30, pady=(0, 8))
 
         self._abc_scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         self._abc_scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
@@ -213,65 +224,32 @@ class ReportsView(ctk.CTkFrame):
         self.abc_pag_frame = ctk.CTkFrame(scroll, fg_color="transparent")
 
         def _fetch_abc():
-            conn = get_connection()
-            if not conn:
-                return
+            # [QUANTITIES] one service call shared with the PDF export; the dates were read on the MAIN thread above
             try:
-                cursor = conn.cursor(dictionary=True)
-                sd = self.start_date.get().strip()
-                ed = self.end_date.get().strip()
-                
-                date_filter = ""
-                params = []
-                if sd:
-                    date_filter += " AND tr.borrow_date >= %s"
-                    params.append(sd)
-                if ed:
-                    date_filter += " AND tr.borrow_date <= %s"
-                    params.append(ed + " 23:59:59")
-
-                cursor.execute("""
-                    SELECT t.tool_id, t.name, COUNT(tr.transaction_id) as usage_count
-                    FROM tool t
-                    LEFT JOIN transaction tr ON t.tool_id = tr.tool_id """ + date_filter + """
-                    WHERE t.is_archived = 0
-                    GROUP BY t.tool_id, t.name
-                    ORDER BY usage_count DESC
-                """, tuple(params))
-                tools = cursor.fetchall()
+                result = rs.abc_analysis(self.user_info, sd, ed)
             except Exception as e:
                 self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
-            self.after(0, lambda: _render_abc(tools))
+            self.after(0, lambda: _render_abc(result))
 
-        def _render_abc(tools):
+        def _render_abc(result):
             if not self.winfo_exists() or not scroll.winfo_exists() or not loading.winfo_exists():
                 return
             loading.destroy()
 
-            total_usage = sum(t['usage_count'] for t in tools) or 1
-            cumulative = 0
+            palette = {"A": ("A (High Priority)", "#2ECC71"), "B": ("B (Medium Priority)", "#F1C40F"), "C": ("C (Low Priority)", "#E74C3C")}
             self._abc_raw_data = []
-            
-            for i, tool in enumerate(tools):
-                cumulative += tool['usage_count']
-                cum_pct = (cumulative / total_usage) * 100
-                if cum_pct <= 70:
-                    category, color = "A (High Priority)", "#2ECC71"
-                elif cum_pct <= 90:
-                    category, color = "B (Medium Priority)", "#F1C40F"
-                else:
-                    category, color = "C (Low Priority)", "#E74C3C"
-                    
+            for d in result["rows"]:
+                category, color = palette[d["category"]]
                 self._abc_raw_data.append({
-                    "rank_raw": i+1, "tool_id": int(tool['tool_id']), "name": tool['name'],
-                    "usage": int(tool['usage_count'] or 0), "cum_pct_raw": cum_pct, "category": category,
-                    "color": color
-                })
+                    "rank_raw": d["rank"], "tool_id": int(d["tool_id"]), "name": d["name"], "usage": d["usage"],
+                    "cum_pct_raw": d["cum_pct"], "category": category, "color": color})
+            c = result["counts"]
+            self._abc_desc_lbl.configure(text=(
+                f"Ranked by quantity issued: A = top 20% of tools, B = next 30%, C = last 50% (tools never issued are always C).   "
+                f"Historical total issued (incl. archived tools): {_fmt(result['historical_total'])}   |   "
+                f"{result['n_active']} active tools ranked (A {c['A']} / B {c['B']} / C {c['C']})   |   "
+                f"archived tools: {_fmt(result['archived_total'])} issued"))
 
             self.abc_current_page = 1
             self.abc_sort_col = "rank_raw"
@@ -306,7 +284,7 @@ class ReportsView(ctk.CTkFrame):
             for w in self.abc_table_inner.winfo_children(): w.destroy()
 
             headers = [("Rank", "rank_raw"), ("Tool ID", "tool_id"), ("Tool Name", "name"),
-                       ("Times Issued", "usage"), ("Cumulative %", "cum_pct_raw"), ("ABC Category", "category")]
+                       ("Qty Issued", "usage"), ("Cumulative %", "cum_pct_raw"), ("ABC Category", "category")]
             weights = [1, 2, 5, 2, 2, 3]
             min_sizes = [50, 80, 200, 120, 120, 140]
 
@@ -426,54 +404,11 @@ class ReportsView(ctk.CTkFrame):
         self._current_loading = loading
 
         def _fetch_usage():
-            conn = get_connection()
-            if not conn:
-                return
             try:
-                cursor = conn.cursor(dictionary=True)
-                
-                sd = self.start_date.get().strip()
-                ed = self.end_date.get().strip()
-                
-                date_filter = ""
-                date_params = []
-                if sd:
-                    date_filter += " AND tr.borrow_date >= %s"
-                    date_params.append(sd)
-                if ed:
-                    date_filter += " AND tr.borrow_date <= %s"
-                    date_params.append(ed + " 23:59:59")
-
-                search_filter = ""
-                search_params = []
-                if search_query:
-                    search_filter = " AND (t.name LIKE %s OR CAST(t.tool_id AS CHAR) LIKE %s OR IFNULL(t.tag_id, '') LIKE %s OR t.condition LIKE %s)"
-                    search_params.extend([f"%{search_query}%", f"%{search_query}%", f"%{search_query}%", f"%{search_query}%"])
-
-                query = f"""
-                    SELECT t.tool_id, t.name,
-                           IFNULL(t.tag_id,'Unassigned') as tag_id,
-                           COUNT(tr.transaction_id) as total_borrowed,
-                           IFNULL(i.quantity_total - i.quantity_available, 0) as currently_out,
-                           IFNULL(i.quantity_available,0) as qty_avail,
-                           t.`condition`
-                    FROM tool t
-                    LEFT JOIN inventory i ON t.tool_id = i.tool_id
-                    LEFT JOIN transaction tr ON t.tool_id = tr.tool_id {date_filter}
-                    WHERE t.is_archived = 0 {search_filter}
-                    GROUP BY t.tool_id, t.name, t.tag_id, i.quantity_total, i.quantity_available, t.`condition`
-                    ORDER BY total_borrowed DESC
-                """
-                params = date_params + search_params
-                cursor.execute(query, tuple(params))
-                rows = cursor.fetchall()
+                rows = rs.usage_report(self.user_info, sd, ed, search_query)
             except Exception as e:
                 self.after(0, lambda err=e: scroll.winfo_exists() and self._show_error(scroll, friendly_message(err)))
                 return
-            finally:
-                if conn and conn.is_connected():
-                    cursor.close()
-                    conn.close()
             self.after(0, lambda: _render_usage_safe(rows))
 
         def _render_usage_safe(rows):
@@ -483,7 +418,7 @@ class ReportsView(ctk.CTkFrame):
 
             self.usage_state["raw_data"] = [
                 {"tool_id": int(r['tool_id']), "name": r['name'], "tag_id": r['tag_id'],
-                 "total_borrowed": int(r['total_borrowed'] or 0), "currently_out": int(r['currently_out'] or 0),
+                 "total_borrowed": r['total_borrowed'], "currently_out": r['currently_out'],
                  "qty_avail": float(r['qty_avail'] or 0), "condition": r['condition']}
                 for r in rows
             ]
@@ -647,42 +582,11 @@ class ReportsView(ctk.CTkFrame):
         if not valid: return
 
         def _fetch_activity():
-            conn = get_connection()
-            if not conn:
-                return
             try:
-                cursor = conn.cursor(dictionary=True)
-                sd = self.start_date.get().strip()
-                ed = self.end_date.get().strip()
-                
-                date_filter = ""
-                params = []
-                if sd:
-                    date_filter += " AND tr.borrow_date >= %s"
-                    params.append(sd)
-                if ed:
-                    date_filter += " AND tr.borrow_date <= %s"
-                    params.append(ed + " 23:59:59")
-
-                cursor.execute("""
-                    SELECT u.employee_id, u.full_name, u.role,
-                           COUNT(tr.transaction_id) as total_borrows,
-                           SUM(CASE WHEN tr.status='Active' THEN 1 ELSE 0 END) as active_borrows,
-                           SUM(CASE WHEN tr.status='Returned' THEN 1 ELSE 0 END) as total_returned
-                    FROM user u
-                    LEFT JOIN transaction tr ON u.user_id = tr.user_id """ + date_filter + """
-                    WHERE IFNULL(u.status, 'Active') != 'Archived'
-                    GROUP BY u.user_id, u.employee_id, u.full_name, u.role
-                    ORDER BY total_borrows DESC
-                """, tuple(params))
-                rows = cursor.fetchall()
+                rows = rs.activity_report(self.user_info, sd, ed)
             except Exception as e:
                 self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
             self.after(0, lambda: _render_activity(rows))
 
         def _render_activity(rows):
@@ -691,8 +595,8 @@ class ReportsView(ctk.CTkFrame):
             for i, row in enumerate(rows):
                 self._activity_raw_data.append({
                     "employee_id": row['employee_id'], "full_name": row['full_name'], "role": row['role'],
-                    "total_borrows": int(row['total_borrows'] or 0), "active_borrows": int(row['active_borrows'] or 0),
-                    "total_returned": int(row['total_returned'] or 0)
+                    "total_borrows": row['total_borrows'], "active_borrows": row['active_borrows'],
+                    "total_returned": row['total_returned']
                 })
 
             # ── Render Activity Bar Chart ───────────────────────
@@ -826,45 +730,11 @@ class ReportsView(ctk.CTkFrame):
         if not valid: return
 
         def _fetch():
-            conn = get_connection()
-            if not conn: return
             try:
-                cursor = conn.cursor(dictionary=True)
-                sd = self.start_date.get().strip()
-                ed = self.end_date.get().strip()
-                
-                params = []
-                date_filter = ""
-                if sd:
-                    date_filter += " AND tr.borrow_date >= %s"
-                    params.append(sd)
-                if ed:
-                    date_filter += " AND tr.borrow_date <= %s"
-                    params.append(ed + " 23:59:59")
-
-                having_clause = " HAVING issued > 0 OR retrieved > 0" if (sd or ed) else ""
-
-                cursor.execute("""
-                    SELECT p.name as project_name, p.client, p.location, p.status,
-                           t.name as tool_name, pr.quantity as requested,
-                           COUNT(tr.transaction_id) as issued,
-                           IFNULL(SUM(CASE WHEN tr.status='Returned' THEN 1 ELSE 0 END), 0) as retrieved,
-                           pr.status as req_status
-                    FROM projects p
-                    JOIN project_requirements pr ON p.project_id = pr.project_id
-                    JOIN tool t ON pr.tool_id = t.tool_id
-                    LEFT JOIN transaction tr ON tr.project_id = p.project_id AND tr.tool_id = t.tool_id """ + date_filter + """
-                    WHERE p.archived_at IS NULL
-                    GROUP BY p.project_id, t.tool_id, pr.quantity, pr.status
-                    """ + having_clause + """
-                    ORDER BY p.status ASC, p.name ASC, t.name ASC
-                """, params)
-                rows = cursor.fetchall()
+                rows = rs.allocation_report(self.user_info, sd, ed)
             except Exception as e:
                 self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            finally:
-                if conn.is_connected(): cursor.close(); conn.close()
             self.after(0, lambda: _render(rows))
 
         def _render(rows):
@@ -881,9 +751,9 @@ class ReportsView(ctk.CTkFrame):
                     pn = pn[:16] + ".." if len(pn) > 16 else pn
                     if pn not in proj_totals:
                         proj_totals[pn] = {"requested": 0, "issued": 0, "retrieved": 0}
-                    proj_totals[pn]["requested"] += int(r['requested'])
-                    proj_totals[pn]["issued"] += int(r['issued'])
-                    proj_totals[pn]["retrieved"] += int(r['retrieved'])
+                    proj_totals[pn]["requested"] += r['requested']
+                    proj_totals[pn]["issued"] += r['issued']
+                    proj_totals[pn]["retrieved"] += r['retrieved']
                 top_projs = list(proj_totals.items())[:8]
                 if top_projs:
                     labels = [p[0] for p in top_projs]
@@ -926,11 +796,11 @@ class ReportsView(ctk.CTkFrame):
             STATUS_COLORS = {"Ongoing": "#2ECC71", "Approved": "#3498DB", "Pending": "#F39C12", "Completed": "#95A5A6"}
             for i, row in enumerate(rows):
                 bg = "#F9FAFB" if i % 2 == 0 else "white"
-                still_out = int(row['issued']) - int(row['retrieved'])
+                still_out = row['issued'] - row['retrieved']
                 flag = "⚠ Unreturned" if still_out > 0 and row['status'] in ("Completed",) else ("Active" if still_out > 0 else "—")
                 vals = [str(row['project_name'] or 'Unknown'), str(row['client'] or 'Unknown'), str(row['location'] or "—"), str(row['status'] or 'Pending'),
-                        str(row['tool_name'] or 'Unknown'), str(int(row['requested'] or 0)), str(int(row['issued'] or 0)),
-                        str(int(row['retrieved'] or 0)), str(flag)]
+                        str(row['tool_name'] or 'Unknown'), _fmt(row['requested']), _fmt(row['issued']),
+                        _fmt(row['retrieved']), str(flag)]
                 for col, val in enumerate(vals):
                     cell = ctk.CTkFrame(self._alloc_table, fg_color=bg, corner_radius=0)
                     cell.grid(row=i+1, column=col, sticky="nsew")
@@ -974,56 +844,12 @@ class ReportsView(ctk.CTkFrame):
         if not valid: return
 
         def _fetch():
-            conn = get_connection()
-            if not conn: return
             try:
-                cursor = conn.cursor(dictionary=True)
-                sd = self.start_date.get().strip()
-                ed = self.end_date.get().strip()
-                
-                params = []
-                date_filter = ""
-                if sd:
-                    date_filter += " AND tr.return_date >= %s"
-                    params.append(sd)
-                if ed:
-                    date_filter += " AND tr.return_date <= %s"
-                    params.append(ed + " 23:59:59")
-
-                cursor.execute("""
-                    SELECT t.tool_id, t.name, IFNULL(t.price, 0) as price,
-                           tr.condition_at_return as cond_flag,
-                           u.full_name as returned_by,
-                           DATE_FORMAT(tr.return_date, '%Y-%m-%d') as return_date,
-                           IFNULL(tr.condition_return_notes, '—') as notes
-                    FROM transaction tr
-                    JOIN tool t ON tr.tool_id = t.tool_id
-                    LEFT JOIN user u ON tr.user_id = u.user_id
-                    WHERE tr.type = 'Retrieval'
-                      AND tr.condition_at_return IN ('Damaged', 'Lost', 'Needs Repair') """ + date_filter + """
-                    ORDER BY tr.return_date DESC
-                """, params)
-                rows = cursor.fetchall()
-
-                cursor.execute("""
-                    SELECT
-                        SUM(CASE WHEN tr.condition_at_return = 'Lost' THEN IFNULL(t.price, 0) ELSE 0 END) as total_loss,
-                        SUM(CASE WHEN tr.condition_at_return = 'Damaged' THEN IFNULL(t.price, 0) ELSE 0 END) as total_damage,
-                        COUNT(CASE WHEN tr.condition_at_return = 'Lost' THEN 1 END) as count_lost,
-                        COUNT(CASE WHEN tr.condition_at_return = 'Damaged' THEN 1 END) as count_damaged,
-                        COUNT(CASE WHEN tr.condition_at_return = 'Needs Repair' THEN 1 END) as count_repair
-                    FROM transaction tr
-                    JOIN tool t ON tr.tool_id = t.tool_id
-                    WHERE tr.type = 'Retrieval'
-                      AND tr.condition_at_return IN ('Damaged', 'Lost', 'Needs Repair') """ + date_filter + """
-                """, params)
-                summary = cursor.fetchone()
+                res = rs.damage_loss_report(self.user_info, sd, ed)
             except Exception as e:
                 self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            finally:
-                if conn.is_connected(): cursor.close(); conn.close()
-            self.after(0, lambda: _render(rows, summary))
+            self.after(0, lambda: _render(res["rows"], res["summary"]))
 
         def _render(rows, summary):
             if not self.winfo_exists() or not scroll.winfo_exists(): return
@@ -1034,9 +860,9 @@ class ReportsView(ctk.CTkFrame):
             kpis = [
                 ("💸 Total Loss Value", f"₱{float(summary['total_loss'] or 0):,.2f}", "#D8000C"),
                 ("🔨 Total Damage Value", f"₱{float(summary['total_damage'] or 0):,.2f}", "#E67E22"),
-                ("❌ Items Lost", str(summary['count_lost'] or 0), "#D8000C"),
-                ("⚠ Items Damaged", str(summary['count_damaged'] or 0), "#E67E22"),
-                ("🔧 Needs Repair", str(summary['count_repair'] or 0), "#F39C12"),
+                ("❌ Items Lost", _fmt(summary['count_lost']), "#D8000C"),
+                ("⚠ Items Damaged", _fmt(summary['count_damaged']), "#E67E22"),
+                ("🔧 Needs Repair", _fmt(summary['count_repair']), "#F39C12"),
             ]
             for label, val, color in kpis:
                 card = ctk.CTkFrame(self._dmg_summary_frame, fg_color="#F9FAFB", corner_radius=8)
@@ -1046,9 +872,9 @@ class ReportsView(ctk.CTkFrame):
 
             # ── Damage/Loss Pie Chart ───────────────────────────
             for w in self._dmg_chart_frame.winfo_children(): w.destroy()
-            c_lost = int(summary['count_lost'] or 0)
-            c_dmg = int(summary['count_damaged'] or 0)
-            c_rep = int(summary['count_repair'] or 0)
+            c_lost = summary['count_lost']
+            c_dmg = summary['count_damaged']
+            c_rep = summary['count_repair']
             if c_lost + c_dmg + c_rep > 0:
                 fig = Figure(figsize=(5, 2.5), dpi=90)
                 fig.patch.set_facecolor('#FFFFFF')
@@ -1128,31 +954,11 @@ class ReportsView(ctk.CTkFrame):
         self._ls_table = ctk.CTkFrame(scroll, fg_color="transparent")
 
         def _fetch():
-            conn = get_connection()
-            if not conn: return
             try:
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute("""
-                    SELECT t.tool_id, t.name, t.item_type, t.category,
-                           IFNULL(t.supplier, '—') as supplier,
-                           IFNULL(t.unit_of_measure, 'pcs') as uom,
-                           IFNULL(i.quantity_available, 0) as qty_avail,
-                           IFNULL(i.quantity_total, 0) as qty_total,
-                           IFNULL(i.minimum_stock, 0) as minimum_stock,
-                           IFNULL(t.price, 0) as price
-                    FROM tool t
-                    JOIN inventory i ON t.tool_id = i.tool_id
-                    WHERE t.is_archived = 0
-                      AND i.minimum_stock > 0
-                    AND i.quantity_available < i.minimum_stock
-                    ORDER BY (i.quantity_available / NULLIF(i.minimum_stock, 0)) ASC
-                """)
-                rows = cursor.fetchall()
+                rows = rs.low_stock_report(self.user_info)
             except Exception as e:
                 self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            finally:
-                if conn.is_connected(): cursor.close(); conn.close()
             self.after(0, lambda: _render(rows))
 
         def _render(rows):
@@ -1239,43 +1045,11 @@ class ReportsView(ctk.CTkFrame):
         if not valid: return
 
         def _fetch():
-            conn = get_connection()
-            if not conn: return
             try:
-                cursor = conn.cursor(dictionary=True)
-                sd = self.start_date.get().strip()
-                ed = self.end_date.get().strip()
-                
-                params = []
-                date_filter = ""
-                if sd:
-                    date_filter += " AND tr.borrow_date >= %s"
-                    params.append(sd)
-                if ed:
-                    date_filter += " AND tr.borrow_date <= %s"
-                    params.append(ed + " 23:59:59")
-
-                cursor.execute("""
-                    SELECT u.employee_id, u.full_name, t.name as tool_name,
-                           IFNULL(p.name, '—') as project_name,
-                           p.end_date as due_date,
-                           DATEDIFF(CURDATE(), p.end_date) as days_overdue,
-                           tr.borrow_date,
-                           IFNULL(t.price, 0) as price
-                    FROM transaction tr
-                    JOIN user u ON tr.user_id = u.user_id
-                    JOIN tool t ON tr.tool_id = t.tool_id
-                    LEFT JOIN projects p ON tr.project_id = p.project_id
-                    WHERE tr.status = 'Active'
-                      AND p.end_date < CURDATE() """ + date_filter + """
-                    ORDER BY days_overdue DESC
-                """, tuple(params))
-                rows = cursor.fetchall()
+                rows = rs.overdue_report(self.user_info, sd, ed)
             except Exception as e:
                 self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
-            finally:
-                if conn.is_connected(): cursor.close(); conn.close()
             self.after(0, lambda: _render(rows))
 
         def _render(rows):
@@ -1287,7 +1061,7 @@ class ReportsView(ctk.CTkFrame):
             total_overdue = len(rows)
             unique_workers = len(set(r['employee_id'] for r in rows))
             max_days = max((int(r['days_overdue'] or 0) for r in rows), default=0)
-            total_value = sum(float(r['price'] or 0) for r in rows)
+            total_value = sum(float(r['price'] or 0) * float(r['units'] or 1) for r in rows)   # price x UNITS held
 
             kpis = [
                 ("🚨 Overdue Items", str(total_overdue), "#D8000C"),
@@ -1420,179 +1194,68 @@ class ReportsView(ctk.CTkFrame):
     # ==========================================
     # PDF Export (shared across all tabs)
     # ==========================================
+    def _export_rows(self, report_type, sd, ed):
+        """(title, column labels, rows) for the PDF. Uses the SAME report_service queries as the screens, for the screen's date range."""
+        me = self.user_info
+        if report_type == "abc":
+            res = rs.abc_analysis(me, sd, ed)
+            names = {"A": "A (High)", "B": "B (Medium)", "C": "C (Low)"}
+            rows = [[f"#{r['rank']}", str(r["tool_id"]), r["name"], _fmt(r["usage"]), f"{r['cum_pct']:.1f}%", names[r["category"]]]
+                    for r in res["rows"]]
+            rows.append(["", "", f"Historical total issued (incl. archived): {_fmt(res['historical_total'])}", "", "", ""])
+            return "Inventory ABC Analysis Report", ["Rank", "Tool ID", "Tool Name", "Qty Issued", "Cumulative%", "Category"], rows
+        if report_type == "usage":
+            rows = [[str(r["tool_id"]), r["name"], r["tag_id"], _fmt(r["total_borrowed"]), _fmt(r["currently_out"]),
+                     _fmt(r["qty_avail"]), r["condition"]] for r in rs.usage_report(me, sd, ed)]
+            return "Tool Usage Report", ["Tool ID", "Name", "Tag ID", "Qty Issued", "Currently Out", "Qty Avail", "Condition"], rows
+        if report_type == "activity":
+            rows = [[r["employee_id"], r["full_name"], r["role"], _fmt(r["total_borrows"]), _fmt(r["active_borrows"]), _fmt(r["total_returned"])]
+                    for r in rs.activity_report(me, sd, ed)]
+            return "Employee Activity Report", ["Employee ID", "Full Name", "Role", "Qty Issued", "Active", "Retrieved"], rows
+        if report_type == "allocation":
+            rows = [[r["project_name"], r["client"] or "—", r["location"] or "—", r["status"], r["tool_name"], _fmt(r["requested"]),
+                     _fmt(r["issued"]), _fmt(r["retrieved"]),
+                     "Unreturned" if r["issued"] - r["retrieved"] > 0 and r["status"] == "Completed" else "—"]
+                    for r in rs.allocation_report(me, sd, ed)]
+            return "Project Allocation Report", ["Project", "Client", "Location", "Status", "Tool", "Requested", "Issued", "Retrieved", "Flag"], rows
+        if report_type == "damage":
+            res = rs.damage_loss_report(me, sd, ed)
+            rows = [[str(r["tool_id"]), r["name"], f"P{float(r['price']):,.2f}", _fmt(r["units"]), r["cond_flag"], r["returned_by"] or "—",
+                     r["return_date"] or "—", r["notes"]] for r in res["rows"]]
+            sm = res["summary"]
+            rows.append(["", "TOTAL", "", "", f"Lost {_fmt(sm['count_lost'])} / Damaged {_fmt(sm['count_damaged'])} / Repair {_fmt(sm['count_repair'])}",
+                         "", "", f"Loss P{float(sm['total_loss']):,.2f}  Damage P{float(sm['total_damage']):,.2f}"])
+            return "Damage, Loss & Maintenance Report", ["Tool ID", "Tool Name", "Unit Price", "Units", "Condition", "Returned By", "Return Date", "Notes"], rows
+        if report_type == "lowstock":
+            rows = [[str(r["tool_id"]), r["name"], r["item_type"], r["category"], r["supplier"], r["uom"], _fmt(r["qty_avail"]),
+                     _fmt(r["minimum_stock"]), _fmt(max(0, float(r["minimum_stock"]) * 2 - float(r["qty_avail"])))]
+                    for r in rs.low_stock_report(me)]
+            return "Low Stock / Procurement Report", ["PID", "Name", "Type", "Category", "Supplier", "UoM", "Available", "Min Stock", "Reorder Qty"], rows
+        if report_type == "overdue":
+            rows = [[r["employee_id"], r["full_name"], r["tool_name"], r["project_name"],
+                     r["due_date"].strftime("%Y-%m-%d") if r.get("due_date") else "—", f"{int(r['days_overdue'] or 0)} days",
+                     r["borrow_date"].strftime("%Y-%m-%d") if r.get("borrow_date") else "—", _fmt(r["units"]),
+                     f"P{float(r['price']):,.2f}"] for r in rs.overdue_report(me, sd, ed)]
+            return "Overdue Transactions Report", ["Emp ID", "Worker", "Tool", "Project", "Due Date", "Days Overdue", "Issued On", "Units", "Unit Price"], rows
+        return "Report", [], []
+
     def export_pdf(self, report_type, criteria_note=None):
         try:
             canvas_width = 900
             line_h = 28
             timestamp = datetime.now().strftime("%B %d, %Y %I:%M %p")
 
-            conn = get_connection()
-            if not conn:
-                messagebox.showerror("Export Error", "Cannot connect to database.", parent=self.winfo_toplevel())
+            sd, ed, valid = self.get_and_validate_dates()
+            if not valid:
                 return
             try:
-                cursor = conn.cursor(dictionary=True)
-
-                if report_type == "abc":
-                    title = "Inventory ABC Analysis Report"
-                    col_labels = ["Rank", "Tool ID", "Tool Name", "Times Issued", "Cumulative%", "Category"]
-                    cursor.execute("""
-                        SELECT t.tool_id, t.name, COUNT(tr.transaction_id) as usage_count
-                        FROM tool t
-                        LEFT JOIN transaction tr ON t.tool_id = tr.tool_id
-                        WHERE t.is_archived = 0
-                        GROUP BY t.tool_id, t.name
-                        ORDER BY usage_count DESC
-                    """)
-                    tools = cursor.fetchall()
-                    total_usage = sum(t['usage_count'] for t in tools) or 1
-                    cumulative = 0
-                    rows = []
-                    for i, tool in enumerate(tools):
-                        cumulative += tool['usage_count']
-                        cum_pct = (cumulative / total_usage) * 100
-                        cat = "A (High)" if cum_pct <= 70 else ("B (Medium)" if cum_pct <= 90 else "C (Low)")
-                        rows.append([f"#{i+1}", str(tool['tool_id']), tool['name'],
-                                     str(tool['usage_count']), f"{cum_pct:.1f}%", cat])
-
-                elif report_type == "usage":
-                    title = "Tool Usage Report"
-                    col_labels = ["Tool ID", "Name", "Tag ID", "Total Issued", "Currently Out", "Qty Avail", "Condition"]
-                    cursor.execute("""
-                        SELECT t.tool_id, t.name, IFNULL(t.tag_id,'—') as tag_id,
-                               COUNT(tr.transaction_id) as total_borrowed,
-                               IFNULL(i.quantity_total - i.quantity_available, 0) as currently_out,
-                               IFNULL(i.quantity_available,0) as qty_avail,
-                               t.`condition`
-                        FROM tool t
-                        LEFT JOIN inventory i ON t.tool_id = i.tool_id
-                        LEFT JOIN transaction tr ON t.tool_id = tr.tool_id
-                        WHERE t.is_archived = 0
-                        GROUP BY t.tool_id, t.name, t.tag_id, i.quantity_total, i.quantity_available, t.`condition`
-                        ORDER BY total_borrowed DESC
-                    """)
-                    rows = [[str(r['tool_id']), r['name'], r['tag_id'],
-                             str(r['total_borrowed']), str(r['currently_out'] or 0),
-                             f"{float(r['qty_avail']):g}", r['condition']]
-                            for r in cursor.fetchall()]
-
-                elif report_type == "activity":
-                    title = "Employee Activity Report"
-                    col_labels = ["Employee ID", "Full Name", "Role", "Total Issuances", "Active", "Retrieved"]
-                    cursor.execute("""
-                        SELECT u.employee_id, u.full_name, u.role,
-                               COUNT(tr.transaction_id) as total_borrows,
-                               SUM(CASE WHEN tr.status='Active' THEN 1 ELSE 0 END) as active_borrows,
-                               SUM(CASE WHEN tr.status='Returned' THEN 1 ELSE 0 END) as returned_borrows
-                        FROM user u
-                        LEFT JOIN transaction tr ON u.user_id = tr.user_id
-                        WHERE IFNULL(u.status, 'Active') != 'Archived'
-                        GROUP BY u.user_id, u.employee_id, u.full_name, u.role
-                        ORDER BY total_borrows DESC
-                    """)
-                    rows = [[r['employee_id'], r['full_name'], r['role'],
-                             str(r['total_borrows']), str(r['active_borrows'] or 0),
-                             str(r['returned_borrows'] or 0)]
-                            for r in cursor.fetchall()]
-
-                elif report_type == "allocation":
-                    title = "Project Allocation Report"
-                    col_labels = ["Project", "Client", "Location", "Status", "Tool", "Requested", "Issued", "Retrieved", "Flag"]
-                    cursor.execute("""
-                        SELECT p.name as project_name, p.client, p.location, p.status,
-                               t.name as tool_name, pr.quantity as requested,
-                               COUNT(tr.transaction_id) as issued,
-                               IFNULL(SUM(CASE WHEN tr.status='Returned' THEN 1 ELSE 0 END), 0) as retrieved
-                        FROM projects p
-                        JOIN project_requirements pr ON p.project_id = pr.project_id
-                        JOIN tool t ON pr.tool_id = t.tool_id
-                        LEFT JOIN transaction tr ON tr.project_id = p.project_id AND tr.tool_id = t.tool_id
-                        WHERE p.archived_at IS NULL
-                        GROUP BY p.project_id, t.tool_id, pr.quantity, pr.status
-                        ORDER BY p.status ASC, p.name ASC, t.name ASC
-                    """)
-                    rows = [[r['project_name'], r['client'] or '—', r['location'] or '—', r['status'],
-                             r['tool_name'], str(int(r['requested'])), str(int(r['issued'])), str(int(r['retrieved'])),
-                             "Unreturned" if int(r['issued']) - int(r['retrieved']) > 0 and r['status'] == "Completed" else "—"]
-                            for r in cursor.fetchall()]
-
-                elif report_type == "damage":
-                    title = "Damage, Loss & Maintenance Report"
-                    col_labels = ["Tool ID", "Tool Name", "Unit Price", "Condition", "Returned By", "Return Date", "Notes"]
-                    cursor.execute("""
-                        SELECT t.tool_id, t.name, IFNULL(t.price, 0) as price,
-                               tr.condition_at_return as cond_flag,
-                               u.full_name as returned_by,
-                               DATE_FORMAT(tr.return_date, '%Y-%m-%d') as return_date,
-                               IFNULL(tr.condition_return_notes, '—') as notes
-                        FROM transaction tr
-                        JOIN tool t ON tr.tool_id = t.tool_id
-                        LEFT JOIN user u ON tr.user_id = u.user_id
-                        WHERE tr.type = 'Retrieval'
-                          AND tr.condition_at_return IN ('Damaged', 'Lost', 'Needs Repair')
-                        ORDER BY tr.return_date DESC
-                    """)
-                    rows = [[str(r['tool_id']), r['name'], f"P{float(r['price']):,.2f}",
-                             r['cond_flag'], r['returned_by'] or '—', r['return_date'] or '—', r['notes']]
-                            for r in cursor.fetchall()]
-
-                elif report_type == "lowstock":
-                    title = "Low Stock / Procurement Report"
-                    col_labels = ["PID", "Name", "Type", "Category", "Supplier", "UoM", "Available", "Min Stock", "Reorder Qty"]
-                    cursor.execute("""
-                        SELECT t.tool_id, t.name, t.item_type, t.category,
-                               IFNULL(t.supplier, '—') as supplier,
-                               IFNULL(t.unit_of_measure, 'pcs') as uom,
-                               IFNULL(i.quantity_available, 0) as qty_avail,
-                               IFNULL(i.minimum_stock, 0) as minimum_stock
-                        FROM tool t
-                        JOIN inventory i ON t.tool_id = i.tool_id
-                        WHERE t.is_archived = 0
-                          AND i.minimum_stock > 0
-                        AND i.quantity_available < i.minimum_stock
-                        ORDER BY (i.quantity_available / NULLIF(i.minimum_stock, 0)) ASC
-                    """)
-                    rows = [[str(r['tool_id']), r['name'], r['item_type'], r['category'],
-                             r['supplier'], r['uom'], f"{float(r['qty_avail']):g}",
-                             f"{float(r['minimum_stock']):g}",
-                             f"{max(0, float(r['minimum_stock'])*2 - float(r['qty_avail'])):g}"]
-                            for r in cursor.fetchall()]
-
-                elif report_type == "overdue":
-                    title = "Overdue Transactions Report"
-                    col_labels = ["Emp ID", "Worker", "Tool", "Project", "Due Date", "Days Overdue", "Issued On", "Unit Price"]
-                    cursor.execute("""
-                        SELECT u.employee_id, u.full_name, t.name as tool_name,
-                               IFNULL(p.name, '—') as project_name,
-                               p.end_date as due_date,
-                               DATEDIFF(CURDATE(), p.end_date) as days_overdue,
-                               tr.borrow_date,
-                               IFNULL(t.price, 0) as price
-                        FROM transaction tr
-                        JOIN user u ON tr.user_id = u.user_id
-                        JOIN tool t ON tr.tool_id = t.tool_id
-                        LEFT JOIN projects p ON tr.project_id = p.project_id
-                        WHERE tr.status = 'Active'
-                          AND p.end_date < CURDATE()
-                        ORDER BY days_overdue DESC
-                    """)
-                    rows = [[r['employee_id'], r['full_name'], r['tool_name'], r['project_name'],
-                             r['due_date'].strftime('%Y-%m-%d') if r.get('due_date') else '—',
-                             str(int(r['days_overdue'] or 0)) + " days",
-                             r['borrow_date'].strftime('%Y-%m-%d') if r.get('borrow_date') else '—',
-                             f"P{float(r['price']):,.2f}"]
-                            for r in cursor.fetchall()]
-                else:
-                    rows = []
-                    title = "Report"
-                    col_labels = []
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
+                title, col_labels, rows = self._export_rows(report_type, sd, ed)
+            except Exception as e:
+                messagebox.showerror("Export Error", friendly_message(e), parent=self.winfo_toplevel())
+                return
 
             total_rows = len(rows)
-            criteria_parts = ["Period: All Time (No filters applied)"]
+            criteria_parts = ["Period: " + (f"{sd or 'beginning'} to {ed or 'today'}" if (sd or ed) else "All Time (No filters applied)")]
             if criteria_note:
                 criteria_parts.append(f"Notes: {criteria_note}")
             criteria = "  |  ".join(criteria_parts)
