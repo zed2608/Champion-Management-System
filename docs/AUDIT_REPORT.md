@@ -123,3 +123,13 @@ Bodies of `execute_borrow` and `execute_return`, `tracking.py`, the `reports.py`
 - **Fix:** `services.validators.parse_id` and the `@require_role` wrapper now convert text ids to numbers for every database-id parameter (`tool_id`, `project_id`, `user_id`, `issue_id`, `borrower_id`, `transaction_id`, `req_id`); junk ids give "… ID is not valid." This protects every service, not only Inventory.
 - **Diagnosable without a terminal:** unexpected errors are written with the full traceback to `logs/app.log` (rotating, git-ignored) under a code such as `ERR-INV-0417`; the dialog shows the same code and one safe line (no SQL, no driver text).
 - **Regression tests:** `tests/test_inventory_row_click.py` (real table load, real row click, real buttons; 8 tests, all fail without the fix) and `tests/test_error_codes_and_ids.py`.
+
+## Phase 3 (unattended run) — what changed
+| Step | Result |
+|---|---|
+| B1 Scanner | `services/scanner.py` (worker thread + queue, camera probe 0-3 DirectShow then default, remembered in `scanner_config.json`, unplug/reconnect with back-off, 2 s debounce, glare retries, always released) and `views/scan_dialog.py`; used by login, issuance, retrieval and inventory. Tested with a fake camera only. |
+| B2 Backup/restore | `services/backup_service.py`: credentials in a temporary defaults file, any non-zero exit = failure, `.part` + "Dump completed" check before rename, free-space check, SHA-256 in `backup_logs`, restore validates the file and takes an automatic safety backup first, history survives a restore. Bug found while testing the screens: an edit had replaced the Issues tab loader; fixed and covered by `tests/test_paging.py`. Bug found by the suite: two restores in the same second could overwrite each other's safety copy; names are now unique. |
+| B3 Inactivity | 15 min + 30 s warning, configurable in `.env`; "No" on the logout question no longer cancels the timers (it used to leave the session without a timeout and freeze the dashboard refresh). |
+| B4 Paging | `services/paging.py` + `views/paged_table.py`; all tables paged; the audit table no longer loads every row. |
+| B5 Hygiene | `views/ui_thread.py`: worker results only reach widgets through a queue polled on the Tk thread (the old `self.after()` from threads fails with "main thread is not in main loop"); `after()` jobs are cancelled when a screen is destroyed; pyplot figures are closed when leaving the dashboard, report figures are cleared. |
+| B6 Services | `services/help_service.py` (Help editor, tickets) with `@require_role`; backup log writes live in `backup_service`. No screen writes SQL any more. |

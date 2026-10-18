@@ -166,3 +166,14 @@ Restore now (1) validates the file (mysqldump header for THIS database, "Dump co
 
 ## G. Scanner (Phase 3 B1)
 One shared scanner window for login, issuance, retrieval and inventory. The working camera is remembered in `scanner_config.json` (per computer, not in git). A code is ignored for 2 seconds after it was read.
+
+## H. Paging (Phase 3 B4)
+Every table shows one page at a time (10/25/50/100 rows, First/Prev/Next/Last, "Showing 1-25 of N"). User Manual: add a short "Paging" note
+with a screenshot. Reports are paged on screen only (see docs/KNOWN_ISSUES.md).
+
+## I. Help and support tickets (Phase 3 B6)
+Help content and tickets are now read and written by `services/help_service.py` (Admin edits, Staff read; Staff see only their own tickets).
+The built-in guide text now says 15 minutes of inactivity. An existing database keeps the old stored text until an Admin edits that guide.
+
+## J. Logs and error codes (see section D)
+`logs\app.log` is created next to the program; it is git-ignored and rotates at 1 MB (5 old files kept).
