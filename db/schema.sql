@@ -242,3 +242,10 @@ CREATE TABLE IF NOT EXISTS help_tickets (
   status       VARCHAR(50) NULL DEFAULT 'Open',
   created_at   TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Staff's MySQL account has no access to system_logs. The dashboard activity feed reads THIS view instead: project-creation events
+-- only (no logins, no security events). SQL SECURITY DEFINER lets Staff select it without any privilege on system_logs itself.
+CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW v_activity_feed AS
+  SELECT sl.log_id, sl.`timestamp` AS `timestamp`, sl.details AS details, IFNULL(u.full_name, 'System') AS actor
+  FROM system_logs sl LEFT JOIN `user` u ON u.user_id = sl.user_id
+  WHERE sl.module = 'Projects' AND sl.action_type IN ('Submitted', 'Drafted', 'Drafted & Approved');

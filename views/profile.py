@@ -5,6 +5,7 @@ from tkinter import filedialog, messagebox
 from PIL import Image, ImageDraw, ImageFont
 from database import get_connection, generate_id_badge
 from db import db, user_message
+from services import user_service
 import re
 import bcrypt
 import qrcode
@@ -278,33 +279,26 @@ class ProfileView(ctk.CTkFrame):
                 "Validation Error", "Full Name and Email are required.")
             return
 
-        if messagebox.askyesno("Confirm Update", "Are you sure you want to save these changes?"):
-            problem = None
+        if not messagebox.askyesno("Confirm Update", "Are you sure you want to save these changes?"):
+            return
+        allow_dup = False
+        while True:
             try:
-                with db.transaction() as cursor:
-                    emp = self.user_info['employee_id']
-                    cursor.execute("SELECT user_id FROM user WHERE full_name = %s AND employee_id != %s", (new_name, emp))
-                    if cursor.fetchone():
-                        problem = "A user with this full name already exists."
-                    else:
-                        cursor.execute("SELECT user_id FROM user WHERE email = %s AND employee_id != %s", (new_email, emp))
-                        if cursor.fetchone():
-                            problem = "A user with this email already exists."
-                        else:
-                            cursor.execute("UPDATE user SET full_name = %s, email = %s WHERE employee_id = %s",
-                                           (new_name, new_email, emp))
+                # [RBAC] always the caller's OWN row; a shared full name is warned about, not blocked; the e-mail stays unique
+                res = user_service.update_profile(self.user_info, name=new_name, email=new_email, allow_duplicate_name=allow_dup)
+                break
+            except user_service.DuplicateName as dup:
+                if not messagebox.askyesno("Same Name Found", f"{dup.count} active user(s) are already named '{dup.name}'.\n\nUse this name anyway?"):
+                    return
+                allow_dup = True
             except Exception as e:
-                messagebox.showerror("Could not save", user_message(e))
+                messagebox.showerror("Could not save", friendly_message(e))
                 return
-            # dialogs only AFTER the connection has been returned to the pool
-            if problem:
-                messagebox.showerror("Duplicate", problem)
-                return
-            self.user_info['full_name'] = new_name
-            self.user_info['email'] = new_email
-            self.dashboard.refresh_topbar()
-            self.build_left_card()
-            messagebox.showinfo("Success", "Profile updated securely.")
+        self.user_info['full_name'] = res['full_name']
+        self.user_info['email'] = res['email']
+        self.dashboard.refresh_topbar()
+        self.build_left_card()
+        messagebox.showinfo("Success", "Profile updated securely.")
 
     def open_password_modal(self):
         dialog = ctk.CTkToplevel(self)
@@ -377,27 +371,13 @@ class ProfileView(ctk.CTkFrame):
                 return
 
             if messagebox.askyesno("Confirm", "Change password?", parent=dialog):
-                outcome = None
                 try:
-                    with db.transaction() as cursor:
-                        cursor.execute(
-                            "SELECT password_hash FROM user WHERE employee_id = %s", (self.user_info['employee_id'],))
-                        result = cursor.fetchone()
-                        if result and result['password_hash'] and bcrypt.checkpw(curr_pwd.encode('utf-8'), result['password_hash'].encode('utf-8')):
-                            new_hashed = bcrypt.hashpw(new_pwd.encode('utf-8'), bcrypt.gensalt())
-                            cursor.execute("UPDATE user SET password_hash = %s WHERE employee_id = %s",
-                                           (new_hashed.decode('utf-8'), self.user_info['employee_id']))
-                            outcome = "ok"
-                        else:
-                            outcome = "wrong"
+                    user_service.change_password(self.user_info, curr_pwd, new_pwd, conf_pwd)     # [RBAC] own account only
                 except Exception as e:
-                    messagebox.showerror("Could not update", user_message(e), parent=dialog)
+                    messagebox.showerror("Could not update", friendly_message(e), parent=dialog)
                     return
-                if outcome == "ok":
-                    messagebox.showinfo("Success", "Password updated successfully!", parent=dialog)
-                    dialog.destroy()
-                else:
-                    messagebox.showerror("Error", "Incorrect current password.", parent=dialog)
+                messagebox.showinfo("Success", "Password updated successfully!", parent=dialog)
+                dialog.destroy()
 
         ctk.CTkButton(btn_frame, text="Change Password", fg_color="#1E4528", hover_color="#14301C",
                       command=process_pwd_change).pack(side="left", expand=True, fill="x", padx=(0, 10))

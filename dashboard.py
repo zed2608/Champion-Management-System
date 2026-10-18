@@ -14,12 +14,21 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from views.projects import ProjectsView
 from views.inventory import InventoryView
 from views.profile import ProfileView
+from services import dashboard_service
+from services.errors import friendly_message
 from views.borrowing import IssuanceView
 from views.tracking import TrackingView
 from views.reports import ReportsView
 from views.maintenance import MaintenanceView
 from views.role_management import RoleManagementView
 from views.help import HelpView
+
+
+_EMPTY_METRICS = {
+    "total_employees": 0, "active_workforce": 0, "available_qty": 0, "borrowed_qty": 0, "total_physical": 0, "utilization_pct": 0,
+    "pending_issues": 0, "overdue_projects": 0, "action_items": 0, "low_stock": 0, "proj_active": 0, "proj_pending": 0,
+    "proj_completed_month": 0, "pwd_resets": 0, "pending_projects": 0,
+}
 
 
 class DashboardApp(ctk.CTkToplevel):
@@ -103,8 +112,8 @@ class DashboardApp(ctk.CTkToplevel):
             "Tracking & Accountability",
         ]
 
+        nav_items.insert(1, "Project Management")            # Staff see it too, read-only (the screen hides every action)
         if is_admin:
-            nav_items.insert(1, "Project Management")
             nav_items += ["Reports", "Maintenance", "Role Management"]
 
         nav_items.append("Help")
@@ -452,8 +461,7 @@ class DashboardApp(ctk.CTkToplevel):
 
     def show_frame(self, page_name, highlight_low_stock=False, highlight_tool_id=None):
         is_admin = self.user_info.get("role", "Staff") == "Admin"
-        restricted_modules = ["Project Management",
-                              "Reports", "Maintenance", "Role Management"]
+        restricted_modules = ["Reports", "Maintenance", "Role Management"]   # [RBAC] UI hint only: services re-check the role in MySQL
 
         if not is_admin and page_name in restricted_modules:
             messagebox.showerror(
@@ -541,227 +549,12 @@ class DashboardApp(ctk.CTkToplevel):
             self.current_frame.open_project_by_id(project_id)
 
     def get_live_metrics(self):
-        metrics = {
-            "total_employees": 0,
-            "active_workforce": 0,
-            "available_qty": 0,
-            "borrowed_qty": 0,
-            "total_physical": 0,
-            "utilization_pct": 0,
-            "pending_issues": 0,
-            "overdue_projects": 0,
-            "action_items": 0,
-            "low_stock": 0,
-            "proj_active": 0,
-            "proj_pending": 0,
-            "proj_completed_month": 0,
-            "pwd_resets": 0,
-        }
-        activities = []
-        # chart_data: 7 days of (issues, retrievals) — [(day_label, issued, retrieved), ...]
-        chart_data = []
-        # deployed_rows: [(project_name, tool_count), ...] top 5
-        deployed_rows = []
-        # my_issuances: [(tool_name, issued_date, project_name), ...] for current user
-        my_issuances = []
-
-        conn = get_connection()
-        if not conn:
-            return metrics, activities, chart_data, deployed_rows, my_issuances
-
+        """[RBAC][QUANTITIES] All numbers come from dashboard_service: sums of quantity (not row counts) and a Staff-safe feed."""
         try:
-            cursor = conn.cursor(dictionary=True)
-
-            cursor.execute("SELECT COUNT(*) as cnt FROM user")
-            metrics["total_employees"] = int(cursor.fetchone()["cnt"] or 0)
-
-            # Fix: only count users with activity in last 30 days
-            cursor.execute("""
-                SELECT COUNT(DISTINCT user_id) as cnt FROM transaction
-                WHERE status = 'Active' AND borrow_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-            """)
-            metrics["active_workforce"] = int(cursor.fetchone()["cnt"] or 0)
-
-            cursor.execute(
-                "SELECT IFNULL(SUM(quantity_available), 0) as qty FROM inventory")
-            metrics["available_qty"] = int(cursor.fetchone()["qty"] or 0)
-
-            cursor.execute(
-                "SELECT COUNT(*) as cnt FROM transaction WHERE status = 'Active'")
-            metrics["borrowed_qty"] = int(cursor.fetchone()["cnt"] or 0)
-
-            metrics["total_physical"] = metrics["available_qty"] + \
-                metrics["borrowed_qty"]
-            if metrics["total_physical"] > 0:
-                metrics["utilization_pct"] = int(
-                    (metrics["borrowed_qty"] / metrics["total_physical"]) * 100)
-
-            try:
-                cursor.execute(
-                    "SELECT COUNT(*) as cnt FROM tool WHERE `condition` IN ('Needs Repair', 'Damaged', 'Lost') AND is_archived = 0")
-                metrics["pending_issues"] = int(cursor.fetchone()["cnt"] or 0)
-            except Exception:
-                pass
-
-            metrics["action_items"] = metrics["pending_issues"]
-
-            try:
-                cursor.execute(
-                    "SELECT COUNT(*) as cnt FROM projects WHERE status NOT IN ('Completed', 'Cancelled', 'Declined') AND archived_at IS NULL AND end_date < CURDATE()")
-                metrics["overdue_projects"] = int(
-                    cursor.fetchone()["cnt"] or 0)
-            except Exception:
-                pass
-
-            try:
-                cursor.execute(
-                    "SELECT COUNT(*) as cnt FROM projects WHERE status = 'Pending'")
-                metrics["pending_projects"] = int(
-                    cursor.fetchone()["cnt"] or 0)
-            except Exception:
-                metrics["pending_projects"] = 0
-
-            # Low stock: items where quantity_available < minimum_stock
-            try:
-                cursor.execute("""
-                    SELECT COUNT(*) as cnt FROM inventory i
-                    WHERE i.minimum_stock > 0 AND i.quantity_available < i.minimum_stock
-                """)
-                metrics["low_stock"] = int(cursor.fetchone()["cnt"] or 0)
-            except Exception:
-                pass
-
-            # Project status counts
-            try:
-                cursor.execute(
-                    "SELECT COUNT(*) as cnt FROM projects WHERE status = 'Active'")
-                metrics["proj_active"] = int(cursor.fetchone()["cnt"] or 0)
-                cursor.execute(
-                    "SELECT COUNT(*) as cnt FROM projects WHERE status = 'Pending'")
-                metrics["proj_pending"] = int(cursor.fetchone()["cnt"] or 0)
-                cursor.execute("""
-                    SELECT COUNT(*) as cnt FROM projects
-                    WHERE status = 'Completed' AND MONTH(end_date) = MONTH(CURDATE()) AND YEAR(end_date) = YEAR(CURDATE())
-                """)
-                metrics["proj_completed_month"] = int(
-                    cursor.fetchone()["cnt"] or 0)
-            except Exception:
-                pass
-
-            # Password Reset Requests
-            try:
-                cursor.execute("SELECT COUNT(*) as cnt FROM user WHERE reset_requested = 1")
-                metrics["pwd_resets"] = int(cursor.fetchone()["cnt"] or 0)
-            except Exception:
-                pass
-
-            # Activity feed
-            cursor.execute("""
-                SELECT
-                    DATE_FORMAT(raw_date, '%Y-%m-%d %I:%i %p') as ts,
-                    action, item, actor
-                FROM (
-                    SELECT borrow_date as raw_date, 'Issued' as action, t.name as item, u.full_name as actor
-                    FROM transaction tr
-                    JOIN tool t ON tr.tool_id = t.tool_id
-                    JOIN user u ON tr.user_id = u.user_id
-                    WHERE tr.type = 'Issue'
-
-                    UNION ALL
-
-                    SELECT return_date as raw_date, 'Retrieved' as action, t.name as item, u.full_name as actor
-                    FROM transaction tr
-                    JOIN tool t ON tr.tool_id = t.tool_id
-                    JOIN user u ON tr.user_id = u.user_id
-                    WHERE tr.type = 'Retrieval' AND tr.return_date IS NOT NULL
-
-                    UNION ALL
-
-                    SELECT sl.timestamp as raw_date, 'Project Created' as action, sl.details as item, IFNULL(u.full_name, 'System') as actor
-                    FROM system_logs sl
-                    LEFT JOIN user u ON sl.user_id = u.user_id
-                    WHERE sl.action_type = 'Submitted' AND sl.module = 'Projects'
-                ) as combined_log
-                ORDER BY raw_date DESC
-                LIMIT 10
-            """)
-            for row in cursor.fetchall():
-                activities.append(
-                    (row["ts"], row["action"], row["item"], row["actor"]))
-
-            # 7-day deployment trend
-            try:
-                cursor.execute("""
-                    SELECT
-                        d.day_label,
-                        IFNULL(i.issued, 0)    AS issued,
-                        IFNULL(r.retrieved, 0) AS retrieved
-                    FROM (
-                        SELECT DATE_SUB(CURDATE(), INTERVAL n DAY) AS day_date,
-                               DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL n DAY), '%a') AS day_label
-                        FROM (SELECT 6 n UNION SELECT 5 UNION SELECT 4 UNION SELECT 3
-                              UNION SELECT 2 UNION SELECT 1 UNION SELECT 0) nums
-                    ) d
-                    LEFT JOIN (
-                        SELECT DATE(borrow_date) as dd, COUNT(*) as issued
-                        FROM transaction WHERE type='Issue' AND borrow_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-                        GROUP BY dd
-                    ) i ON i.dd = d.day_date
-                    LEFT JOIN (
-                        SELECT DATE(return_date) as dd, COUNT(*) as retrieved
-                        FROM transaction WHERE type='Retrieval' AND return_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-                        GROUP BY dd
-                    ) r ON r.dd = d.day_date
-                    ORDER BY d.day_date
-                """)
-                chart_data = [(row["day_label"], int(row["issued"]), int(
-                    row["retrieved"])) for row in cursor.fetchall()]
-            except Exception:
-                pass
-
-            # Currently deployed: top 5 projects by active tool count
-            try:
-                cursor.execute("""
-                    SELECT p.name as project_name, COUNT(tr.transaction_id) as tool_count
-                    FROM transaction tr
-                    JOIN projects p ON tr.project_id = p.project_id
-                    WHERE tr.status = 'Active'
-                    GROUP BY p.project_id, p.name
-                    ORDER BY tool_count DESC
-                    LIMIT 5
-                """)
-                deployed_rows = [(row["project_name"], int(
-                    row["tool_count"])) for row in cursor.fetchall()]
-            except Exception:
-                pass
-
-            # My active issuances for current user
-            try:
-                uid = self.user_info.get("user_id")
-                cursor.execute("""
-                    SELECT t.name as tool_name,
-                           DATE_FORMAT(tr.borrow_date, '%b %d, %Y') as issued_date,
-                           IFNULL(p.name, '—') as project_name
-                    FROM transaction tr
-                    JOIN tool t ON tr.tool_id = t.tool_id
-                    LEFT JOIN projects p ON tr.project_id = p.project_id
-                    WHERE tr.user_id = %s AND tr.status = 'Active'
-                    ORDER BY tr.borrow_date DESC
-                    LIMIT 8
-                """, (uid,))
-                my_issuances = [(row["tool_name"], row["issued_date"],
-                                 row["project_name"]) for row in cursor.fetchall()]
-            except Exception:
-                pass
-
+            return dashboard_service.live_metrics(self.user_info)
         except Exception as e:
-            print(f"Dashboard Sync Error: {e}")
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
-
-        return metrics, activities, chart_data, deployed_rows, my_issuances
+            print(f"Dashboard Sync Error: {friendly_message(e)}")
+            return dict(_EMPTY_METRICS), [], [], [], []
 
     def create_home_dashboard(self):
         is_admin = self.user_info.get("role", "Staff") == "Admin"

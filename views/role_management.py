@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 import re
 import difflib
 from services.errors import friendly_message
+from services import user_service
 
 
 class RoleManagementView(ctk.CTkFrame):
@@ -180,108 +181,46 @@ class RoleManagementView(ctk.CTkFrame):
         name = self.reg_name.get().strip()
         email = self.reg_email.get().strip()
         role = self.reg_role.get()
-        pwd = self.reg_pass.get().strip() if self.reg_pass else ""
-        cpwd = self.reg_confirm.get().strip() if self.reg_confirm else ""
+        pwd = self.reg_pass.get() if self.reg_pass else ""            # [RBAC] passwords are not stripped
+        cpwd = self.reg_confirm.get() if self.reg_confirm else ""
 
-        # 1. Validation
-        if role == "Worker":
-            if not name:
-                return messagebox.showerror("Validation Error", "Full Name is required for Workers.", parent=self.reg_modal)
-            pwd = "FIELD_WORKER_NO_LOGIN_SYSTEM_LOCKED" 
-            cpwd = pwd
-        else:
-            if not all([name, pwd, cpwd]):
-                return messagebox.showerror("Validation Error", "Full Name and Password are required.", parent=self.reg_modal)
-            if pwd != cpwd:
-                return messagebox.showerror("Password Mismatch", "Passwords do not match.", parent=self.reg_modal)
-            if len(pwd) < 8 or not any(c.isdigit() for c in pwd) or not any(c.isupper() for c in pwd) or not any(c in r"!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in pwd):
-                return messagebox.showerror("Weak Password", "Password must meet all strength guidelines (8+ chars, number, uppercase, special).", parent=self.reg_modal)
-
-        conn = get_connection()
-        if not conn: return
+        if not name:
+            return messagebox.showerror("Validation Error", "Full Name is required.", parent=self.reg_modal)
         try:
-            cursor = conn.cursor(dictionary=True)
-            
-            # --- DUPLICATE & TYPO CHECK ---
-            cursor.execute("SELECT full_name FROM user WHERE status != 'Archived'")
-            existing_names = [r['full_name'] for r in cursor.fetchall()]
-            exact_match = False
-            similar_names = []
-            
-            for en in existing_names:
-                if en.lower() == name.lower():
-                    exact_match = True
-                    break
-                if difflib.SequenceMatcher(None, name.lower(), en.lower()).ratio() > 0.85:
-                    similar_names.append(en)
-                    
-            if exact_match:
-                messagebox.showerror("Duplicate User", f"A user named '{name}' already exists.", parent=self.reg_modal)
-                return
-                
-            if similar_names:
-                sim_list = "\n".join([f"• {sn}" for sn in similar_names[:3]])
-                msg = f"Wait! Similar names already exist:\n\n{sim_list}\n\nAre you sure you want to register '{name}' as a new distinct user?"
-                if not messagebox.askyesno("Similar Name Detected", msg, parent=self.reg_modal):
-                    return
-            # -----------------------------
-            
-            if email:
-                cursor.execute("SELECT user_id FROM user WHERE email = %s", (email,))
-                if cursor.fetchone():
-                    messagebox.showerror("Duplicate User", "A user with this email address already exists.", parent=self.reg_modal)
-                    return
-            
-            # --- 2. THE AUTO-GENERATION ENGINE ---
-            prefix = ""
-            if role == "Admin": prefix = "ADM"
-            elif role == "Staff": prefix = "STF"
-            elif role == "Worker": prefix = "WKR"
-            
-            from datetime import datetime
-            current_year = datetime.now().year
-            
-            # Find the highest existing ID for this specific role and year
-            search_pattern = f"{prefix}-{current_year}-%"
-            cursor.execute("SELECT employee_id FROM user WHERE employee_id LIKE %s ORDER BY employee_id DESC LIMIT 1", (search_pattern,))
-            last_record = cursor.fetchone()
-            
-            if last_record and last_record['employee_id']:
-                # Extract the last 3 digits and add 1
-                last_seq = int(last_record['employee_id'].split('-')[-1])
-                new_seq = last_seq + 1
-            else:
-                new_seq = 1 # Start at 001 if no users exist for this year
-                
-            # Combine them into the final format (e.g., ADM-2026-004)
-            new_emp_id = f"{prefix}-{current_year}-{new_seq:03d}"
-            
-            # --- 3. SAVE TO DATABASE ---
-            hashed_pw = bcrypt.hashpw(pwd.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            
-            cursor.execute("INSERT INTO user (employee_id, full_name, email, role, password_hash) VALUES (%s, %s, %s, %s, %s)",
-                           (new_emp_id, name, email, role, hashed_pw))
-            conn.commit()
-            
-            if self.user_info.get("user_id"):
-                log_action(self.user_info['user_id'], "Added", "Role Management", f"Registered new {role}: {name} ({new_emp_id})")
-                
-            # Announce the generated ID to the Admin
-            messagebox.showinfo("Registration Success", f"{role} registered successfully!\n\nSystem Assigned ID: {new_emp_id}", parent=self.reg_modal)
-            
-            self.reg_modal.destroy()
-            self.load_user_table()
-            
-            dashboard = self.winfo_toplevel()
-            if hasattr(dashboard, "dashboard_refresh_job") and dashboard.dashboard_refresh_job:
-                dashboard.after_cancel(dashboard.dashboard_refresh_job)
-            if hasattr(dashboard, "_auto_refresh_dashboard"):
-                dashboard._auto_refresh_dashboard()
-            
+            same, similar = user_service.find_similar_names(name)
         except Exception as e:
-            messagebox.showerror("Database Error", friendly_message(e), parent=self.reg_modal)
-        finally:
-            if conn.is_connected(): cursor.close(); conn.close()
+            return messagebox.showerror("Validation Error", friendly_message(e), parent=self.reg_modal)
+        allow_dup = False
+        if same:                                                       # real employees share names: WARN, then allow
+            if not messagebox.askyesno("Same Name Found",
+                                       f"{same} active user(s) are already named '{name}'.\n\nRegister another person with the same name?",
+                                       parent=self.reg_modal):
+                return
+            allow_dup = True
+        elif similar:
+            sim_list = "\n".join([f"• {sn}" for sn in similar])
+            if not messagebox.askyesno("Similar Name Detected",
+                                       f"Wait! Similar names already exist:\n\n{sim_list}\n\nAre you sure you want to register '{name}' as a new distinct user?",
+                                       parent=self.reg_modal):
+                return
+        try:
+            # [RBAC][CONCURRENCY] Admin only; Workers get NO password; ids come from a locked sequence; blank e-mail is stored as NULL
+            res = user_service.register_user(self.user_info, name=name, email=email, role=role, password=pwd,
+                                             confirm_password=cpwd, allow_duplicate_name=allow_dup)
+        except Exception as e:
+            return messagebox.showerror("Could not register", friendly_message(e), parent=self.reg_modal)
+
+        if self.user_info.get("user_id"):
+            log_action(self.user_info['user_id'], "Added", "Role Management", f"Registered new {role}: {name} ({res['employee_id']})")
+        messagebox.showinfo("Registration Success", f"{role} registered successfully!\n\nSystem Assigned ID: {res['employee_id']}", parent=self.reg_modal)
+
+        self.reg_modal.destroy()
+        self.load_user_table()
+        dashboard = self.winfo_toplevel()
+        if hasattr(dashboard, "dashboard_refresh_job") and dashboard.dashboard_refresh_job:
+            dashboard.after_cancel(dashboard.dashboard_refresh_job)
+        if hasattr(dashboard, "_auto_refresh_dashboard"):
+            dashboard._auto_refresh_dashboard()
 
     # ==========================================
     # RIGHT: User Management Table
@@ -427,28 +366,21 @@ class RoleManagementView(ctk.CTkFrame):
                 conn.close()
 
     def delete_user(self, row):
-        if messagebox.askyesno("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
-            conn = get_connection()
-            if not conn: return
-            try:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE user SET status = 'Archived' WHERE user_id = %s", (row['user_id'],))
-                conn.commit()
-                log_action(self.user_info['user_id'], "Archived", "Role Management", f"Archived user {row['full_name']}")
-                self.load_user_table()
-                
-                dashboard = self.winfo_toplevel()
-                if hasattr(dashboard, "show_toast"):
-                    dashboard.show_toast(f"✓ User '{row['full_name']}' deactivated and archived.")
-                    
-                if hasattr(dashboard, "dashboard_refresh_job") and dashboard.dashboard_refresh_job:
-                    dashboard.after_cancel(dashboard.dashboard_refresh_job)
-                if hasattr(dashboard, "_auto_refresh_dashboard"):
-                    dashboard._auto_refresh_dashboard()
-            except Exception as e:
-                messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
-            finally:
-                if conn.is_connected(): cursor.close(); conn.close()
+        if not messagebox.askyesno("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
+            return
+        try:
+            user_service.archive_user(self.user_info, row['user_id'])     # refuses yourself and the last active Admin
+        except Exception as e:
+            return messagebox.showerror("Could not archive", friendly_message(e), parent=self.winfo_toplevel())
+        log_action(self.user_info['user_id'], "Archived", "Role Management", f"Archived user {row['full_name']}")
+        self.load_user_table()
+        dashboard = self.winfo_toplevel()
+        if hasattr(dashboard, "show_toast"):
+            dashboard.show_toast(f"✓ User '{row['full_name']}' deactivated and archived.")
+        if hasattr(dashboard, "dashboard_refresh_job") and dashboard.dashboard_refresh_job:
+            dashboard.after_cancel(dashboard.dashboard_refresh_job)
+        if hasattr(dashboard, "_auto_refresh_dashboard"):
+            dashboard._auto_refresh_dashboard()
 
     def open_edit_modal(self, row):
         modal = ctk.CTkToplevel(self)
@@ -589,107 +521,42 @@ class RoleManagementView(ctk.CTkFrame):
             new_name  = name_e.get().strip()
             new_email = email_e.get().strip()
             new_role  = role_menu.get()
-            new_pass  = pass_e_holder[0].get().strip() if pass_e_holder[0] else ""
-            conf_pass = pass_e_holder[1].get().strip() if pass_e_holder[1] else ""
+            new_pass  = pass_e_holder[0].get() if pass_e_holder[0] else ""      # [RBAC] passwords are not stripped
+            conf_pass = pass_e_holder[1].get() if pass_e_holder[1] else ""
 
             if not new_name:
                 messagebox.showerror("Error", "Full Name is required.", parent=modal)
                 return
-
-            # --- FIX A: Require Email for login-enabled roles (Admin/Staff)
-            if new_role != "Worker" and not new_email:
-                messagebox.showerror("Error", "Email Address is required to enable the Forgot Password feature.", parent=modal)
-                return
-
-            # If promoting a Worker to a login role, a password is required
-            old_role = row["role"]
-            if new_role != "Worker" and old_role == "Worker" and not new_pass:
-                messagebox.showerror("Password Required",
-                                     "Assigning a login role requires setting a password.",
-                                     parent=modal)
-                return
-                
-            if new_pass:
-                if new_pass != conf_pass:
-                    messagebox.showerror("Password Mismatch", "Passwords do not match.", parent=modal)
-                    return
-                if len(new_pass) < 8 or not any(c.isdigit() for c in new_pass) or not any(c.isupper() for c in new_pass) or not any(c in r"!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in new_pass):
-                    messagebox.showerror("Weak Password", "Password must meet all guidelines (8+ chars, number, uppercase, special).", parent=modal)
-                    return
-
-            conn = get_connection()
-            if not conn:
-                return
+            allow_dup = False
             try:
-                cursor = conn.cursor()
-                
-                # --- DUPLICATE & TYPO CHECK FOR EDITS ---
-                cursor.execute("SELECT user_id, full_name FROM user WHERE status != 'Archived' AND user_id != %s", (row["user_id"],))
-                existing_users = cursor.fetchall()
-                exact_match = False
-                similar_names = []
-                
-                for eu in existing_users:
-                    eu_name = eu[1]
-                    if eu_name.lower() == new_name.lower():
-                        exact_match = True
-                        break
-                    if difflib.SequenceMatcher(None, new_name.lower(), eu_name.lower()).ratio() > 0.85:
-                        similar_names.append(eu_name)
-                        
-                if exact_match:
-                    messagebox.showerror("Duplicate Name", f"Another active user named '{new_name}' already exists.", parent=modal)
-                    return
-                    
-                if similar_names and new_name.lower() != row['full_name'].lower():
-                    sim_list = "\n".join([f"• {sn}" for sn in similar_names[:3]])
-                    msg = f"Similar user names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this user to '{new_name}'?"
-                    if not messagebox.askyesno("Similar Name Detected", msg, parent=modal):
-                        return
-                # -----------------------------
-                
-                if new_role == "Worker":
-                    # Keep existing hash or store placeholder — Workers never log in
-                    cursor.execute("""
-                        UPDATE user SET full_name=%s, email=%s, role=%s,
-                                        status='Active', failed_attempts=0, reset_requested=0
-                        WHERE user_id=%s
-                    """, (new_name, new_email or None, new_role, row["user_id"]))
-                elif new_pass:
-                    if len(new_pass) < 8:
-                        messagebox.showerror("Weak Password",
-                                             "Password must be at least 8 characters.",
-                                             parent=modal)
-                        return
-                    hashed = bcrypt.hashpw(new_pass.encode("utf-8"),
-                                           bcrypt.gensalt()).decode("utf-8")
-                    cursor.execute("""
-                        UPDATE user SET full_name=%s, email=%s, role=%s, password_hash=%s,
-                                        status='Active', failed_attempts=0, reset_requested=0
-                        WHERE user_id=%s
-                    """, (new_name, new_email or None, new_role, hashed, row["user_id"]))
-                else:
-                    cursor.execute("""
-                        UPDATE user SET full_name=%s, email=%s, role=%s,
-                                        status='Active', failed_attempts=0, reset_requested=0
-                        WHERE user_id=%s
-                    """, (new_name, new_email or None, new_role, row["user_id"]))
-                conn.commit()
-                messagebox.showinfo("Updated", "User account updated successfully.", parent=modal)
-                modal.destroy()
-                self.load_user_table()
-                
-                dashboard = self.winfo_toplevel()
-                if hasattr(dashboard, "dashboard_refresh_job") and dashboard.dashboard_refresh_job:
-                    dashboard.after_cancel(dashboard.dashboard_refresh_job)
-                if hasattr(dashboard, "_auto_refresh_dashboard"):
-                    dashboard._auto_refresh_dashboard()
+                same, similar = user_service.find_similar_names(new_name, exclude_user_id=row["user_id"])
             except Exception as e:
-                messagebox.showerror("Error", friendly_message(e), parent=modal)
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
+                return messagebox.showerror("Error", friendly_message(e), parent=modal)
+            if new_name.lower() != row['full_name'].lower():
+                if same:
+                    if not messagebox.askyesno("Same Name Found", f"{same} active user(s) are already named '{new_name}'.\n\nRename this user anyway?", parent=modal):
+                        return
+                    allow_dup = True
+                elif similar:
+                    sim_list = "\n".join([f"• {sn}" for sn in similar])
+                    if not messagebox.askyesno("Similar Name Detected", f"Similar user names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this user to '{new_name}'?", parent=modal):
+                        return
+            try:
+                res = user_service.update_user(self.user_info, row["user_id"], name=new_name, email=new_email, role=new_role,
+                                               new_password=new_pass, confirm_password=conf_pass, allow_duplicate_name=allow_dup)
+            except Exception as e:
+                return messagebox.showerror("Could not update", friendly_message(e), parent=modal)
+            if self.user_info.get("user_id"):
+                log_action(self.user_info['user_id'], "Edited", "Role Management",
+                           f"Edited user {res['name']} ({res['employee_id']}){' and cleared the lockout' if res['unlocked'] else ''}")
+            messagebox.showinfo("Updated", "User account updated successfully.", parent=modal)
+            modal.destroy()
+            self.load_user_table()
+            dashboard = self.winfo_toplevel()
+            if hasattr(dashboard, "dashboard_refresh_job") and dashboard.dashboard_refresh_job:
+                dashboard.after_cancel(dashboard.dashboard_refresh_job)
+            if hasattr(dashboard, "_auto_refresh_dashboard"):
+                dashboard._auto_refresh_dashboard()
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=30, pady=(5, 20))

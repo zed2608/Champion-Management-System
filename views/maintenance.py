@@ -6,7 +6,7 @@ import os
 import subprocess
 import threading
 from services.errors import friendly_message
-from services import maintenance_service as mnt, inventory_service as inv_svc, project_service as proj_svc
+from services import maintenance_service as mnt, inventory_service as inv_svc, project_service as proj_svc, user_service
 
 
 class MaintenanceView(ctk.CTkFrame):
@@ -694,32 +694,18 @@ class MaintenanceView(ctk.CTkFrame):
             btn.pack(expand=True, pady=10)
 
     def restore_employee(self, user_id):
-        if not messagebox.askyesno("Confirm Restore", f"Restore employee access for User ID: {user_id}?"):
-            return
-        conn = get_connection()
-        if not conn:
+        if not messagebox.askyesno("Confirm Restore", "Restore this employee to Active status? They will be able to log in (Staff/Admin) or receive tools (Workers) again."):
             return
         try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE `user` SET status = 'Active', archived_at = NULL WHERE user_id = %s",
-                (user_id,)
-            )
-            conn.commit()
-
-            uid = self.user_info.get("user_id")
-            if uid:
-                log_action(uid, "Edited", "Maintenance",
-                           f"Restored Employee UID: {user_id} from Archive")
-
-            messagebox.showinfo("Success", "Employee access restored.")
-            self.load_archived_employees()
+            res = user_service.restore_user(self.user_info, user_id)
         except Exception as e:
-            messagebox.showerror("Error", friendly_message(e))
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+            messagebox.showerror("Could not restore", friendly_message(e))
+            return
+        uid = self.user_info.get("user_id")
+        if uid:
+            log_action(uid, "Edited", "Maintenance", f"Restored employee {res['name']} ({res['employee_id']}) from Archive")
+        messagebox.showinfo("Success", f"{res['name']} was restored.")
+        self.load_archived_employees()
 
     # ------------------------------------------
     # TAB 4: Archived Projects

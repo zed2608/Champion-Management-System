@@ -334,13 +334,18 @@ def test_return_failure_rolls_back_rows_stock_and_ticket(issued, monkeypatch):
     assert rows(d, "SELECT quantity_in_maintenance AS m FROM inventory WHERE tool_id=%s", (cal,))[0]["m"] == 0
 
 
-def test_returning_long_after_issuing_still_works(issued):
-    """The due-date rule applies to ISSUING only; tools must always be returnable, however late."""
-    d, u, staff, cal, grs, pid = issued
-    with d.transaction() as cur:
-        cur.execute("UPDATE `transaction` SET borrow_date = borrow_date - INTERVAL 40 DAY WHERE tool_id = %s", (cal,)) \
-            if False else None
-    assert iss.retrieve(staff, u["w1"], cal, 3, "Good", "").closed_ids
+def test_returning_after_the_project_ended_still_works(w):
+    """The end-date rule applies to ISSUING only: a tool still out on a project that ended 5 days ago must always be returnable."""
+    d, u, staff, cal, grs, pid = w
+    ended = run(d, "INSERT INTO projects (name, start_date, end_date, status, workers_assigned) VALUES ('Ended',%s,%s,'Ongoing','WKR-2026-001')",
+                (TODAY - timedelta(days=30), TODAY - timedelta(days=5)))
+    run(d, "INSERT INTO `transaction` (tool_id, user_id, project_id, type, status, quantity, borrow_date) "
+           "VALUES (%s,%s,%s,'Issue','Active',1, NOW() - INTERVAL 10 DAY)", (cal, u["w1"], ended))
+    run(d, "UPDATE inventory SET quantity_available = 9 WHERE tool_id=%s", (cal,))
+    res = iss.retrieve(staff, u["w1"], cal, 1, "Good", "")
+    assert res.closed_ids and avail(d, cal) == 10
+    t = rows(d, "SELECT status, due_date FROM `transaction` WHERE transaction_id=%s", (res.closed_ids[0],))[0]
+    assert t["status"] == "Returned" and t["due_date"] == TODAY - timedelta(days=5)      # the snapshot is kept; it was returned late
 
 
 def test_friendly_messages_never_leak_driver_text(w):

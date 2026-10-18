@@ -11,6 +11,7 @@ from database import log_action
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 from services.errors import friendly_message
+from services import auth_service, validators as _v
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
@@ -209,70 +210,29 @@ class LoginApp(ctk.CTk):
         self.update_idletasks()
 
         username = self.user_entry.get().strip()
-        password = self.pass_entry.get().strip()
-
-        if not username or not password:
-            self.show_error("Please fill in all fields.")
-            self.login_button.configure(state="normal", text="Login")
-            return
-
-        conn = get_connection()
-        if not conn:
-            self.show_error("Database connection failed.")
-            self.login_button.configure(state="normal", text="Login")
-            return
+        password = self.pass_entry.get()            # [RBAC] never stripped: a trailing space is part of the password
 
         try:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(
-                "SELECT * FROM user WHERE employee_id = %s", (username,))
-            user = cursor.fetchone()
-
-            if not user:
-                self.show_error("Invalid Credentials.")
-                self.login_button.configure(state="normal", text="Login")
-                return
-
-            # Hard-block: Workers are field personnel with no system login access
-            if user.get("role") == "Worker":
-                self.show_error(
-                    "Access Denied: Field Workers do not have system login privileges.")
-                self.login_button.configure(state="normal", text="Login")
-                return
-
-            if user.get("status") == "Locked":
-                self.show_error("Account Locked. Please contact Admin.")
-                self.login_button.configure(state="disabled", text="Locked")
-                return
-
-            if bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-                if user.get("failed_attempts", 0) > 0:
-                    cursor.execute("UPDATE user SET failed_attempts = 0 WHERE user_id = %s", (user['user_id'],))
-                    conn.commit()
-                self.handle_remember_me(username)
-                self.show_loading_screen(user)
-                return
-
-            failed_attempts = user.get("failed_attempts", 0) + 1
-            if failed_attempts >= 3:
-                cursor.execute("UPDATE user SET failed_attempts = %s, status = 'Locked' WHERE user_id = %s", (failed_attempts, user['user_id']))
-                conn.commit()
-                self.show_error("Account Locked: Maximum attempts reached.")
-                messagebox.showwarning("Account Locked", "Too many failed attempts. Your account has been locked. Please request a password reset.", parent=self)
+            # [RBAC][CONCURRENCY] status + role + lockout are decided in MySQL; Locked/Archived/Inactive accounts and Workers
+            # are refused; the failed-attempt counter is committed before the refusal.
+            user = auth_service.login(username, password)
+        except auth_service.AuthError as e:
+            self.show_error(str(e))
+            if e.locked:
+                if "Maximum" in str(e):
+                    messagebox.showwarning("Account Locked", "Too many failed attempts. Your account has been locked. "
+                                           "Please request a password reset.", parent=self)
                 self.login_button.configure(state="disabled", text="Locked")
             else:
-                cursor.execute("UPDATE user SET failed_attempts = %s WHERE user_id = %s", (failed_attempts, user['user_id']))
-                conn.commit()
-                self.show_error(
-                    f"Invalid Credentials. {3 - failed_attempts} attempt(s) left.")
                 self.login_button.configure(state="normal", text="Login")
+            return
         except Exception as e:
             self.show_error(friendly_message(e))
             self.login_button.configure(state="normal", text="Login")
-        finally:
-            if conn and conn.is_connected():
-                cursor.close()
-                conn.close()
+            return
+
+        self.handle_remember_me(username)
+        self.show_loading_screen(user)
 
     def show_loading_screen(self, user):
         self.withdraw()
@@ -351,29 +311,15 @@ class LoginApp(ctk.CTk):
                 messagebox.showerror(
                     "Error", "Please enter your email.", parent=dialog)
                 return
-            conn = get_connection()
-            if not conn:
-                return
             try:
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute(
-                    "SELECT employee_id, full_name FROM user WHERE email=%s", (email_val,))
-                result = cursor.fetchone()
-                if result:
-                    messagebox.showinfo("Found",
-                                        f"Account: {result['full_name']}\nUsername: {result['employee_id']}",
-                                        parent=dialog)
-                    dialog.destroy()
-                else:
-                    messagebox.showerror(
-                        "Not Found", "No account found with that email.", parent=dialog)
+                # [UNHAPPY-PATH] identical reply whether or not the e-mail exists; the id is NEVER shown here.
+                # A match creates a support ticket for an Admin, who contacts the person.
+                reply = auth_service.request_username_help(email_val)
             except Exception as e:
-                messagebox.showerror(
-                    "Error", friendly_message(e), parent=dialog)
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
+                messagebox.showerror("Error", friendly_message(e), parent=dialog)
+                return
+            messagebox.showinfo("Request Received", reply, parent=dialog)
+            dialog.destroy()
 
         btn_frame = ctk.CTkFrame(content, fg_color="transparent")
         btn_frame.pack(fill="x", padx=10, pady=(0, 10))
@@ -415,38 +361,13 @@ class LoginApp(ctk.CTk):
                 messagebox.showerror(
                     "Error", "Please enter your Employee ID.", parent=dialog)
                 return
-
-            conn = get_connection()
-            if not conn:
-                return
-
             try:
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute(
-                    "SELECT user_id, full_name, status FROM user WHERE employee_id=%s", (e_id,))
-                user = cursor.fetchone()
-
-                if user:
-                    cursor.execute("UPDATE user SET reset_requested = 1 WHERE user_id = %s", (user['user_id'],))
-                    conn.commit()
-
-                    log_action(user['user_id'], "Flagged", "Authentication",
-                               f"ACCOUNT LOCKED: '{user['full_name']}' requested a password reset.")
-
-                    messagebox.showinfo("Request Sent",
-                                        "Your request has been logged to the Admin Dashboard.\nPlease contact your administrator to unlock your account.",
-                                        parent=dialog)
-                    dialog.destroy()
-                else:
-                    messagebox.showerror(
-                        "Not Found", "No account matches that Employee ID.", parent=dialog)
+                reply = auth_service.request_password_reset(e_id)     # identical reply whether or not the id exists
             except Exception as e:
-                messagebox.showerror(
-                    "Error", friendly_message(e), parent=dialog)
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
+                messagebox.showerror("Error", friendly_message(e), parent=dialog)
+                return
+            messagebox.showinfo("Request Sent", reply, parent=dialog)
+            dialog.destroy()
 
         btn_frame = ctk.CTkFrame(content, fg_color="transparent")
         btn_frame.pack(fill="x", padx=10, pady=(0, 10))
@@ -486,7 +407,9 @@ class LoginApp(ctk.CTk):
             # Check the frame for QR Codes
             decoded_objects = decode(frame, symbols=[ZBarSymbol.QRCODE])
             for obj in decoded_objects:
-                qr_data = obj.data.decode('utf-8')
+                raw_qr = obj.data.decode('utf-8', 'replace')
+                scan = _v.parse_scan(raw_qr)           # one shared parser for badge QR payloads
+                qr_data = scan.value if scan.kind == 'worker' else raw_qr.strip()
                 
                 # We caught an ID! Stop the camera and fill the box.
                 self.user_entry.delete(0, 'end')

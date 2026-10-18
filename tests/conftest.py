@@ -129,3 +129,17 @@ def svc(fresh_db, monkeypatch):
     monkeypatch.setattr(tc.tool_cache, "_by_tag", {})
     monkeypatch.setattr(tc.tool_cache, "_high_water", None)
     return fresh_db
+
+
+def make_window(factory, attempts=4):
+    """Create a Tk window, retrying: creating many Tcl interpreters in one process occasionally fails with a transient
+    "Can't find a usable init.tcl" on Windows. After the retries the test is SKIPPED (never silently passed)."""
+    import time
+    last = None
+    for _ in range(attempts):
+        try:
+            return factory()
+        except Exception as exc:                                # noqa: BLE001
+            last = exc
+            time.sleep(0.6)
+    pytest.skip(f"Tk unavailable: {last}")

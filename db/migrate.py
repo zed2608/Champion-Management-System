@@ -380,6 +380,14 @@ def step_sync_transitions(ctx: Ctx):
         ctx.note("removed legacy project status edges: " + ", ".join(removed))
 
 
+def step_workers_without_password(ctx: Ctx):
+    """Workers are field personnel with no login. The old registration stored the bcrypt hash of ONE shared constant for all of
+    them; a Worker now has no password hash at all."""
+    n = ctx.q("UPDATE `user` SET password_hash = NULL WHERE role = 'Worker' AND password_hash IS NOT NULL").rowcount
+    if n:
+        ctx.note(f"cleared the shared password hash of {n} Worker accounts")
+
+
 STEPS = [
     (1, "baseline_tables", step_baseline_tables, True),
     (2, "rename_requirement_id", step_rename_requirement_id, True),
@@ -391,6 +399,7 @@ STEPS = [
     (8, "check_constraints", step_check_constraints, True),
     (9, "seed_project_transitions", step_seed_transitions, True),
     (10, "project_transitions_exact", step_sync_transitions, False),
+    (11, "workers_without_password", step_workers_without_password, False),
 ]
 
 

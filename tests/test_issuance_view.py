@@ -27,10 +27,8 @@ def rows(db, sql, params=()):
 @pytest.fixture
 def screen(svc, monkeypatch):
     import customtkinter as ctk
-    try:
-        root = ctk.CTk()
-    except Exception as exc:                                     # no display
-        pytest.skip(f"Tk unavailable: {exc}")
+    from conftest import make_window
+    root = make_window(ctk.CTk)
     root.geometry("400x300+0+0")
     root.update()
 

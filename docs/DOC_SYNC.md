@@ -78,6 +78,25 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 | 54 | Workers on a project | free text, matched by `LIKE` | each ID must belong to an Active employee; stored in `project_workers` (exact match) | none |
 | 55 | Staff and Project Management | Staff blocked from the module, but the screen still had Staff branches | **Staff get read-only Project Management (your decision), so Staff can no longer save drafts.** `DRAFT_ROLES = ("Admin",)` in `services/project_service.py` is the single switch if drafting should return | the "Save as Draft" step in the Staff guide goes away |
 
+## A6. Access control, login and Role Management (Phase 2f)
+| # | Topic | Old behaviour | New behaviour | Manuscript / manual impact |
+|---|---|---|---|---|
+| 56 | Who can do what | enforced only by hiding sidebar entries | **every service function** re-reads the caller's role and status from MySQL (`@require_role`); a tampered or stale session cannot escalate; refusals are written to the audit log; Workers never have a session. A test fails the build if a service function lacks a guard. Matching MySQL accounts (`champion_staff`, `champion_admin`) are the second layer | revise the "UI-only RBAC" weakness in Ch. 5 |
+| 57 | Staff and Project Management | Staff blocked from the module | **Staff see a read-only Project Management** (list and details; no Add, Edit, status or archive actions) **(your decision)** | update Fig. 116 |
+| 58 | Staff dashboard feed | the dashboard read the audit log directly | Staff read a database view (`v_activity_feed`) that exposes project-creation events only, so Staff need no access to the audit log | none |
+| 59 | Login for non-active accounts | only `Locked` was refused | `Locked`, `Archived` and `Inactive` are refused; Workers cannot log in; failed attempts of non-active accounts are not counted | add to the login section |
+| 60 | Passwords | trimmed at login and registration | **never trimmed**; a password over 72 bytes is "invalid", not an error | none |
+| 61 | Workers' password | the bcrypt hash of one shared constant on every Worker | no password hash at all (migration clears the old ones) | none |
+| 62 | Forgot Username | showed the employee id to anyone who knew an email, and said "not found" otherwise | identical reply either way; **the id is never shown**; a match creates a support ticket ("Username request") for an Admin, who contacts the person | revise Fig. 3 and the FAQ |
+| 63 | Forgot Password | reply differed for unknown ids | identical reply; known accounts are flagged for an Admin | none |
+| 64 | Same full name | registration was blocked | **warns and allows** (real employees share names); the e-mail address stays unique; also applies to the Profile screen | add to Role Management |
+| 65 | Employee ids | `MAX + 1` with no lock; padded to 3 digits | issued from a locked sequence (two Admins cannot get the same id); numbers past 999 work | none |
+| 66 | Blank e-mail on registration | stored as an empty string, so a second blank e-mail broke the unique key | stored as NULL | none |
+| 67 | Editing a user | saving re-activated the account unconditionally | an archived account cannot be edited (restore it first); saving a Locked account still unlocks it | none |
+| 68 | Last Admin | could be archived or demoted | **the last active Admin cannot be archived or demoted, and nobody can archive their own account** (race-safe) | add to Role Management |
+| 69 | Dashboard numbers | counted rows | sums of quantity: a consumable of 2.5 kg counts 2.5; total physical = shelf + deployed + in maintenance; "maintenance items" = open tickets; archived employees and tools are excluded | none |
+| 70 | Help editor, backup log, Tagging writes | direct SQL in the screens | **still direct SQL** (Help editor and tickets, backup log: scheduled; Tagging: step g) | n/a |
+
 ## B. ERD (Fig. 92) vs code (AUDIT_FINDINGS 1.12)
 | Item | ERD | Code | Decision |
 |---|---|---|---|

@@ -40,6 +40,7 @@ GRANT SELECT ON `{{DB}}`.`help_faqs`            TO '{{STAFF_USER}}'@'{{HOST}}';
 GRANT SELECT ON `{{DB}}`.`system_requirements`  TO '{{STAFF_USER}}'@'{{HOST}}';
 GRANT SELECT ON `{{DB}}`.`help_tickets`         TO '{{STAFF_USER}}'@'{{HOST}}';
 GRANT SELECT ON `{{DB}}`.`schema_migrations`    TO '{{STAFF_USER}}'@'{{HOST}}';
+GRANT SELECT ON `{{DB}}`.`v_activity_feed`      TO '{{STAFF_USER}}'@'{{HOST}}';   -- dashboard feed (project events only)
 GRANT SELECT ON `{{DB}}`.`schema_meta`          TO '{{STAFF_USER}}'@'{{HOST}}';
 
 -- Issuance / retrieval and maintenance tickets.

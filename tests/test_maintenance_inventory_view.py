@@ -20,10 +20,8 @@ def rows(db, sql, params=()):
 @pytest.fixture
 def ui(svc, monkeypatch):
     import customtkinter as ctk
-    try:
-        root = ctk.CTk()
-    except Exception as exc:
-        pytest.skip(f"Tk unavailable: {exc}")
+    from conftest import make_window
+    root = make_window(ctk.CTk)
     root.geometry("400x300+0+0")
     root.update()
     import database
@@ -74,7 +72,6 @@ def test_maintenance_flag_and_restore_through_the_real_screen(ui):
     view.submit_flag()                                                         # more than are in stock
     assert shown[0][0] == "showerror" and "stock" in shown[0][2].lower() and "Traceback" not in shown[0][2]
 
-    run(d, "UPDATE tool SET is_archived = 1 WHERE tool_id = %s", (cal,)) if False else None
 
 
 def test_inventory_add_and_archive_rules_through_the_real_screen(ui):

@@ -56,6 +56,8 @@ def test_staff_can_do_the_daily_work(accounts):
     s = accounts(STAFF, STAFF_PW)
     allowed(s, "SELECT * FROM tool")
     allowed(s, "SELECT * FROM `transaction`")
+    allowed(s, "SELECT * FROM v_activity_feed")                                          # dashboard feed: project events only
+    allowed(s, "INSERT INTO help_tickets (user_id, subject, message) VALUES (1, 'Username request', 'm')")   # forgot-username request
     allowed(s, "INSERT INTO `transaction` (tool_id, user_id, project_id, type, status, quantity) VALUES (1, 2, 1, 'Issue', 'Active', 1)")
     allowed(s, "UPDATE inventory SET quantity_available = quantity_available - 1 WHERE tool_id = 1")
     allowed(s, "UPDATE `transaction` SET status = 'Returned', type = 'Retrieval' WHERE transaction_id = 1")
@@ -87,6 +89,7 @@ def test_staff_cannot_escalate_or_destroy(accounts):
 
 def test_staff_can_only_append_to_the_audit_log(accounts):
     s = accounts(STAFF, STAFF_PW)
+    denied(s, "SELECT * FROM system_logs")                                               # the feed view is NOT a way around this
     allowed(s, "INSERT INTO system_logs (user_id, action_type, module, details) VALUES (1, 'A', 'B', 'C')")
     denied(s, "SELECT * FROM system_logs")
     denied(s, "UPDATE system_logs SET details = 'tampered'")

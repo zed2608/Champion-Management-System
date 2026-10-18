@@ -721,7 +721,11 @@ class ProjectsView(ctk.CTkFrame):
             self._proj_search_timer = self.after(300, lambda: self.load_projects(self.proj_search.get().strip()))
         self.proj_search_var.trace_add("write", on_proj_search)
         
-        ctk.CTkButton(top, text="+ Add Project", width=140, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_draft_project_modal).pack(side="right", padx=(10, 5))
+        if self.is_admin:
+            ctk.CTkButton(top, text="+ Add Project", width=140, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_draft_project_modal).pack(side="right", padx=(10, 5))
+        else:
+            ctk.CTkLabel(top, text="View only: ask an administrator to create or change projects.", font=("Inter", 11, "italic"),
+                         text_color="gray").pack(side="right", padx=(10, 10))
 
         # Removed the crashing "both" orientation - back to safe standard vertical scrolling
         self.project_scroll = ctk.CTkScrollableFrame(
@@ -945,7 +949,7 @@ class ProjectsView(ctk.CTkFrame):
             self.open_draft_project_modal(edit_row=row, reqs=reqs)
 
         raw_status = row['status'].replace(' (OVERDUE)', '')
-        if raw_status in ['Pending', 'Approved']:
+        if raw_status in ['Pending', 'Approved'] and self.is_admin:
             ctk.CTkButton(btn_frame, text="Edit Project", width=90, fg_color="#F1C40F", hover_color="#D4AC0D", text_color="black", font=("Inter", 11, "bold"), command=trigger_edit_mode).pack(side="left", padx=5)
             
         if raw_status == 'Pending' and self.is_admin:
