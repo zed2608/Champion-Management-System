@@ -136,8 +136,8 @@ def test_archived_borrower_archived_tool_and_closed_project_are_refused(w):
     with pytest.raises(Conflict, match="Archived"):
         iss.issue(staff, u["w1"], pid, [{"tool_id": cal, "qty": 1}], "p")
     run(d, "UPDATE `user` SET status='Active' WHERE user_id=%s", (u["w1"],))
-    run(d, "UPDATE projects SET status='Pending' WHERE project_id=%s", (pid,))
-    with pytest.raises(Conflict, match="Pending"):
+    run(d, "UPDATE projects SET status='Cancelled' WHERE project_id=%s", (pid,))     # a legal edge (Approved -> Cancelled)
+    with pytest.raises(Conflict, match="Cancelled"):
         iss.issue(staff, u["w1"], pid, [{"tool_id": cal, "qty": 1}], "p")
 
 
