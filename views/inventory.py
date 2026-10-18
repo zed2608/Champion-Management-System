@@ -11,6 +11,7 @@ import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 from datetime import datetime
 from services.errors import friendly_message
+from services import inventory_service as inv_svc
 
 
 class InventoryView(ctk.CTkFrame):
@@ -661,87 +662,36 @@ class InventoryView(ctk.CTkFrame):
                 "Validation Error", "Category is required.", parent=self.add_modal)
             return
 
+        sup = "" if sup in ("", "Type or select...") else sup
         try:
-            price_val = self.price_entry.get().strip()
-            price = float(price_val) if price_val else 0.00
-
-            qty_val = self.qty_entry.get().strip()
-            if not qty_val:
-                messagebox.showerror(
-                    "Validation Error", "Quantity is required.", parent=self.add_modal)
-                return
-            qty = float(qty_val)
-
-            if qty < 0 or price < 0:
-                messagebox.showerror(
-                    "Validation Error", "Price and Quantity cannot be negative values.", parent=self.add_modal)
-                return
-
-        except ValueError:
-            messagebox.showerror(
-                "Type Error", "Price and Quantity must be numbers.", parent=self.add_modal)
-            return
-
-        conn = get_connection()
-        if not conn:
-            return
-        try:
-            cursor = conn.cursor()
-
-            # --- DUPLICATE & TYPO CHECK ---
-            cursor.execute("SELECT name FROM tool WHERE is_archived = 0")
-            existing_names = [r[0] for r in cursor.fetchall()]
-            exact_match = False
-            similar_names = []
-
-            for en in existing_names:
-                if en.lower() == name.lower():
-                    exact_match = True
-                    break
-                if difflib.SequenceMatcher(None, name.lower(), en.lower()).ratio() > 0.85:
-                    similar_names.append(en)
-
-            if exact_match:
-                messagebox.showerror(
-                    "Duplicate Name", f"A product named '{name}' already exists in active inventory.", parent=self.add_modal)
-                return
-
-            if similar_names:
-                sim_list = "\n".join([f"• {sn}" for sn in similar_names[:3]])
-                msg = f"Wait! Similar product names already exist:\n\n{sim_list}\n\nAre you sure you want to add '{name}' as a new distinct item?"
-                if not messagebox.askyesno("Similar Name Detected", msg, parent=self.add_modal):
-                    return
-            # -----------------------------
-
-            cursor.execute("""
-                INSERT INTO tool (category, supplier, name, description, price, location,
-                                  item_type, unit_of_measure, `condition`, date_acquired, is_archived)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Good', NOW(), 0)
-            """, (cat, sup, name, desc, price, loc, itype, uom))
-
-            new_tool_id = cursor.lastrowid
-            cursor.execute(
-                "INSERT INTO inventory (tool_id, quantity_total, quantity_available) VALUES (%s, %s, %s)",
-                (new_tool_id, qty, qty)
-            )
-            conn.commit()
-
-            uid = self.user_info.get("user_id")
-            if uid:
-                log_action(uid, "Added", "Inventory",
-                           f"Added new {itype}: '{name}' (PID: {new_tool_id}), Qty: {qty} {uom}")
-
-            messagebox.showinfo(
-                "Success", f"{itype} '{name}' added successfully.", parent=self.add_modal)
-            self.add_modal.destroy()
-            self.load_inventory_data()
+            # name clash / typo check (read-only helper); the service re-checks the exact duplicate under lock
+            exact, similar = inv_svc.find_similar_names(name)
         except Exception as e:
-            messagebox.showerror("Database Error", friendly_message(e),
-                                 parent=self.add_modal)
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+            messagebox.showerror("Validation Error", friendly_message(e), parent=self.add_modal)
+            return
+        if exact:
+            messagebox.showerror("Duplicate Name", f"A product named '{name}' already exists in active inventory.", parent=self.add_modal)
+            return
+        if similar:
+            sim_list = "\n".join([f"• {sn}" for sn in similar])
+            msg = f"Wait! Similar product names already exist:\n\n{sim_list}\n\nAre you sure you want to add '{name}' as a new distinct item?"
+            if not messagebox.askyesno("Similar Name Detected", msg, parent=self.add_modal):
+                return
+        try:
+            # [RBAC][CONCURRENCY] Admin only; validated server-side (numbers, whole units for equipment, limits); one transaction
+            res = inv_svc.add_item(self.user_info, name=name, category=cat, supplier=sup, description=desc, location=loc,
+                                   item_type=itype, unit_of_measure=uom, price=self.price_entry.get(),
+                                   quantity=self.qty_entry.get())
+        except Exception as e:
+            messagebox.showerror("Could not add item", friendly_message(e), parent=self.add_modal)
+            return
+        uid = self.user_info.get("user_id")
+        if uid:
+            log_action(uid, "Added", "Inventory",
+                       f"Added new {itype}: '{name}' (PID: {res['tool_id']}), Qty: {res['quantity']:g} {uom}")
+        messagebox.showinfo("Success", f"{itype} '{name}' added successfully.", parent=self.add_modal)
+        self.add_modal.destroy()
+        self.load_inventory_data()
 
     def open_tool_modal(self, lookup_id):
         data = self.tool_hash_table.get(str(lookup_id))
@@ -856,6 +806,9 @@ class InventoryView(ctk.CTkFrame):
                                         "Good", "Needs Repair", "Damaged", "Lost"], fg_color="#F9FAFB", text_color="black")
         status_menu.pack(side="left", fill="x", expand=True)
         status_menu.set(data['status'])
+        status_menu.configure(state="disabled")          # [RBAC] display only: conditions change through Maintenance
+        ctk.CTkLabel(form_scroll, text="ℹ  Condition is set by Maintenance tickets (flag or resolve an issue there).",
+                     font=("Inter", 10), text_color="gray", justify="left", wraplength=450).pack(anchor="w", pady=(0, 5))
 
         # --- TAGGING SECTION ---
         ctk.CTkFrame(form_scroll, height=2, fg_color="#E0E0E0").pack(
@@ -888,35 +841,33 @@ class InventoryView(ctk.CTkFrame):
 
         def save_tag():
             new_tag = tag_entry.get().strip()
-            conn = get_connection()
-            if not conn:
-                return
+            if not new_tag:
+                return messagebox.showwarning("Tag ID", "Enter a tag ID, or use 'Unlink Current Tag'.", parent=modal)
             try:
-                c = conn.cursor()
-                if new_tag:
-                    c.execute(
-                        "SELECT tool_id FROM tool WHERE tag_id = %s AND tool_id != %s", (new_tag, lookup_id))
-                    if c.fetchone():
-                        return messagebox.showerror("Duplicate Tag", f"Tag '{new_tag}' is already used!", parent=modal)
-                c.execute("UPDATE tool SET tag_id = %s WHERE tool_id = %s",
-                          (new_tag or None, lookup_id))
-                conn.commit()
-                data['tag_id'] = new_tag
-                messagebox.showinfo(
-                    "Success", "Tag successfully linked to tool.", parent=modal)
-                self.load_inventory_data()
+                res = inv_svc.assign_tag(self.user_info, lookup_id, new_tag)     # [RBAC] Admin may relink; Staff only if untagged
             except Exception as e:
-                messagebox.showerror("Error", friendly_message(e), parent=modal)
-            finally:
-                if conn.is_connected():
-                    c.close()
-                    conn.close()
+                return messagebox.showerror("Tag not saved", friendly_message(e), parent=modal)
+            data['tag_id'] = res['tag_id']
+            tag_entry.delete(0, 'end'); tag_entry.insert(0, res['tag_id'])
+            uid = self.user_info.get("user_id")
+            if uid and res['changed']:
+                log_action(uid, "Edited", "Inventory", f"Linked tag {res['tag_id']} to '{res['name']}' (PID: {lookup_id})")
+            messagebox.showinfo("Success", "Tag successfully linked to tool.", parent=modal)
+            self.load_inventory_data()
 
         def unlink_tag():
             if messagebox.askyesno("Remove Tag", "Unlink the tag from this tool?", parent=modal):
+                try:
+                    res = inv_svc.unlink_tag(self.user_info, lookup_id)
+                except Exception as e:
+                    return messagebox.showerror("Tag not removed", friendly_message(e), parent=modal)
                 tag_entry.delete(0, 'end')
-                save_tag()
+                data['tag_id'] = ''
+                uid = self.user_info.get("user_id")
+                if uid:
+                    log_action(uid, "Edited", "Inventory", f"Unlinked tag {res['old_tag']} from '{res['name']}' (PID: {lookup_id})")
                 update_preview()
+                self.load_inventory_data()
 
         if not is_staff_modal:
             tag_btn_row = ctk.CTkFrame(form_scroll, fg_color="transparent")
@@ -1015,123 +966,58 @@ class InventoryView(ctk.CTkFrame):
         # --- END TAGGING SECTION ---
 
         def execute_update():
+            new_name = name_entry.get().strip()
             try:
-                new_qty = float(qty_entry.get())
-                new_min_stock = float(min_stock_entry.get(
-                )) if min_stock_entry.get().strip() else 0.0
-                # --- FIX C: Capture and Validate Price Update ---
-                new_price = float(
-                    price_entry.get()) if price_entry.get().strip() else 0.00
-                if new_qty < 0 or new_price < 0 or new_min_stock < 0:
-                    return messagebox.showerror("Error", "Quantity, Min Stock, and Price cannot be negative.", parent=modal)
-            except ValueError:
-                return messagebox.showerror("Error", "Quantity, Min Stock, and Price must be valid numbers.", parent=modal)
-
-            qty_diff = new_qty - float(data['qty_tot'])
-            new_avail = float(data['qty_avail']) + qty_diff
-
-            if new_avail < 0:
-                borrowed_out = float(data['qty_tot']) - \
-                    float(data['qty_avail'])
-                return messagebox.showerror("Warning", f"Invalid adjustment.\n\nYou cannot lower the Total Quantity to {new_qty} because there are {borrowed_out} unit(s) currently deployed to workers.\n\nThis would result in a negative Available Qty ({new_avail}).", parent=modal)
-
-            if messagebox.askyesno("Confirm Update", "Save all changes to the database?", parent=modal):
-                conn = get_connection()
-                if not conn:
+                exact, similar = inv_svc.find_similar_names(new_name, exclude_tool_id=lookup_id)
+            except Exception as e:
+                return messagebox.showerror("Error", friendly_message(e), parent=modal)
+            if exact:
+                return messagebox.showerror("Duplicate Name", f"Another product named '{new_name}' already exists.", parent=modal)
+            if similar and new_name.lower() != data['name'].lower():
+                sim_list = "\n".join([f"• {sn}" for sn in similar])
+                if not messagebox.askyesno("Similar Name Detected",
+                                           f"Similar product names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this to '{new_name}'?",
+                                           parent=modal):
                     return
-                try:
-                    cursor = conn.cursor()
-
-                    # --- DUPLICATE & TYPO CHECK FOR EDITS ---
-                    new_name = name_entry.get().strip()
-                    cursor.execute(
-                        "SELECT tool_id, name FROM tool WHERE is_archived = 0 AND tool_id != %s", (lookup_id,))
-                    existing_tools = cursor.fetchall()
-                    exact_match = False
-                    similar_names = []
-
-                    for et in existing_tools:
-                        en_name = et[1]
-                        if en_name.lower() == new_name.lower():
-                            exact_match = True
-                            break
-                        if difflib.SequenceMatcher(None, new_name.lower(), en_name.lower()).ratio() > 0.85:
-                            similar_names.append(en_name)
-
-                    if exact_match:
-                        return messagebox.showerror("Duplicate Name", f"Another product named '{new_name}' already exists.", parent=modal)
-
-                    if similar_names and new_name.lower() != data['name'].lower():
-                        sim_list = "\n".join(
-                            [f"• {sn}" for sn in similar_names[:3]])
-                        msg = f"Similar product names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this to '{new_name}'?"
-                        if not messagebox.askyesno("Similar Name Detected", msg, parent=modal):
-                            return
-                    # -----------------------------
-
-                    new_tag = tag_entry.get().strip() or None
-                    if new_tag:
-                        cursor.execute(
-                            "SELECT tool_id FROM tool WHERE tag_id = %s AND tool_id != %s", (new_tag, lookup_id))
-                        if cursor.fetchone():
-                            return messagebox.showerror("Duplicate Tag", "Tag ID is already used by another tool.", parent=modal)
-
-                    cursor.execute("""
-                        UPDATE tool SET name=%s, description=%s, category=%s, supplier=%s, location=%s, item_type=%s, unit_of_measure=%s, `condition`=%s, tag_id=%s
-                        WHERE tool_id=%s
-                    """, (name_entry.get(), desc_entry.get(), cat_entry.get(), sup_entry.get(), loc_entry.get(), type_menu.get(), uom_menu.get(), status_menu.get(), new_tag, lookup_id))
-
-                    cursor.execute("""
-                        UPDATE inventory SET quantity_total=%s, quantity_available=quantity_available + %s, minimum_stock=%s WHERE tool_id=%s
-                    """, (new_qty, qty_diff, new_min_stock, lookup_id))
-                    conn.commit()
-
-                    uid = self.user_info.get("user_id")
-                    if uid:
-                        log_action(
-                            uid, "Edited", "Inventory", f"Edited item '{name_entry.get()}' (PID: {lookup_id})")
-
-                    modal.destroy()
-                    self.load_inventory_data()
-                except Exception as e:
-                    messagebox.showerror(
-                        "Database Error", friendly_message(e), parent=modal)
-                finally:
-                    if conn.is_connected():
-                        cursor.close()
-                        conn.close()
+            if not messagebox.askyesno("Confirm Update", "Save all changes to the database?", parent=modal):
+                return
+            try:
+                # [RBAC][CONCURRENCY] Admin only; the "cannot go below deployed" rule is checked against the LOCKED row
+                inv_svc.update_item(self.user_info, lookup_id, name=name_entry.get(), category=cat_entry.get(),
+                                    supplier=sup_entry.get(), description=desc_entry.get(), location=loc_entry.get(),
+                                    item_type=type_menu.get(), unit_of_measure=uom_menu.get(), price=price_entry.get(),
+                                    quantity=qty_entry.get(), min_stock=min_stock_entry.get(), tag_id=tag_entry.get())
+            except Exception as e:
+                return messagebox.showerror("Could not update", friendly_message(e), parent=modal)
+            uid = self.user_info.get("user_id")
+            if uid:
+                log_action(uid, "Edited", "Inventory", f"Edited item '{name_entry.get()}' (PID: {lookup_id})")
+            modal.destroy()
+            self.load_inventory_data()
 
         def execute_archive():
             if is_arch:
                 msg = "Restore this item to active inventory?"
-                new_state = 0
             else:
                 msg = "Archive this item? It will be hidden from active inventory."
-                new_state = 1
-
-            if messagebox.askyesno("Confirm", msg, parent=modal):
-                conn = get_connection()
-                if conn:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "UPDATE tool SET is_archived=%s, archived_at=NOW() WHERE tool_id=%s", (new_state, lookup_id))
-                    conn.commit()
-                    cursor.close()
-                    conn.close()
-
-                    uid = self.user_info.get("user_id")
-                    action_str = "Restored" if new_state == 0 else "Archived"
-                    if uid:
-                        log_action(uid, action_str, "Inventory",
-                                   f"{action_str} item '{data['name']}'")
-
-                    modal.destroy()
-                    self.load_inventory_data()
-
-                    dashboard = self.winfo_toplevel()
-                    if hasattr(dashboard, "show_toast"):
-                        msg_str = "✓ Tool archived and passed to Maintenance." if new_state == 1 else "✓ Tool restored successfully."
-                        dashboard.show_toast(msg_str)
+            if not messagebox.askyesno("Confirm", msg, parent=modal):
+                return
+            try:
+                if is_arch:
+                    inv_svc.restore_tool(self.user_info, lookup_id)
+                else:
+                    inv_svc.archive_tool(self.user_info, lookup_id)     # refused while units are deployed / in maintenance
+            except Exception as e:
+                return messagebox.showerror("Could not " + ("restore" if is_arch else "archive"), friendly_message(e), parent=modal)
+            uid = self.user_info.get("user_id")
+            action_str = "Restored" if is_arch else "Archived"
+            if uid:
+                log_action(uid, action_str, "Inventory", f"{action_str} item '{data['name']}'")
+            modal.destroy()
+            self.load_inventory_data()
+            dashboard = self.winfo_toplevel()
+            if hasattr(dashboard, "show_toast"):
+                dashboard.show_toast("✓ Tool restored successfully." if is_arch else "✓ Tool archived and passed to Maintenance.")
 
         # Modal Focus Traversal
         name_entry.bind("<Return>", lambda e: desc_entry.focus_set())

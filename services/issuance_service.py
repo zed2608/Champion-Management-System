@@ -195,8 +195,8 @@ def issue(actor, borrower_id, project_id, cart, purpose) -> IssueResult:
                         "AND type = 'Issue' AND status = 'Active'", (project_id, tid))
             deployed = _num(cur.fetchone()["d"])
             if deployed + qty > reqs[tid]["quantity"]:
-                raise Conflict(f"Cannot issue {qty:g} x '{row['name']}': approved {reqs[tid]['quantity']:g}, "
-                               f"already deployed {deployed:g}.")
+                raise Conflict(f"Cannot issue {v.fmt_qty(qty)} x '{row['name']}': approved {v.fmt_qty(reqs[tid]['quantity'])}, "
+                               f"already deployed {v.fmt_qty(deployed)}.")
             if qty > row["quantity_available"]:
                 if row["quantity_in_maintenance"] > 0 and row["quantity_available"] <= 0:
                     raise Conflict(f"'{row['name']}': all remaining units are in maintenance.")
@@ -312,7 +312,7 @@ def retrieve(actor, user_id, tool_id, qty, condition, notes) -> RetrieveResult:
         rows = cur.fetchall()
         held = sum((_num(r["quantity"]) for r in rows), Decimal(0))
         if want > held:
-            raise Conflict(f"Cannot retrieve {want:g}: only {held:g} deployed to this employee.")
+            raise Conflict(f"Cannot retrieve {v.fmt_qty(want)}: only {v.fmt_qty(held)} deployed to this employee.")
 
         remaining = want
         for r in rows:

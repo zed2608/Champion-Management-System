@@ -41,7 +41,7 @@ def test_fresh_install_creates_everything_and_rerun_is_a_noop(make_db):
     report = migrate.run(d, require_backup=False, **QUIET)
     assert {n for n, _ in report} >= {"baseline_tables", "triggers"}
     assert {r["t"] for r in _q(d, "SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE()")} == EXPECTED_TABLES
-    assert len(_q(d, "SELECT 1 FROM information_schema.triggers WHERE trigger_schema = DATABASE()")) == 9
+    assert len(_q(d, "SELECT 1 FROM information_schema.triggers WHERE trigger_schema = DATABASE()")) == 10
     assert migrate.run(d, require_backup=False, **QUIET) == []          # nothing pending: nothing touched
     assert migrate.check_schema_current(d) == (True, "")
     assert len(_q(d, "SELECT * FROM project_transitions")) == len(migrate.TRANSITIONS)
@@ -127,7 +127,9 @@ def migrated_legacy(legacy_db, tmp_path, monkeypatch):
 def test_legacy_upgrade_keeps_every_row(migrated_legacy):
     d, before, _ = migrated_legacy
     for t, n in before.items():
-        assert _q(d, f"SELECT COUNT(*) AS n FROM `{t}`")[0]["n"] == n, t
+        now = _q(d, f"SELECT COUNT(*) AS n FROM `{t}`")[0]["n"]
+        # nothing is ever lost; the only table the upgrade adds rows to is tool_issues (tickets for tools the old screens flagged)
+        assert (now >= n) if t == "tool_issues" else (now == n), t
 
 
 def test_legacy_requirement_key_renamed_and_status_added(migrated_legacy):
@@ -179,6 +181,10 @@ def test_legacy_issue_status_and_unit_condition_backfill(migrated_legacy):
     assert inv[2]["quantity_in_maintenance"] == 1 and inv[2]["quantity_lost"] == 0
     # caliper: total 10, available 7, 3 deployed -> nothing missing, nothing reclassified
     assert inv[1]["quantity_in_maintenance"] == 0
+    # old saw: flagged 'Needs Repair' by the old screens with no ticket -> a real ticket is created once, and its 1 missing unit is held
+    saw = _q(d, "SELECT * FROM tool_issues WHERE tool_id = 4")
+    assert len(saw) == 1 and saw[0]["status"] == "Open" and saw[0]["reported_by"] == "Migration"
+    assert inv[4]["quantity_in_maintenance"] == 1
 
 
 def test_legacy_id_sequences_seeded_from_existing_ids(migrated_legacy):
@@ -216,7 +222,7 @@ def test_legacy_upgrade_matches_fresh_install_and_is_rerunnable(migrated_legacy,
     migrate.run(fresh, require_backup=False, **QUIET)
     assert _columns(d) == _columns(fresh), "an upgraded database must have exactly the shape of a fresh one"
     assert migrate.run(d, require_backup=False, **QUIET) == []
-    assert len(_q(d, "SELECT 1 FROM information_schema.triggers WHERE trigger_schema = DATABASE()")) == 9
+    assert len(_q(d, "SELECT 1 FROM information_schema.triggers WHERE trigger_schema = DATABASE()")) == 10
 
 
 def test_editing_schema_sql_reaches_already_migrated_databases(fresh_db, monkeypatch, tmp_path):

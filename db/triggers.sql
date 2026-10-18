@@ -166,3 +166,16 @@ BEGIN
     SET NEW.resolved_at = COALESCE(NEW.resolved_at, NOW());
   END IF;
 END
+-- //
+DROP TRIGGER IF EXISTS trg_tool_bu
+-- //
+-- A tool cannot be archived while units are out. Mirrors inventory_service.archive_tool so the rule holds for any SQL.
+CREATE TRIGGER trg_tool_bu BEFORE UPDATE ON tool FOR EACH ROW
+BEGIN
+  IF (OLD.is_archived IS NULL OR OLD.is_archived = 0) AND NEW.is_archived = 1 THEN
+    IF EXISTS (SELECT 1 FROM `transaction` WHERE tool_id = OLD.tool_id AND status = 'Active')
+       OR EXISTS (SELECT 1 FROM inventory WHERE tool_id = OLD.tool_id AND quantity_in_maintenance > 0) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CHAMPION: A tool cannot be archived while units are deployed or in maintenance.';
+    END IF;
+  END IF;
+END

@@ -113,3 +113,42 @@ def resolve_maintenance(cur, tool_id, qty, *, repaired: bool) -> None:
     cur.execute(sql, args)
     if cur.rowcount != 1:
         raise StockError("Those units are not in maintenance any more.")
+
+
+def resolve_maintenance_as_lost(cur, tool_id, qty) -> None:
+    """Close out ``qty`` units from maintenance as LOST: they leave the total and are counted in quantity_lost."""
+    qty = _d(qty)
+    cur.execute("UPDATE inventory SET quantity_in_maintenance = quantity_in_maintenance - %s, "
+                "quantity_total = quantity_total - %s, quantity_lost = quantity_lost + %s "
+                "WHERE tool_id = %s AND quantity_in_maintenance >= %s", (qty, qty, qty, tool_id, qty))
+    if cur.rowcount != 1:
+        raise StockError("Those units are not in maintenance any more.")
+
+
+def quarantine_units(cur, tool_id, qty) -> None:
+    """A manual flag on units that are physically in stock: available -> in maintenance (total unchanged)."""
+    qty = _d(qty)
+    cur.execute("UPDATE inventory SET quantity_available = quantity_available - %s, "
+                "quantity_in_maintenance = quantity_in_maintenance + %s "
+                "WHERE tool_id = %s AND quantity_available >= %s", (qty, qty, tool_id, qty))
+    if cur.rowcount != 1:
+        raise StockError("Not enough units are in stock to flag. Units that are deployed must be retrieved first.")
+
+
+def lose_units_from_stock(cur, tool_id, qty) -> None:
+    """A manual 'Lost' / 'Stolen' flag on units that were in stock: they leave the total and are counted as lost."""
+    qty = _d(qty)
+    cur.execute("UPDATE inventory SET quantity_available = quantity_available - %s, quantity_total = quantity_total - %s, "
+                "quantity_lost = quantity_lost + %s WHERE tool_id = %s AND quantity_available >= %s",
+                (qty, qty, qty, tool_id, qty))
+    if cur.rowcount != 1:
+        raise StockError("Not enough units are in stock to flag. Units that are deployed must be retrieved first.")
+
+
+def receive_units(cur, tool_id, qty) -> None:
+    """New or found units: total and available both grow by ``qty`` (replacement bought, lost unit found)."""
+    qty = _d(qty)
+    cur.execute("UPDATE inventory SET quantity_total = quantity_total + %s, quantity_available = quantity_available + %s "
+                "WHERE tool_id = %s", (qty, qty, tool_id))
+    if cur.rowcount != 1:
+        raise ToolNotFound(f"Tool {tool_id} was not found in inventory.")

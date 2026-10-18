@@ -6,6 +6,7 @@ import os
 import subprocess
 import threading
 from services.errors import friendly_message
+from services import maintenance_service as mnt, inventory_service as inv_svc
 
 
 class MaintenanceView(ctk.CTkFrame):
@@ -145,6 +146,11 @@ class MaintenanceView(ctk.CTkFrame):
         )
         self.flag_condition.grid(
             row=1, column=2, sticky="ew", padx=5, pady=(3, 8))
+        ctk.CTkLabel(form_grid, text="Units (qty)", font=("Inter", 11, "bold"),
+                     text_color="#1A1A1A").grid(row=0, column=3, sticky="w", padx=5)
+        self.flag_qty = ctk.CTkEntry(form_grid, placeholder_text="1")
+        self.flag_qty.grid(row=1, column=3, sticky="ew", padx=5, pady=(3, 8))
+        self.flag_qty.insert(0, "1")
 
         notes_row = ctk.CTkFrame(flag_card, fg_color="transparent")
         notes_row.pack(fill="x", padx=15, pady=(0, 12))
@@ -203,59 +209,33 @@ class MaintenanceView(ctk.CTkFrame):
         reported_by = self.flag_reported_by.get().strip()
         condition = self.flag_condition.get()
         notes = self.flag_notes.get().strip()
+        qty = self.flag_qty.get().strip() or "1"
 
         if not tool_input or not reported_by:
             messagebox.showerror("Error", "Tool ID/Tag and Reported By are required.",
                                  parent=self.winfo_toplevel())
             return
-
-        conn = get_connection()
-        if not conn:
-            return
         try:
-            cursor = conn.cursor(dictionary=True)
-            if tool_input.isdigit():
-                cursor.execute(
-                    "SELECT tool_id, name FROM tool WHERE tool_id = %s", (tool_input,))
-            else:
-                cursor.execute(
-                    "SELECT tool_id, name FROM tool WHERE tag_id = %s", (tool_input,))
-            tool = cursor.fetchone()
-            if not tool:
-                messagebox.showerror("Not Found", "No tool found with that PID or Tag ID.",
-                                     parent=self.winfo_toplevel())
-                return
-
-            cursor.execute("""
-                INSERT INTO tool_issues (tool_id, reported_by, condition_flag, notes)
-                VALUES (%s, %s, %s, %s)
-            """, (tool["tool_id"], reported_by, condition, notes or "No additional details."))
-            cursor.execute(
-                "UPDATE tool SET `condition` = %s WHERE tool_id = %s",
-                (condition, tool["tool_id"])
-            )
-            conn.commit()
-
-            uid = self.user_info.get("user_id")
-            if uid:
-                log_action(uid, "Flagged", "Maintenance",
-                           f"Flagged tool '{tool['name']}' (PID: {tool['tool_id']}) — {condition}: {notes}")
-
-            messagebox.showinfo("Flagged",
-                                f"Tool '{tool['name']}' has been flagged.\n"
-                                f"Its condition has been updated to '{condition}' in the inventory.",
-                                parent=self.winfo_toplevel())
-            self.flag_tool_id.delete(0, "end")
-            self.flag_reported_by.delete(0, "end")
-            self.flag_notes.delete(0, "end")
-            self.load_issues()
+            # [CONCURRENCY][RBAC] one transaction: locks the tool's stock, moves exactly these units, creates the ticket
+            res = mnt.flag_tool(self.user_info, tool_input, reported_by, condition, notes, qty)
         except Exception as e:
-            messagebox.showerror("Database Error", friendly_message(e),
-                                 parent=self.winfo_toplevel())
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+            messagebox.showerror("Could not flag", friendly_message(e), parent=self.winfo_toplevel())
+            return
+
+        uid = self.user_info.get("user_id")
+        if uid:
+            log_action(uid, "Flagged", "Maintenance",
+                       f"Flagged tool '{res['name']}' (PID: {res['tool_id']}) x{qty} - {condition}: {notes}")
+        what = (f"{qty} unit(s) were taken out of circulation." if res["moved"]
+                else "This is a record only; no stock was moved.")
+        messagebox.showinfo("Flagged", f"Tool '{res['name']}' has been flagged ({condition}).\n{what}",
+                            parent=self.winfo_toplevel())
+        self.flag_tool_id.delete(0, "end")
+        self.flag_reported_by.delete(0, "end")
+        self.flag_notes.delete(0, "end")
+        self.flag_qty.delete(0, "end")
+        self.flag_qty.insert(0, "1")
+        self.load_issues()
 
     def load_issues(self):
         for w in self._issues_scroll.winfo_children():
@@ -298,19 +278,8 @@ class MaintenanceView(ctk.CTkFrame):
             try:
                 cursor = conn.cursor(dictionary=True)
 
-                # --- THE AUTO-SYNC FIX ---
-                cursor.execute("""
-                    INSERT INTO tool_issues (tool_id, reported_by, condition_flag, notes, is_resolved)
-                    SELECT tool_id, 'System Auto-Sync', `condition`, 'Automatically flagged by system due to inventory condition.', 0
-                    FROM tool t
-                    WHERE `condition` IN ('Needs Repair', 'Damaged', 'Lost')
-                      AND is_archived = 0
-                      AND NOT EXISTS (
-                          SELECT 1 FROM tool_issues ti WHERE ti.tool_id = t.tool_id AND ti.is_resolved = 0
-                      )
-                """)
-                conn.commit()
-
+                # [UNHAPPY-PATH] no auto-sync here any more: tickets are created inside the transaction that causes them
+                # (retrieval, manual flag) and, once, by `db.migrate` for tools the old screens had flagged.
                 sql = """
                     SELECT ti.issue_id, t.name as tool_name, ti.reported_by,
                            ti.condition_flag, IFNULL(ti.notes,'—') as notes,
@@ -434,8 +403,10 @@ class MaintenanceView(ctk.CTkFrame):
         form = ctk.CTkFrame(modal, fg_color="transparent")
         form.pack(fill="x", padx=25)
 
-        ctk.CTkLabel(form, text="Update Condition:", font=("Inter", 11, "bold"),
+        ctk.CTkLabel(form, text="Final condition of the affected unit(s):", font=("Inter", 11, "bold"),
                      text_color="#1A1A1A").pack(anchor="w")
+        ctk.CTkLabel(form, text="Good = return the unit(s) to stock.  Anything else = remove them from stock for good.",
+                     font=("Inter", 10), text_color="gray", wraplength=420, justify="left").pack(anchor="w")
         cond_menu = ctk.CTkOptionMenu(
             form, values=["Good", "Needs Repair", "Damaged", "Lost"],
             fg_color="#F9FAFB", text_color="black")
@@ -443,7 +414,7 @@ class MaintenanceView(ctk.CTkFrame):
                       ["Good", "Needs Repair", "Damaged", "Lost"] else "Needs Repair")
         cond_menu.pack(fill="x", pady=(5, 10))
 
-        ctk.CTkLabel(form, text="Restock Quantity (if replaced/found):", font=("Inter", 11, "bold"),
+        ctk.CTkLabel(form, text="New units to add (replacement bought / found):", font=("Inter", 11, "bold"),
                      text_color="#1A1A1A").pack(anchor="w")
         restock_entry = ctk.CTkEntry(
             form, placeholder_text="0 (Leave 0 if already in stock)")
@@ -456,55 +427,20 @@ class MaintenanceView(ctk.CTkFrame):
         notes_entry.pack(fill="x", pady=(5, 10))
 
         def resolve_issue():
-            conn = get_connection()
-            if not conn:
-                return
             try:
-                cursor = conn.cursor()
-                resolution = notes_entry.get().strip() or "Marked resolved by Admin."
-
-                try:
-                    rq = float(restock_entry.get().strip() or 0)
-                    if rq < 0:
-                        raise ValueError
-                except ValueError:
-                    messagebox.showerror(
-                        "Error", "Restock Quantity must be a positive number.", parent=modal)
-                    return
-
-                if rq > 0:
-                    cursor.execute(
-                        "UPDATE inventory SET quantity_available = quantity_available + %s, quantity_total = quantity_total + %s WHERE tool_id = %s", (rq, rq, row["tool_id"]))
-
-                cursor.execute("""
-                    UPDATE tool_issues
-                    SET is_resolved = 1, condition_flag = %s,
-                        notes = CONCAT(IFNULL(notes,''), ' | Resolution: ', %s)
-                    WHERE issue_id = %s
-                """, (cond_menu.get(), resolution, row["issue_id"]))
-
-                cursor.execute("""
-                    UPDATE tool SET `condition` = %s
-                    WHERE tool_id = (SELECT tool_id FROM tool_issues WHERE issue_id = %s)
-                """, (cond_menu.get(), row["issue_id"]))
-                conn.commit()
-
-                uid = self.user_info.get("user_id")
-                if uid:
-                    log_action(uid, "Resolved", "Maintenance",
-                               f"Resolved issue #{row['issue_id']} for '{row['tool_name']}'. "
-                               f"New condition: {cond_menu.get()}")
-
-                messagebox.showinfo(
-                    "Resolved", "Issue marked as resolved, inventory updated, and removed from open issues.", parent=modal)
-                modal.destroy()
-                self.load_issues()
+                # [CONCURRENCY] one transaction: locks the ticket (a stale modal is refused) and the stock, moves the units
+                out = mnt.resolve_issue(self.user_info, row["issue_id"], cond_menu.get(),
+                                        restock_entry.get().strip(), notes_entry.get().strip())
             except Exception as e:
-                messagebox.showerror("Error", friendly_message(e), parent=modal)
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
+                messagebox.showerror("Could not resolve", friendly_message(e), parent=modal)
+                return
+            uid = self.user_info.get("user_id")
+            if uid:
+                log_action(uid, "Resolved", "Maintenance",
+                           f"Resolved issue #{row['issue_id']} for '{row['tool_name']}'. Outcome: {out['outcome']} ({out['effect']})")
+            messagebox.showinfo("Resolved", f"Issue resolved: {out['effect']}.", parent=modal)
+            modal.destroy()
+            self.load_issues()
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=25, pady=(5, 20))
@@ -633,29 +569,16 @@ class MaintenanceView(ctk.CTkFrame):
     def restore_tool(self, tool_id):
         if not messagebox.askyesno("Confirm Restore", f"Are you sure you want to restore Tool PID: {tool_id}?"):
             return
-        conn = get_connection()
-        if not conn:
-            return
         try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE tool SET is_archived = 0 WHERE tool_id = %s", (tool_id,))
-            conn.commit()
-
-            uid = self.user_info.get("user_id")
-            if uid:
-                log_action(uid, "Edited", "Maintenance",
-                           f"Restored Tool PID: {tool_id} from Archive")
-
-            messagebox.showinfo(
-                "Success", "Tool restored to active inventory.")
-            self.load_archived_tools()
+            res = inv_svc.restore_tool(self.user_info, tool_id)
         except Exception as e:
-            messagebox.showerror("Error", friendly_message(e))
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+            messagebox.showerror("Could not restore", friendly_message(e))
+            return
+        uid = self.user_info.get("user_id")
+        if uid:
+            log_action(uid, "Edited", "Maintenance", f"Restored Tool PID: {tool_id} ('{res['name']}') from Archive")
+        messagebox.showinfo("Success", "Tool restored to active inventory.")
+        self.load_archived_tools()
 
     # ------------------------------------------
     # TAB 3: Archived Employees

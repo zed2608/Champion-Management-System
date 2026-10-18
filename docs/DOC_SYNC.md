@@ -52,6 +52,19 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 | 36 | `INTERVAL 8 HOUR` | shown +8 h for the UTC cloud DB | removed; session time zone +08:00 | see row 25 |
 | 37 | Return after the project ended | n/a | still allowed (the end-date rule applies to issuing only) | add to manual |
 
+## A4. Maintenance and Inventory behaviour changes (Phase 2d)
+| # | Topic | Old behaviour | New behaviour | Manuscript / manual impact |
+|---|---|---|---|---|
+| 38 | Resolving a ticket | "Restock quantity" added to total AND available while the damaged unit was still in total, so stock was inflated | Final condition **Good** returns the units to stock (total unchanged); any other condition removes them from stock; "New units to add" (replacement bought / lost unit found) is the only way the total grows | revise the Maintenance section |
+| 39 | Resolved ticket's issue type | overwritten with the final condition | kept (Damaged stays Damaged); resolution and outcome appended to the notes | none |
+| 40 | Manual flag | set the tool's condition (blocking every unit) | takes the stated number of units (new "Units" field, default 1) out of stock; Discrepancy/Other are records only | add the "Units" field to the screenshots |
+| 41 | Maintenance auto-sync | opening the tab invented a ticket for any tool whose condition field was flagged | removed. Tickets are created by what causes them (return, manual flag); for data coming from the old system the upgrade creates them once | none |
+| 42 | Condition on the Inventory item panel | editable by Admin | read-only; changes go through Maintenance (Fig. "Manage Item") | revise the Inventory section |
+| 43 | Archiving a tool | allowed while units were deployed | refused while units are deployed or in maintenance (service **and** database trigger): "A tool cannot be archived while units are deployed or in maintenance." | add to the Inventory/Maintenance sections |
+| 44 | Editing total quantity | "cannot go below deployed" computed from the values the panel loaded | checked against the locked, current values; also counts units in maintenance | none |
+| 45 | Restoring a tool | set `is_archived = 0` only | also clears `archived_at` | none |
+| 46 | Tag ID | Admin could edit it freely, no format rule | new tags must be 3-32 letters/digits/dashes; an unchanged legacy tag is kept; **Staff may assign a tag only to an untagged tool; only Admin can relink or unlink** | revise the Tagging section (Fig. 118) |
+
 ## B. ERD (Fig. 92) vs code (AUDIT_FINDINGS 1.12)
 | Item | ERD | Code | Decision |
 |---|---|---|---|

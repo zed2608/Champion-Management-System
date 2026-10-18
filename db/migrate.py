@@ -223,6 +223,16 @@ def step_backfill(ctx: Ctx):
         ctx.q("INSERT INTO id_sequences (prefix, yr, last_seq) VALUES (%s, %s, %s) "
               "ON DUPLICATE KEY UPDATE last_seq = GREATEST(last_seq, VALUES(last_seq))", (prefix, yr, last))
 
+    # (g) Tools the old screens flagged through tool.condition but never ticketed: the Maintenance tab used to INVENT those
+    #     tickets on every visit ("auto-sync"). Create them once, here, so the screen no longer needs to.
+    n = ctx.q("""INSERT INTO tool_issues (tool_id, reported_by, condition_flag, notes, quantity, status, is_resolved)
+                 SELECT t.tool_id, 'Migration', t.`condition`, 'Created by the upgrade from the old condition flag.', 1, 'Open', 0
+                 FROM tool t
+                 WHERE t.`condition` IN ('Needs Repair', 'Damaged', 'Lost') AND t.is_archived = 0
+                   AND NOT EXISTS (SELECT 1 FROM tool_issues s WHERE s.tool_id = t.tool_id AND s.status = 'Open')""").rowcount
+    if n:
+        ctx.note(f"created {n} maintenance tickets for tools flagged by the old condition field")
+
     # (f) Per-unit condition model. Old behaviour kept DAMAGED units inside quantity_total but out of quantity_available, so
     #     total - available - deployed  = units waiting in maintenance. (Old LOST units were already deducted from the total.)
     #     Only tools that still have an OPEN non-lost ticket are reclassified; anything else is only reported, never guessed.

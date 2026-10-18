@@ -71,11 +71,12 @@ INSERT INTO `user` (user_id, employee_id, full_name, email, role, password_hash,
 INSERT INTO tool (tool_id, name, category, item_type, unit_of_measure, `condition`, tag_id, price) VALUES
   (1, 'Digital Caliper', 'Measuring', 'Equipment',  'pcs', 'Good',    'CAL-001',  4500.00),
   (2, 'Cordless Drill',  'Power',     'Equipment',  'pcs', 'Damaged', 'DRL-001',  6200.00),
-  (3, 'Machine Grease',  'Supplies',  'Consumable', 'kg',  'Good',    'GRS-001',   350.00);
+  (3, 'Machine Grease',  'Supplies',  'Consumable', 'kg',  'Good',    'GRS-001',   350.00),
+  (4, 'Old Saw',         'Cutting',   'Equipment',  'pcs', 'Needs Repair', 'SAW-001', 900.00);   -- flagged by the old screens, never ticketed
 
 -- floats and a NULL on purpose
 INSERT INTO inventory (tool_id, quantity_total, quantity_available, minimum_stock) VALUES
-  (1, 10, 7, 2), (2, 5, 3, NULL), (3, 2.5, 2.5, 1);
+  (1, 10, 7, 2), (2, 5, 3, NULL), (3, 2.5, 2.5, 1), (4, 5, 4, 1);
 
 INSERT INTO projects (project_id, name, client, start_date, end_date, workers_assigned, status, is_archived) VALUES
   (1, 'Alpha Line Retool', 'ACME', '2026-01-01', '2026-12-31', 'WKR-2026-001, WKR-2026-0011, Juan Dela Cruz', 'Approved', 0),

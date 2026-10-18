@@ -111,11 +111,18 @@ def legacy_db(make_db):
 
 @pytest.fixture
 def svc(fresh_db, monkeypatch):
-    """A migrated test database wired into every service module that uses the process-wide ``db``."""
+    """A migrated test database wired into EVERY service module that uses the process-wide ``db`` (found by scanning the package,
+    so a new service cannot silently keep talking to the real database)."""
+    import importlib
+    import pkgutil
+
     import database
-    from services import issuance_service, security, tool_cache as tc
-    monkeypatch.setattr(security, "db", fresh_db)
-    monkeypatch.setattr(issuance_service, "db", fresh_db)
+    import services
+    from services import tool_cache as tc
+    for info in pkgutil.iter_modules(services.__path__):
+        mod = importlib.import_module(f"services.{info.name}")
+        if hasattr(mod, "db"):
+            monkeypatch.setattr(mod, "db", fresh_db)
     monkeypatch.setattr(database, "db", fresh_db)             # log_action / get_connection
     monkeypatch.setattr(tc.tool_cache, "_db", fresh_db)
     monkeypatch.setattr(tc.tool_cache, "_by_id", {})

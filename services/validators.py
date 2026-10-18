@@ -126,16 +126,17 @@ def parse_scan(raw) -> Scan:
 
 
 # ---- numbers -----------------------------------------------------------------------------------------------------
-def parse_quantity(value, *, whole: bool = False, field: str = "Quantity") -> Decimal:
-    """> 0, at most 2 decimals, at most 100,000; whole numbers only when ``whole`` (Equipment)."""
+def parse_quantity(value, *, whole: bool = False, field: str = "Quantity", allow_zero: bool = False) -> Decimal:
+    """> 0 (or >= 0 with ``allow_zero``, used for stock levels), at most 2 decimals, at most 100,000; whole numbers only when
+    ``whole`` (Equipment)."""
     try:
         q = Decimal(str(value).strip())
     except (InvalidOperation, ValueError):
         raise ValidationError(f"{field} must be a number.")
     if not q.is_finite():
         raise ValidationError(f"{field} must be a number.")
-    if q <= 0:
-        raise ValidationError(f"{field} must be greater than zero.")
+    if q < 0 or (q == 0 and not allow_zero):
+        raise ValidationError(f"{field} must be greater than zero." if not allow_zero else f"{field} cannot be negative.")
     if q > MAX_QTY:
         raise ValidationError(f"{field} cannot exceed {MAX_QTY:,}.")
     if q != q.quantize(Decimal("0.01")):
@@ -143,6 +144,17 @@ def parse_quantity(value, *, whole: bool = False, field: str = "Quantity") -> De
     if whole and q != q.to_integral_value():
         raise ValidationError(f"{field} must be a whole number for equipment.")
     return q.quantize(Decimal("0.01"))
+
+
+def fmt_qty(x) -> str:
+    """Quantity for people: 2.00 -> '2', 2.50 -> '2.5', 100 -> '100'. (Decimal's own ``:g`` keeps trailing zeros: '2.00'.)"""
+    try:
+        s = format(Decimal(str(x)), "f")
+    except (InvalidOperation, ValueError):
+        return str(x)
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s or "0"
 
 
 def parse_price(value, *, field: str = "Price") -> Decimal:
