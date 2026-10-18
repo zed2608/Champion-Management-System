@@ -55,7 +55,7 @@ class ProfileView(ctk.CTkFrame):
         details = [
             ("Username", self.user_info['employee_id']),
             ("Employee ID", self.user_info['employee_id']),
-            ("Email", self.user_info.get('email', 'N/A')),
+            ("Email", self.user_info.get('email') or 'N/A'),
             ("Role", self.user_info['role'])
         ]
         for label, val in details:
@@ -232,7 +232,8 @@ class ProfileView(ctk.CTkFrame):
         ctk.CTkLabel(frame, text=label_text, font=("Inter", 12),
                      text_color="gray").pack(anchor="w")
         entry = ctk.CTkEntry(frame, height=35)
-        entry.insert(0, default_val)
+        # [UNHAPPY-PATH] DB columns can be NULL (e.g. seeded admin has no email); Tk rejects None.
+        entry.insert(0, default_val or "")
         entry.pack(fill="x", pady=(5, 0))
         return entry
 

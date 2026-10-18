@@ -422,49 +422,56 @@ class DashboardApp(ctk.CTkToplevel):
         if uid and page_name != "Dashboard":
             log_action(uid, "Viewed", page_name, f"Navigated to {page_name}")
 
-        if page_name == "Profile":
-            self.current_frame = ProfileView(
-                self.main_container, self.user_info, self)
-        elif page_name == "Project Management":
-            self.current_frame = ProjectsView(
-                self.main_container, self.user_info)
-        elif page_name == "Inventory":
-            self.current_frame = InventoryView(
-                self.main_container, self.user_info,
-                navigate_to=self.navigate_to_project,
-                highlight_low_stock=highlight_low_stock,
-                highlight_tool_id=highlight_tool_id,
-            )
-        elif page_name == "Issuance & Retrieval":
-            self.current_frame = IssuanceView(
-                self.main_container, self.user_info, navigate_to=self.navigate_to_project)
-        elif page_name == "Tracking & Accountability":
-            self.current_frame = TrackingView(
-                self.main_container, self.user_info)
-        elif page_name == "Reports":
-            self.current_frame = ReportsView(
-                self.main_container, navigate_to_tool=self.navigate_to_tool)
-        elif page_name == "Maintenance":
-            self.current_frame = MaintenanceView(
-                self.main_container, self.user_info)
-        elif page_name == "Role Management":
-            self.current_frame = RoleManagementView(
-                self.main_container, self.user_info)
-        elif page_name == "Help":
-            self.current_frame = HelpView(self.main_container, self.user_info)
-        elif page_name == "Dashboard":
-            self.current_frame = self.create_home_dashboard()
-        else:
-            self.current_frame = ctk.CTkFrame(
-                self.main_container, fg_color="transparent")
-            ctk.CTkLabel(self.current_frame, text=f"{page_name.upper()} MODULE",
-                         font=("Inter", 20), text_color="gray").pack(expand=True)
-
-        # Remove overlay and show the real frame
-        if overlay.winfo_exists():
-            if hasattr(overlay, "_spin_job"):
-                self.after_cancel(overlay._spin_job)
-            overlay.destroy()
+        # [UNHAPPY-PATH] A page that fails to build must never leave the spinner overlay up forever.
+        try:
+            if page_name == "Profile":
+                self.current_frame = ProfileView(
+                    self.main_container, self.user_info, self)
+            elif page_name == "Project Management":
+                self.current_frame = ProjectsView(
+                    self.main_container, self.user_info)
+            elif page_name == "Inventory":
+                self.current_frame = InventoryView(
+                    self.main_container, self.user_info,
+                    navigate_to=self.navigate_to_project,
+                    highlight_low_stock=highlight_low_stock,
+                    highlight_tool_id=highlight_tool_id,
+                )
+            elif page_name == "Issuance & Retrieval":
+                self.current_frame = IssuanceView(
+                    self.main_container, self.user_info, navigate_to=self.navigate_to_project)
+            elif page_name == "Tracking & Accountability":
+                self.current_frame = TrackingView(
+                    self.main_container, self.user_info)
+            elif page_name == "Reports":
+                self.current_frame = ReportsView(
+                    self.main_container, navigate_to_tool=self.navigate_to_tool)
+            elif page_name == "Maintenance":
+                self.current_frame = MaintenanceView(
+                    self.main_container, self.user_info)
+            elif page_name == "Role Management":
+                self.current_frame = RoleManagementView(
+                    self.main_container, self.user_info)
+            elif page_name == "Help":
+                self.current_frame = HelpView(self.main_container, self.user_info)
+            elif page_name == "Dashboard":
+                self.current_frame = self.create_home_dashboard()
+            else:
+                self.current_frame = ctk.CTkFrame(
+                    self.main_container, fg_color="transparent")
+                ctk.CTkLabel(self.current_frame, text=f"{page_name.upper()} MODULE",
+                             font=("Inter", 20), text_color="gray").pack(expand=True)
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            self.current_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
+            ctk.CTkLabel(self.current_frame, text=f"Could not load {page_name}. Please try again or contact an administrator.",
+                         font=("Inter", 14), text_color="#D8000C").pack(expand=True)
+        finally:
+            # Remove overlay whether or not the page built
+            if overlay.winfo_exists():
+                if hasattr(overlay, "_spin_job"):
+                    self.after_cancel(overlay._spin_job)
+                overlay.destroy()
 
         self.current_frame.place(
             relx=0.5, rely=0.5, anchor="center", relwidth=1.0, relheight=1.0)
