@@ -75,4 +75,44 @@ Line numbers are from the current tree and differ slightly from the brief in pla
 | 6.3 | Medium | `create_tables.py` and `seed_admin.py` print emoji and crash on a Windows cp1252 console; `seed_admin` creates the admin with no email (the cause of 3.1) | observed |
 
 ## Not yet verified (to be read before editing)
-Bodies of `execute_borrow` and `execute_return`, `tracking.py`, the `reports.py` ABC SQL (archived-tool joins), `tagging.py` and `help.py` beyond the cited lines, `scripts/*.py`.
+Bodies of `execute_borrow` and `execute_return`, `tracking.py`, the `reports.py` ABC SQL (archived-tool joins), `help.py` beyond the cited lines, `scripts/*.py`.
+
+---
+
+# Phase 1 addendum - new findings and status
+
+## New findings (not in the brief or `AUDIT_FINDINGS.md`)
+| # | Sev | Finding | Evidence | Status |
+|---|-----|---------|----------|--------|
+| N1 | Critical | **`views/tagging.py` was committed with three unresolved merge-conflict blocks** (`<<<<<<< HEAD` ... `>>>>>>> 0b6201e`), so it could not even be imported. It is also **not imported or routed anywhere**: the sidebar has no Tagging entry and `show_frame` has no Tagging branch (the "TAGGING MODULE" placeholder would show). The documented Tagging module is unreachable | `views/tagging.py:256,293,329,339,342,346,592,638,685`; `dashboard.py` nav list | **Syntax fixed** (took the `HEAD` side: fixed 450x300 label, bold font, long-name truncation, 300 dpi, over the older variable-size layout). **Still to do**: route it (see DOC_SYNC #23) |
+| N2 | Critical | `InventoryView.__init__` ran `ALTER TABLE inventory MODIFY ... FLOAT` on every visit. It would have silently reverted the DECIMAL(10,2) stock columns the new schema relies on | `views/inventory.py:36-62` | **Removed** with all other runtime DDL |
+| N3 | High | Connecting to the name `localhost` costs ~2 s per connection on this Windows machine (IPv6 first). The old pool opened 10 connections at the first call, so login stalled 20+ s | measured: 2.07 s vs 0.00 s for `127.0.0.1` | **Fixed** in `db/pool.py` (`localhost` -> `127.0.0.1`); test suite 111 s -> 10 s |
+| N4 | High | My own first pool draft set `conn.autocommit = ...` on a pooled-connection **proxy**, which never reaches the session; a bookkeeping `INSERT` was silently rolled back. Caught by the migration re-run test | `db/pool.py` | **Fixed** (set in SQL); covered by tests |
+| N5 | Medium | Plain `pytest` collected the legacy `_test.py` in the repo root, which connects to the configured database at import time | `_test.py` | `pytest.ini` restricts collection to `tests/`; file is deleted in Phase 6 |
+| N6 | Medium | MySQL cannot drop and re-add a foreign key of the same name in one `ALTER`; the first CASCADE->RESTRICT attempt failed silently. Caught by test | `db/migrate.py` | **Fixed** |
+| N7 | Low | The Maintenance tab "auto-sync" inserts an open ticket for every tool whose `condition` is Damaged/Needs Repair/Lost (the documented "automatic ticket" is really this query) | `views/maintenance.py` (`_fetch`) | Replaced in Phase 2 by a ticket created inside the retrieval transaction |
+
+## Status of Area 1 (database) after Phase 1
+| Brief item | Status |
+|---|---|
+| 1.1/1.2 ACID issuance + transaction helper, retry 1213/1205 | **Mechanism done and tested** (`db/pool.py`, `services/stock_ledger.py`, `tests/test_stock_concurrency.py`). **Not yet wired**: `execute_borrow`/`execute_return`/maintenance/inventory/projects still use the old code paths until Phase 2 |
+| 1.3 Pool, leak in profile, offline banner | **Done**: `db/pool.py`; `ProfileView` no longer holds a connection (40 views opened against a pool of 16); banner verified in the real `DashboardApp` |
+| 1.4 O(1) cache | **Done** (`services/tool_cache.py`, 7 tests). **Not yet wired** into the scan screens (Phase 2/3) |
+| 1.5 Canonical schema + idempotent migrate + remove runtime DDL | **Done**; legacy scripts moved to `db/legacy/`; no `CREATE/ALTER/DROP TABLE` remains in app code (grep clean) |
+| 1.6 Schema drift (`req_id`, `status`, archive columns, `tool_issues`) | **Done** |
+| 1.7 `project_workers` junction | **Done** (table, backfill, trigger sync). Old screens still write the text column; the trigger mirrors it |
+| 1.8 Snapshot 4 dates | **Done** (columns, backfill, trigger copies from the project on insert) |
+| 1.9 `tool_issues` columns per ERD | **Done**. Creating the ticket inside the retrieval transaction: Phase 2 |
+| 1.10 Per-unit condition | **Schema + ledger done** (`quantity_in_maintenance`, `quantity_lost`). Screens still use the old per-tool `condition` until Phase 2 |
+| 1.11 Fractional consumables (`transaction.quantity`) | Column + CHECK done; screens still create one row per unit until Phase 2 |
+| 1.12 FKs RESTRICT, CHECKs, unify archive flags | **Done** (archive: `archived_at` canonical, `is_archived` kept in sync by trigger; column dropped in Phase 2) |
+| 1.13 Indexes | **Done** (all nine listed, plus `updated_at`) |
+| 1.14 Remove `DATE_ADD(.. 8 HOUR)` | **Done** (5 places). **Data note:** old Aiven timestamps are UTC, see `docs/DATABASE.md` |
+| 1.15 Employee ID sequences | Table + backfill done; `role_management.py` still uses MAX+1 until Phase 2 |
+
+## Verification actually run (Phase 1)
+* `pytest`: **107 passed** with `TEST_DB_*` set (local MySQL 8.0.46); **30 passed, 77 skipped** without it (DB tests skip cleanly).
+* Migration of a legacy-shaped database with awkward data (FLOAT/NULL stock, `requirement_id`, colliding worker ids, archive flag only, a project that violates the new date CHECK): all rows kept, shape identical to a fresh install, re-run is a no-op.
+* Migration run for real on the local `champion_db` (verified backup written to `backups/` first, which is git-ignored).
+* Headless build of all 10 screens (Profile, Projects, Inventory, Issuance, Tracking, Reports, Maintenance, Role Management, Help, Tagging) under a real Tk main loop for 2.5 s each with background threads: no exceptions. **This is a load check, not a click-through of every button.**
+* **Not run:** the GUI by hand, camera/QR scanning, PDF export, backup/restore buttons, and any Aiven access (by design).
