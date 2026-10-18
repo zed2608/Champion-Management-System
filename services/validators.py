@@ -91,6 +91,23 @@ def validate_email(value, *, required: bool = True):
     return v.lower()
 
 
+def parse_id(value, field: str = "ID") -> int:
+    """A database id from a screen: an int, or the text of one ('42', as widgets and table rows hand it over).
+    [UNHAPPY-PATH] The Inventory panel passes the row's id as TEXT; looking it up in a dict keyed by int raised KeyError('1') and every
+    Update failed with a generic error. Ids are converted and validated HERE, once, instead of trusting each caller."""
+    if isinstance(value, bool):
+        raise ValidationError(f"{field} is not valid.")
+    if isinstance(value, int):
+        n = value
+    elif isinstance(value, str) and value.strip().isdigit() and len(value.strip()) <= 18:
+        n = int(value.strip())
+    else:
+        raise ValidationError(f"{field} is not valid.")
+    if n <= 0:
+        raise ValidationError(f"{field} is not valid.")
+    return n
+
+
 @dataclass(frozen=True)
 class Scan:
     kind: str          # 'tool' | 'worker' | 'unknown'

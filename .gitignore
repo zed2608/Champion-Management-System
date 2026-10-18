@@ -13,3 +13,6 @@ remember_config.json
 *.sql.part
 backups/
 .pytest_cache/
+
+# runtime logs (rotating, written by services.errors)
+logs/

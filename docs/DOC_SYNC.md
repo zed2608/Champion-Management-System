@@ -154,3 +154,6 @@ The Scope already reads "Products and Inventory Module (with integrated Tagging)
 | Hash-chained audit log, session ID (see row 13) | code |
 | `.env` tracked / public credentials | Untrack in Phase 6; you are rotating the password and will scrub history yourself |
 | Worker accounts store a hashed shared constant | **Change code**: `password_hash NULL` |
+
+## D. Error codes and the log file (Inventory fix)
+Unexpected errors now show `(ERR-<AREA>-<4 digits>) <short reason>` and are logged with a traceback in `logs\app.log`. The User Manual's troubleshooting page should tell users to send that file and code to an administrator. Text ids from screens are converted centrally (no manuscript change).

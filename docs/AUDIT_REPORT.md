@@ -116,3 +116,10 @@ Bodies of `execute_borrow` and `execute_return`, `tracking.py`, the `reports.py`
 * Migration run for real on the local `champion_db` (verified backup written to `backups/` first, which is git-ignored).
 * Headless build of all 10 screens (Profile, Projects, Inventory, Issuance, Tracking, Reports, Maintenance, Role Management, Help, Tagging) under a real Tk main loop for 2.5 s each with background threads: no exceptions. **This is a load check, not a click-through of every button.**
 * **Not run:** the GUI by hand, camera/QR scanning, PDF export, backup/restore buttons, and any Aiven access (by design).
+
+## Inventory "Could not update … nothing was saved" (PID 1, "nails") — root cause
+- **Cause:** a click on a table row hands the Inventory panel the item id as TEXT (`'1'`). `inventory_service` looked it up in a dictionary keyed by the NUMBER `1` and raised `KeyError: '1'`. The generic error handler hid that. It hit EVERY Update, Archive, Restore, Save Tag and Unlink from the panel, whatever was edited (so "nothing edited" failed too). Earlier tests opened the panel with a number, so they never saw it.
+- **Reproduced** on a throwaway database restored from the latest verified backup (never `champion_db`): the unchanged Update failed; after the fix 10 variants (unchanged, name, price, minimum stock, total, tag set/cleared/"Unassigned", description and supplier cleared) all save.
+- **Fix:** `services.validators.parse_id` and the `@require_role` wrapper now convert text ids to numbers for every database-id parameter (`tool_id`, `project_id`, `user_id`, `issue_id`, `borrower_id`, `transaction_id`, `req_id`); junk ids give "… ID is not valid." This protects every service, not only Inventory.
+- **Diagnosable without a terminal:** unexpected errors are written with the full traceback to `logs/app.log` (rotating, git-ignored) under a code such as `ERR-INV-0417`; the dialog shows the same code and one safe line (no SQL, no driver text).
+- **Regression tests:** `tests/test_inventory_row_click.py` (real table load, real row click, real buttons; 8 tests, all fail without the fix) and `tests/test_error_codes_and_ids.py`.

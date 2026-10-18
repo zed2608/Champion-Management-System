@@ -49,4 +49,4 @@ def test_our_own_errors_pass_through_and_unknown_ones_are_generic():
     for exc in (Conflict("Project is Pending."), NotFound("Project not found."), PermissionDenied("No."), ValidationError("Bad.")):
         assert friendly_message(exc) == str(exc)
     generic = friendly_message(KeyError("secret_column"))
-    assert "secret_column" not in generic and "nothing was saved" in generic.lower()
+    assert "nothing was saved" in generic.lower() and "ERR-" in generic        # code + short reason are SHOWN on purpose (see errors.py)

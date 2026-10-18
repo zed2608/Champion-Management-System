@@ -20,6 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db import migrate                      # noqa: E402
 from db.pool import Database               # noqa: E402
 
+# tests must never write into the real logs/ folder
+os.environ.setdefault("CHAMPION_LOG_DIR", __import__("tempfile").mkdtemp(prefix="champion_test_logs_"))
+
 BASE_NAME = os.getenv("TEST_DB_NAME", "test_champion")
 _counter = itertools.count(1)
 
