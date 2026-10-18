@@ -11,6 +11,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from services.errors import friendly_message
 from services import report_service as rs
+from views.paged_table import list_table
 
 
 def _fmt(x) -> str:
@@ -779,35 +780,17 @@ class ReportsView(ctk.CTkFrame):
                     chart_canvas.get_tk_widget().pack(pady=10)
             # ────────────────────────────────────────────────────
 
-            headers = ["Project", "Client", "Location", "Status", "Tool", "Requested", "Issued", "Retrieved", "Flag"]
-            weights = [4, 3, 3, 2, 4, 2, 2, 2, 2]
-            min_sizes = [140, 110, 110, 90, 140, 80, 70, 80, 80]
-            for col, (w, mn) in enumerate(zip(weights, min_sizes)):
-                self._alloc_table.grid_columnconfigure(col, weight=w, minsize=mn, uniform="alloc_cols")
-            for col, text in enumerate(headers):
-                cell = ctk.CTkFrame(self._alloc_table, fg_color="#1E4528", corner_radius=0)
-                cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-                ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center").pack(fill="both", expand=True, padx=2, pady=10)
-
-            if not rows:
-                ctk.CTkLabel(self._alloc_table, text="No project allocation data found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-                return
-
             STATUS_COLORS = {"Ongoing": "#2ECC71", "Approved": "#3498DB", "Pending": "#F39C12", "Completed": "#95A5A6"}
-            for i, row in enumerate(rows):
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+
+            def alloc_cells(row):
                 still_out = row['issued'] - row['retrieved']
                 flag = "⚠ Unreturned" if still_out > 0 and row['status'] in ("Completed",) else ("Active" if still_out > 0 else "—")
-                vals = [str(row['project_name'] or 'Unknown'), str(row['client'] or 'Unknown'), str(row['location'] or "—"), str(row['status'] or 'Pending'),
-                        str(row['tool_name'] or 'Unknown'), _fmt(row['requested']), _fmt(row['issued']),
-                        _fmt(row['retrieved']), str(flag)]
-                for col, val in enumerate(vals):
-                    cell = ctk.CTkFrame(self._alloc_table, fg_color=bg, corner_radius=0)
-                    cell.grid(row=i+1, column=col, sticky="nsew")
-                    txt = STATUS_COLORS.get(val, "#1A1A1A") if col == 3 else ("#D8000C" if "⚠" in str(val) else "#1A1A1A")
-                    fw = "bold" if col in (3, 8) else "normal"
-                    ctk.CTkLabel(cell, text=val, font=("Inter", 11, fw), text_color=txt,
-                                 anchor="center", wraplength=min_sizes[col]-10).pack(fill="both", expand=True, padx=4, pady=10)
+                return [str(row['project_name'] or 'Unknown'), str(row['client'] or 'Unknown'), str(row['location'] or "—"), str(row['status'] or 'Pending'),
+                        str(row['tool_name'] or 'Unknown'), _fmt(row['requested']), _fmt(row['issued']), _fmt(row['retrieved']), str(flag)]
+            list_table(self._alloc_table, [("Project", 4, 140), ("Client", 3, 110), ("Location", 3, 110), ("Status", 2, 90), ("Tool", 4, 140),
+                                           ("Requested", 2, 80), ("Issued", 2, 70), ("Retrieved", 2, 80), ("Flag", 2, 80)], rows, alloc_cells,
+                       cell_style=lambda r, c, v: (STATUS_COLORS.get(v, "#1A1A1A"), True) if c == 3 else (("#D8000C" if "⚠" in v else "#1A1A1A"), c == 8),
+                       empty_text="No project allocation data found.", font_size=11, cell_pady=10, uniform="alloc_cols")
 
         import threading
         threading.Thread(target=_fetch, daemon=True).start()
@@ -892,32 +875,13 @@ class ReportsView(ctk.CTkFrame):
             # ────────────────────────────────────────────────────
 
             for w in self._dmg_table.winfo_children(): w.destroy()
-            headers = ["Tool ID", "Tool Name", "Unit Price", "Condition", "Returned By", "Return Date", "Notes"]
-            weights = [1, 4, 2, 2, 3, 2, 4]
-            min_sizes = [60, 160, 100, 110, 130, 100, 160]
-            for col, (w, mn) in enumerate(zip(weights, min_sizes)):
-                self._dmg_table.grid_columnconfigure(col, weight=w, minsize=mn, uniform="dmg_cols")
-            for col, text in enumerate(headers):
-                cell = ctk.CTkFrame(self._dmg_table, fg_color="#1E4528", corner_radius=0)
-                cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-                ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center").pack(fill="both", expand=True, padx=2, pady=10)
-
-            if not rows:
-                ctk.CTkLabel(self._dmg_table, text="No damage or loss records found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-                return
-
             COND_COLORS = {"Lost": "#D8000C", "Damaged": "#E67E22", "Needs Repair": "#F39C12"}
-            for i, row in enumerate(rows):
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
-                vals = [str(row['tool_id']), str(row['name'] or 'Unknown'), f"₱{float(row['price'] or 0):,.2f}",
-                        str(row['cond_flag'] or 'Unknown'), str(row['returned_by'] or "—"), str(row['return_date'] or "—"), str(row['notes'] or "")]
-                for col, val in enumerate(vals):
-                    cell = ctk.CTkFrame(self._dmg_table, fg_color=bg, corner_radius=0)
-                    cell.grid(row=i+1, column=col, sticky="nsew")
-                    txt = COND_COLORS.get(val, "#1A1A1A") if col == 3 else "#1A1A1A"
-                    fw = "bold" if col == 3 else "normal"
-                    ctk.CTkLabel(cell, text=val, font=("Inter", 11, fw), text_color=txt,
-                                 anchor="center", wraplength=min_sizes[col]-10).pack(fill="both", expand=True, padx=4, pady=10)
+            list_table(self._dmg_table, [("Tool ID", 1, 60), ("Tool Name", 4, 160), ("Unit Price", 2, 100), ("Condition", 2, 110), ("Returned By", 3, 130),
+                                         ("Return Date", 2, 100), ("Notes", 4, 160)], rows,
+                       lambda row: [str(row['tool_id']), str(row['name'] or 'Unknown'), f"₱{float(row['price'] or 0):,.2f}", str(row['cond_flag'] or 'Unknown'),
+                                    str(row['returned_by'] or "—"), str(row['return_date'] or "—"), str(row['notes'] or "")],
+                       cell_style=lambda r, c, v: (COND_COLORS.get(v, "#1A1A1A"), True) if c == 3 else ("#1A1A1A", False),
+                       empty_text="No damage or loss records found.", font_size=11, cell_pady=10, uniform="dmg_cols")
 
         import threading
         threading.Thread(target=_fetch, daemon=True).start()
@@ -968,45 +932,18 @@ class ReportsView(ctk.CTkFrame):
 
             self._ls_table.pack(fill="x", pady=(0, 10))
 
-            headers = ["PID", "Name", "Type", "Category", "Supplier", "UoM", "Available", "Total", "Min Stock", "Reorder Qty"]
-            weights = [1, 4, 2, 2, 3, 1, 2, 2, 2, 2]
-            min_sizes = [50, 150, 90, 100, 120, 60, 80, 70, 80, 90]
-
-            for col, (w, mn) in enumerate(zip(weights, min_sizes)):
-                self._ls_table.grid_columnconfigure(col, weight=w, minsize=mn, uniform="ls_cols")
-
-            for col, text in enumerate(headers):
-                cell = ctk.CTkFrame(self._ls_table, fg_color="#1E4528", corner_radius=0)
-                cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-                ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center").pack(fill="both", expand=True, padx=2, pady=10)
-
-            if not rows:
-                ctk.CTkLabel(self._ls_table,
-                             text="✓ All items are above their minimum stock thresholds.\n\nTip: Set a Minimum Stock value per item in the Inventory module to enable this report.",
-                             text_color="gray", font=("Inter", 12), justify="center").grid(row=1, column=0, columnspan=len(headers), pady=30)
-                return
-
-            for i, row in enumerate(rows):
-                bg = "#FFF3F3" if float(row['qty_avail'] or 0) == 0 else ("#FFFBF0" if i % 2 == 0 else "white")
+            def ls_cells(row):
                 reorder_qty = max(0, float(row['minimum_stock'] or 0) * 2 - float(row['qty_avail'] or 0))
-                vals = [str(row['tool_id']), str(row['name'] or 'Unknown'), str(row['item_type'] or 'Unknown'), str(row['category'] or 'Unknown'),
+                return [str(row['tool_id']), str(row['name'] or 'Unknown'), str(row['item_type'] or 'Unknown'), str(row['category'] or 'Unknown'),
                         str(row['supplier'] or '—'), str(row['uom'] or 'pcs'), f"{float(row['qty_avail'] or 0):g}",
-                        f"{float(row['qty_total'] or 0):g}", f"{float(row['minimum_stock'] or 0):g}",
-                        f"{reorder_qty:g}"]
-                tid = row['tool_id']
-                for col, val in enumerate(vals):
-                    cell = ctk.CTkFrame(self._ls_table, fg_color=bg, corner_radius=0,
-                                        cursor="hand2" if self.navigate_to_tool else "")
-                    cell.grid(row=i+1, column=col, sticky="nsew")
-                    txt = "#D8000C" if col == 6 and float(row['qty_avail']) == 0 else ("#E67E22" if col == 6 else "#1A1A1A")
-                    fw = "bold" if col == 6 else "normal"
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, fw), text_color=txt,
-                                       anchor="center", wraplength=min_sizes[col]-10,
-                                       cursor="hand2" if self.navigate_to_tool else "")
-                    lbl.pack(fill="both", expand=True, padx=4, pady=8)
-                    if self.navigate_to_tool:
-                        cell.bind("<Button-1>", lambda e, t=tid: self.navigate_to_tool(t))
-                        lbl.bind("<Button-1>",  lambda e, t=tid: self.navigate_to_tool(t))
+                        f"{float(row['qty_total'] or 0):g}", f"{float(row['minimum_stock'] or 0):g}", f"{reorder_qty:g}"]
+            list_table(self._ls_table, [("PID", 1, 50), ("Name", 4, 150), ("Type", 2, 90), ("Category", 2, 100), ("Supplier", 3, 120), ("UoM", 1, 60),
+                                        ("Available", 2, 80), ("Total", 2, 70), ("Min Stock", 2, 80), ("Reorder Qty", 2, 90)], rows, ls_cells,
+                       row_bg=lambda r, i: "#FFF3F3" if float(r['qty_avail'] or 0) == 0 else ("#FFFBF0" if i % 2 == 0 else "white"),
+                       cell_style=lambda r, c, v: (("#D8000C" if float(r['qty_avail'] or 0) == 0 else "#E67E22"), True) if c == 6 else ("#1A1A1A", False),
+                       on_row_click=(lambda r: self.navigate_to_tool(r['tool_id'])) if self.navigate_to_tool else None,
+                       empty_text="✓ All items are above their minimum stock thresholds.\n\nTip: Set a Minimum Stock value per item in the Inventory module to enable this report.",
+                       font_size=11, cell_pady=8, uniform="ls_cols")
 
         import threading
         threading.Thread(target=_fetch, daemon=True).start()
@@ -1099,36 +1036,17 @@ class ReportsView(ctk.CTkFrame):
             # ────────────────────────────────────────────────────
 
             for w in self._ov_table.winfo_children(): w.destroy()
-            headers = ["Emp ID", "Worker", "Tool", "Project", "Due Date", "Days Overdue", "Issued On", "Unit Price"]
-            weights = [1, 3, 3, 3, 2, 2, 2, 2]
-            min_sizes = [70, 130, 130, 130, 100, 110, 100, 100]
-            for col, (w, mn) in enumerate(zip(weights, min_sizes)):
-                self._ov_table.grid_columnconfigure(col, weight=w, minsize=mn, uniform="ov_cols")
-            for col, text in enumerate(headers):
-                cell = ctk.CTkFrame(self._ov_table, fg_color="#D8000C", corner_radius=0)
-                cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-                ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center").pack(fill="both", expand=True, padx=2, pady=10)
-
-            if not rows:
-                ctk.CTkLabel(self._ov_table, text="✓ No overdue transactions found.", text_color="gray",
-                             font=("Inter", 12)).grid(row=1, column=0, columnspan=len(headers), pady=30)
-                return
-
-            for i, row in enumerate(rows):
+            def ov_cells(row):
                 days = int(row['days_overdue'] or 0)
-                bg = "#FFF0F0" if i % 2 == 0 else "#FFF8F8"
                 borrow_str = row['borrow_date'].strftime('%Y-%m-%d') if row.get('borrow_date') else "—"
                 due_str = row['due_date'].strftime('%Y-%m-%d') if row.get('due_date') else "—"
-                vals = [str(row['employee_id'] or 'Unknown'), str(row['full_name'] or 'Unknown'), str(row['tool_name'] or 'Unknown'),
-                        str(row['project_name'] or '—'), str(due_str), f"{days} days",
-                        str(borrow_str), f"₱{float(row['price'] or 0):,.2f}"]
-                for col, val in enumerate(vals):
-                    cell = ctk.CTkFrame(self._ov_table, fg_color=bg, corner_radius=0)
-                    cell.grid(row=i+1, column=col, sticky="nsew")
-                    txt = "#D8000C" if col == 5 else "#1A1A1A"
-                    fw = "bold" if col == 5 else "normal"
-                    ctk.CTkLabel(cell, text=val, font=("Inter", 11, fw), text_color=txt,
-                                 anchor="center", wraplength=min_sizes[col]-10).pack(fill="both", expand=True, padx=4, pady=10)
+                return [str(row['employee_id'] or 'Unknown'), str(row['full_name'] or 'Unknown'), str(row['tool_name'] or 'Unknown'),
+                        str(row['project_name'] or '—'), str(due_str), f"{days} days", str(borrow_str), f"₱{float(row['price'] or 0):,.2f}"]
+            list_table(self._ov_table, [("Emp ID", 1, 70), ("Worker", 3, 130), ("Tool", 3, 130), ("Project", 3, 130), ("Due Date", 2, 100),
+                                        ("Days Overdue", 2, 110), ("Issued On", 2, 100), ("Unit Price", 2, 100)], rows, ov_cells,
+                       row_bg=lambda r, i: "#FFF0F0" if i % 2 == 0 else "#FFF8F8",
+                       cell_style=lambda r, c, v: ("#D8000C", True) if c == 5 else ("#1A1A1A", False),
+                       empty_text="✓ No overdue transactions found.", font_size=11, cell_pady=10, uniform="ov_cols", header_bg="#D8000C")
 
         import threading
         threading.Thread(target=_fetch, daemon=True).start()

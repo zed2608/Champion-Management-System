@@ -7,6 +7,9 @@ import subprocess
 import threading
 from services.errors import friendly_message
 from services import backup_service
+from services.paging import PageInfo, clamp_page, fetch_page
+from services.validators import like_pattern
+from views.paged_table import PagedTable
 from services import maintenance_service as mnt, inventory_service as inv_svc, project_service as proj_svc, user_service
 
 
@@ -238,106 +241,60 @@ class MaintenanceView(ctk.CTkFrame):
         self.flag_qty.insert(0, "1")
         self.load_issues()
 
-    def load_issues(self):
-        for w in self._issues_scroll.winfo_children():
-            w.destroy()
+    ISSUE_COLUMNS = [("#", 1, 50), ("Tool Name", 3, 150), ("Reported By", 2, 100), ("Issue Type", 2, 100), ("Description", 4, 200),
+                     ("Flagged At", 3, 150), ("Status", 2, 100)]
+    ISSUE_COLORS = {"Damaged": "#E74C3C", "Lost": "#C0392B", "Needs Repair": "#F39C12", "Discrepancy": "#8E44AD", "Stolen": "#C0392B",
+                    "Missing Parts": "#D35400", "Other": "#7F8C8D"}
 
-        # Hard-Bounded Uniform Grid Setup
-        table_inner = ctk.CTkFrame(self._issues_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
+    def load_issues(self, keep_page=False):
+        self._issues_filter_val = self.issues_filter.get() if hasattr(self, "issues_filter") else "Open (Pending)"      # main thread
+        self._issues_query = self.issues_search.get().strip() if hasattr(self, "issues_search") else ""
+        if getattr(self, "_issues_table", None) is None or not self._issues_table.winfo_exists():
+            for w in self._issues_scroll.winfo_children():
+                w.destroy()
+            self._issues_table = PagedTable(
+                self._issues_scroll, self.ISSUE_COLUMNS, fetch=self._fetch_issues_page,
+                cells=lambda r: [str(r["issue_id"]), r["tool_name"], r["reported_by"], r["condition_flag"], r["notes"],
+                                 r["flagged_at"], "✓ Resolved" if r["is_resolved"] else "⚠ Pending"],
+                row_bg=lambda r, i: "#F0FFF0" if r["is_resolved"] else ("#FFF8F0" if i % 2 == 0 else "#FFF3F3"),
+                cell_style=lambda r, c, v: (self.ISSUE_COLORS.get(v, "#D35400"), True) if c == 3 else
+                                           ((("#2ECC71" if "Resolved" in v else "#D8000C"), True) if c == 6 else ("#1A1A1A", False)),
+                on_row_click=self.open_issue_modal, on_loaded=self._issues_loaded, empty_text="No issues found. Inventory is clean.",
+                font_size=12, cell_pady=12, uniform="issue_cols")
+            self._issues_table.pack(fill="x", expand=True)
+        self._issues_table.reload(self._issues_table.page if keep_page else 0)
 
-        headers = ["#", "Tool Name", "Reported By",
-                   "Issue Type", "Description", "Flagged At", "Status"]
-        weights = [1, 3, 2, 2, 4, 3, 2]
-        min_sizes = [50, 150, 100, 100, 200, 150, 100]
+    def _fetch_issues_page(self, page, size):
+        where, params = "WHERE 1=1", []
+        if self._issues_filter_val == "Open (Pending)":
+            where += " AND ti.is_resolved = 0"
+        elif self._issues_filter_val == "Resolved":
+            where += " AND ti.is_resolved = 1"
+        if self._issues_query:
+            where += " AND (t.name LIKE %s OR ti.reported_by LIKE %s OR ti.condition_flag LIKE %s)"
+            params += [like_pattern(self._issues_query)] * 3
+        frm = f"FROM tool_issues ti JOIN tool t ON ti.tool_id = t.tool_id {where}"
+        conn = get_connection()
+        if not conn:
+            raise ConnectionError("The database is not reachable.")
+        try:
+            cur = conn.cursor(dictionary=True)
+            # [UNHAPPY-PATH] no auto-sync here any more: tickets are created inside the transaction that causes them
+            # (retrieval, manual flag) and, once, by `db.migrate` for tools the old screens had flagged.
+            rows, info = fetch_page(
+                cur, "SELECT ti.issue_id, t.name as tool_name, ti.reported_by, ti.condition_flag, IFNULL(ti.notes,'—') as notes, ti.flagged_at, ti.is_resolved",
+                frm, params, "ORDER BY ti.is_resolved ASC, ti.flagged_at DESC, ti.issue_id DESC", page, size)
+            cur.execute(f"SELECT COALESCE(SUM(ti.is_resolved = 0), 0) AS open_n {frm}", tuple(params))
+            self._issues_open = int(cur.fetchone()["open_n"] or 0)
+            return rows, info
+        finally:
+            if conn.is_connected():
+                conn.close()
 
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(
-                col, weight=w, minsize=min_w, uniform="issue_cols")
-
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(
-                table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=(
-                "Inter", 12, "bold"), text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading issues... Please wait",
-                                   text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        status_filter = self.issues_filter.get() if hasattr(
-            self, "issues_filter") else "Open (Pending)"
-        q = self.issues_search.get().strip() if hasattr(self, "issues_search") else ""
-
-        def _fetch():
-            try:
-                rows, _total = backup_service.history_page(self.user_info, 50, 0)
-            except Exception as e:
-                msg = friendly_message(e)
-                self._after_safe(lambda: loading_lbl.configure(text=msg, text_color="red", wraplength=600))
-                return
-            self._after_safe(lambda: self._render_backup_history(rows, table_inner, loading_lbl, headers, min_sizes))
-
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def _render_issues(self, rows, table_inner, loading_lbl, headers, min_sizes):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-        loading_lbl.destroy()
-
-        total = len(rows)
-        open_cnt = sum(1 for r in rows if not r["is_resolved"])
-        resolved_cnt = total - open_cnt
-        if hasattr(self, "issues_summary"):
-            self.issues_summary.configure(
-                text=f"  Total: {total}   |   Open: {open_cnt}   |   Resolved: {resolved_cnt}"
-            )
-
-        if not rows:
-            ctk.CTkLabel(
-                table_inner, text="No issues found. Inventory is clean.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-            return
-
-        condition_colors = {
-            "Damaged": "#E74C3C", "Lost": "#C0392B", "Needs Repair": "#F39C12",
-            "Discrepancy": "#8E44AD", "Stolen": "#C0392B", "Missing Parts": "#D35400", "Other": "#7F8C8D",
-        }
-
-        for i, row in enumerate(rows):
-            resolved_text = "✓ Resolved" if row["is_resolved"] else "⚠ Pending"
-            vals = [
-                str(row["issue_id"]), row["tool_name"], row["reported_by"],
-                row["condition_flag"], row["notes"], row["flagged_at"], resolved_text,
-            ]
-            bg = "#F0FFF0" if row["is_resolved"] else (
-                "#FFF8F0" if i % 2 == 0 else "#FFF3F3")
-
-            r_idx = i + 1
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg,
-                                    corner_radius=0, cursor="hand2")
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-
-                txt_col = "#1A1A1A"
-                if col == 3:
-                    txt_col = condition_colors.get(val, "#D35400")
-                elif col == 6:
-                    txt_col = "#2ECC71" if "Resolved" in val else "#D8000C"
-                font_w = "bold" if col in (3, 6) else "normal"
-
-                lbl = ctk.CTkLabel(cell, text=val, font=(
-                    "Inter", 12, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
-
-                # High-performance static wrapping
-                lbl.configure(wraplength=min_sizes[col] - 10)
-                lbl.pack(fill="both", expand=True, padx=4, pady=12)
-
-                cell.bind("<Button-1>", lambda e,
-                          r=row: self.open_issue_modal(r))
-                lbl.bind("<Button-1>", lambda e,
-                         r=row: self.open_issue_modal(r))
+    def _issues_loaded(self, rows, info):
+        if hasattr(self, "issues_summary") and self.issues_summary.winfo_exists():
+            opened = getattr(self, "_issues_open", 0)
+            self.issues_summary.configure(text=f"  Total: {info.total}   |   Open: {opened}   |   Resolved: {info.total - opened}")
 
     def open_issue_modal(self, row):
         modal = ctk.CTkToplevel(self)
@@ -408,7 +365,7 @@ class MaintenanceView(ctk.CTkFrame):
                            f"Resolved issue #{row['issue_id']} for '{row['tool_name']}'. Outcome: {out['outcome']} ({out['effect']})")
             messagebox.showinfo("Resolved", f"Issue resolved: {out['effect']}.", parent=modal)
             modal.destroy()
-            self.load_issues()
+            self.load_issues(keep_page=True)
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=25, pady=(5, 20))
@@ -439,100 +396,34 @@ class MaintenanceView(ctk.CTkFrame):
             fill="both", expand=True, padx=20, pady=(5, 20))
         return frame
 
-    def load_archived_tools(self):
-        for w in self._tools_scroll.winfo_children():
-            w.destroy()
+    def load_archived_tools(self, keep_page=False):
+        if getattr(self, "_tools_table", None) is None or not self._tools_table.winfo_exists():
+            for w in self._tools_scroll.winfo_children():
+                w.destroy()
+            self._tools_table = PagedTable(
+                self._tools_scroll, [("Tool ID", 1, 70), ("Name", 3, 200), ("Category", 2, 150), ("Qty", 1, 60), ("Archived At", 2, 150), ("Action", 1, 100)],
+                fetch=self._fetch_archived_tools,
+                cells=lambda r: [str(r["tool_id"]), r["name"], r["category"], f"{r['qty_total']:g}",
+                                 r["archived_date"].strftime("%Y-%m-%d %H:%M") if r["archived_date"] else "—", ""],
+                actions={5: {"text": "Restore", "command": lambda r: self.restore_tool(r["tool_id"])}},
+                empty_text="No archived tools found.", font_size=12, cell_pady=12, uniform="tool_cols")
+            self._tools_table.pack(fill="x", expand=True)
+        self._tools_table.reload(self._tools_table.page if keep_page else 0)
 
-        # Hard-Bounded Uniform Grid Setup
-        table_inner = ctk.CTkFrame(self._tools_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
-
-        headers = ["Tool ID", "Name", "Category",
-                   "Qty", "Archived At", "Action"]
-        weights = [1, 3, 2, 1, 2, 1]
-        min_sizes = [70, 200, 150, 60, 150, 100]
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(
-                col, weight=w, minsize=min_w, uniform="tool_cols")
-
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(
-                table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=(
-                "Inter", 12, "bold"), text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading archived tools... Please wait",
-                                   text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        def _fetch():
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
-                return
-            try:
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute("""
-                    SELECT t.tool_id, t.name, t.category, t.`condition`,
-                           IFNULL(t.archived_at, t.date_acquired) as archived_date,
-                           IFNULL(i.quantity_total, 0) as qty_total
-                    FROM tool t
-                    LEFT JOIN inventory i ON t.tool_id = i.tool_id
-                    WHERE t.is_archived = 1
-                    ORDER BY t.archived_at DESC
-                """)
-                rows = cursor.fetchall()
-                self.after(0, lambda: self._render_archived_tools(
-                    rows, table_inner, loading_lbl, headers, min_sizes))
-            except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(
-                    text=friendly_message(err), text_color="red", wraplength=600))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
-
-        import threading
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def _render_archived_tools(self, rows, table_inner, loading_lbl, headers, min_sizes):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-        loading_lbl.destroy()
-
-        if not rows:
-            ctk.CTkLabel(
-                table_inner, text="No archived tools found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-            return
-
-        for i, row in enumerate(rows):
-            archived_ts = row["archived_date"].strftime(
-                "%Y-%m-%d %H:%M") if row["archived_date"] else "—"
-            vals = [str(row["tool_id"]), row["name"], row["category"],
-                    f"{row['qty_total']:g}", archived_ts]
-
-            r_idx = i + 1
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
-
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-                lbl = ctk.CTkLabel(cell, text=val, font=(
-                    "Inter", 12), text_color="#1A1A1A", justify="center", anchor="center")
-                lbl.configure(wraplength=min_sizes[col] - 10)
-                lbl.pack(fill="both", expand=True, padx=4, pady=12)
-
-            btn_cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-            btn_cell.grid(row=r_idx, column=5, sticky="nsew")
-            btn_f = ctk.CTkFrame(btn_cell, fg_color="transparent")
-            btn_f.pack(expand=True)
-
-            btn = ctk.CTkButton(btn_f, text="Restore", width=60, height=28, fg_color="#2980B9", hover_color="#1F618D", font=(
-                "Inter", 11, "bold"), command=lambda r=row["tool_id"]: self.restore_tool(r))
-            btn.pack(expand=True, pady=10)
+    def _fetch_archived_tools(self, page, size):
+        conn = get_connection()
+        if not conn:
+            raise ConnectionError("The database is not reachable.")
+        try:
+            cur = conn.cursor(dictionary=True)
+            return fetch_page(
+                cur, """SELECT t.tool_id, t.name, t.category, t.`condition`, IFNULL(t.archived_at, t.date_acquired) as archived_date,
+                               IFNULL(i.quantity_total, 0) as qty_total""",
+                "FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id WHERE t.is_archived = 1", [],
+                "ORDER BY t.archived_at DESC, t.tool_id DESC", page, size)
+        finally:
+            if conn.is_connected():
+                conn.close()
 
     def restore_tool(self, tool_id):
         if not messagebox.askyesno("Confirm Restore", f"Are you sure you want to restore Tool PID: {tool_id}?"):
@@ -546,7 +437,7 @@ class MaintenanceView(ctk.CTkFrame):
         if uid:
             log_action(uid, "Edited", "Maintenance", f"Restored Tool PID: {tool_id} ('{res['name']}') from Archive")
         messagebox.showinfo("Success", "Tool restored to active inventory.")
-        self.load_archived_tools()
+        self.load_archived_tools(keep_page=True)
 
     # ------------------------------------------
     # TAB 3: Archived Employees
@@ -567,99 +458,33 @@ class MaintenanceView(ctk.CTkFrame):
         self._emp_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
         return frame
 
-    def load_archived_employees(self):
-        for w in self._emp_scroll.winfo_children():
-            w.destroy()
+    def load_archived_employees(self, keep_page=False):
+        if getattr(self, "_emp_table", None) is None or not self._emp_table.winfo_exists():
+            for w in self._emp_scroll.winfo_children():
+                w.destroy()
+            self._emp_table = PagedTable(
+                self._emp_scroll, [("User ID", 1, 60), ("Employee ID", 2, 100), ("Full Name", 3, 180), ("Role", 2, 100), ("Status", 2, 100),
+                                   ("Archived At", 2, 150), ("Action", 1, 100)],
+                fetch=self._fetch_archived_employees,
+                cells=lambda r: [str(r["user_id"]), r["employee_id"], r["full_name"], r["role"], r["status"] or "Inactive",
+                                 r["archived_at"].strftime("%Y-%m-%d %H:%M:%S") if r.get("archived_at") else "—", ""],
+                actions={6: {"text": "Restore", "command": lambda r: self.restore_employee(r["user_id"])}},
+                empty_text="No archived employees found.", font_size=12, cell_pady=12, uniform="emp_cols")
+            self._emp_table.pack(fill="x", expand=True)
+        self._emp_table.reload(self._emp_table.page if keep_page else 0)
 
-        # Hard-Bounded Uniform Grid Setup
-        table_inner = ctk.CTkFrame(self._emp_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
-
-        headers = ["User ID", "Employee ID", "Full Name",
-                   "Role", "Status", "Archived At", "Action"]
-        weights = [1, 2, 3, 2, 2, 2, 1]
-        min_sizes = [60, 100, 180, 100, 100, 150, 100]
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(
-                col, weight=w, minsize=min_w, uniform="emp_cols")
-
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(
-                table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=(
-                "Inter", 12, "bold"), text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading archived employees... Please wait",
-                                   text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        def _fetch():
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
-                return
-            try:
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute("""
-                    SELECT user_id, employee_id, full_name, role, status, archived_at
-                    FROM `user`
-                    WHERE IFNULL(status, 'Inactive') != 'Active'
-                    ORDER BY archived_at DESC, user_id DESC
-                """)
-                rows = cursor.fetchall()
-                self.after(0, lambda: self._render_archived_employees(
-                    rows, table_inner, loading_lbl, headers, min_sizes))
-            except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(
-                    text=friendly_message(err), text_color="red", wraplength=600))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
-
-        import threading
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def _render_archived_employees(self, rows, table_inner, loading_lbl, headers, min_sizes):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-        loading_lbl.destroy()
-
-        if not rows:
-            ctk.CTkLabel(
-                table_inner, text="No archived employees found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-            return
-
-        for i, row in enumerate(rows):
-            status_display = row["status"] if row.get("status") else "Inactive"
-            archived_at = row.get("archived_at")
-            archived_display = archived_at.strftime(
-                "%Y-%m-%d %H:%M:%S") if archived_at else "—"
-            vals = [str(row["user_id"]), row["employee_id"], row["full_name"],
-                    row["role"], status_display, archived_display]
-
-            r_idx = i + 1
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
-
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-                lbl = ctk.CTkLabel(cell, text=val, font=(
-                    "Inter", 12), text_color="#1A1A1A", justify="center", anchor="center")
-                lbl.configure(wraplength=min_sizes[col] - 10)
-                lbl.pack(fill="both", expand=True, padx=4, pady=12)
-
-            btn_cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-            btn_cell.grid(row=r_idx, column=6, sticky="nsew")
-            btn_f = ctk.CTkFrame(btn_cell, fg_color="transparent")
-            btn_f.pack(expand=True)
-
-            btn = ctk.CTkButton(btn_f, text="Restore", width=60, height=28, fg_color="#2980B9", hover_color="#1F618D", font=(
-                "Inter", 11, "bold"), command=lambda r=row["user_id"]: self.restore_employee(r))
-            btn.pack(expand=True, pady=10)
+    def _fetch_archived_employees(self, page, size):
+        conn = get_connection()
+        if not conn:
+            raise ConnectionError("The database is not reachable.")
+        try:
+            cur = conn.cursor(dictionary=True)
+            return fetch_page(cur, "SELECT user_id, employee_id, full_name, role, status, archived_at",
+                              "FROM `user` WHERE IFNULL(status, 'Inactive') != 'Active'", [],
+                              "ORDER BY archived_at DESC, user_id DESC", page, size)
+        finally:
+            if conn.is_connected():
+                conn.close()
 
     def restore_employee(self, user_id):
         if not messagebox.askyesno("Confirm Restore", "Restore this employee to Active status? They will be able to log in (Staff/Admin) or receive tools (Workers) again."):
@@ -673,7 +498,7 @@ class MaintenanceView(ctk.CTkFrame):
         if uid:
             log_action(uid, "Edited", "Maintenance", f"Restored employee {res['name']} ({res['employee_id']}) from Archive")
         messagebox.showinfo("Success", f"{res['name']} was restored.")
-        self.load_archived_employees()
+        self.load_archived_employees(keep_page=True)
 
     # ------------------------------------------
     # TAB 4: Archived Projects
@@ -694,102 +519,38 @@ class MaintenanceView(ctk.CTkFrame):
         self._proj_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
         return frame
 
-    def load_archived_projects(self):
-        for w in self._proj_scroll.winfo_children():
-            w.destroy()
+    def load_archived_projects(self, keep_page=False):
+        if getattr(self, "_proj_table", None) is None or not self._proj_table.winfo_exists():
+            for w in self._proj_scroll.winfo_children():
+                w.destroy()
 
-        # Hard-Bounded Uniform Grid Setup
-        table_inner = ctk.CTkFrame(self._proj_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
+            def when(r):
+                if r.get("archived_at"):
+                    return r["archived_at"].strftime("%Y-%m-%d %H:%M:%S")
+                return r["end_date"].strftime("%Y-%m-%d") if r.get("end_date") else "—"
+            self._proj_table = PagedTable(
+                self._proj_scroll, [("Project ID", 1, 70), ("Project Name", 3, 200), ("Client/Dept", 2, 150), ("Status", 1, 100),
+                                    ("End/Archived At", 2, 150), ("Action", 1, 100)],
+                fetch=self._fetch_archived_projects,
+                cells=lambda r: [str(r["project_id"]), r["name"], r.get("client") or "—", r["status"], when(r), ""],
+                actions={5: {"text": "Restore", "command": lambda r: self.restore_project(r["project_id"])}},
+                empty_text="No archived projects found. Archive a Completed or Cancelled project from Project Management.",
+                font_size=12, cell_pady=12, uniform="proj_cols")
+            self._proj_table.pack(fill="x", expand=True)
+        self._proj_table.reload(self._proj_table.page if keep_page else 0)
 
-        headers = ["Project ID", "Project Name", "Client/Dept",
-                   "Status", "End/Archived At", "Action"]
-        weights = [1, 3, 2, 1, 2, 1]
-        min_sizes = [70, 200, 150, 100, 150, 100]
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(
-                col, weight=w, minsize=min_w, uniform="proj_cols")
-
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(
-                table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=(
-                "Inter", 12, "bold"), text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading archived projects... Please wait",
-                                   text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        def _fetch():
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
-                return
-            try:
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute("""
-                    SELECT project_id, name, client, status, end_date, archived_at
-                    FROM projects
-                    WHERE archived_at IS NOT NULL
-                    ORDER BY archived_at DESC
-                """)
-                rows = cursor.fetchall()
-                self.after(0, lambda: self._render_archived_projects(
-                    rows, table_inner, loading_lbl, headers, min_sizes))
-            except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(
-                    text=friendly_message(err), text_color="red", wraplength=600))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
-
-        import threading
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def _render_archived_projects(self, rows, table_inner, loading_lbl, headers, min_sizes):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-        loading_lbl.destroy()
-
-        if not rows:
-            ctk.CTkLabel(table_inner, text="No archived projects found. Archive a Completed or Cancelled project from Project Management.",
-                         text_color="gray", wraplength=600, justify="center").grid(row=1, column=0, columnspan=len(headers), pady=30)
-            return
-
-        for i, row in enumerate(rows):
-            display_date = "—"
-            if row.get("archived_at"):
-                display_date = row["archived_at"].strftime("%Y-%m-%d %H:%M:%S")
-            elif row.get("end_date"):
-                display_date = row["end_date"].strftime("%Y-%m-%d")
-
-            client_display = row.get("client") or "—"
-            vals = [str(row["project_id"]), row["name"],
-                    client_display, row["status"], display_date]
-
-            r_idx = i + 1
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
-
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-                lbl = ctk.CTkLabel(cell, text=val, font=(
-                    "Inter", 12), text_color="#1A1A1A", justify="center", anchor="center")
-                lbl.configure(wraplength=min_sizes[col] - 10)
-                lbl.pack(fill="both", expand=True, padx=4, pady=12)
-
-            btn_cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-            btn_cell.grid(row=r_idx, column=5, sticky="nsew")
-            btn_f = ctk.CTkFrame(btn_cell, fg_color="transparent")
-            btn_f.pack(expand=True)
-
-            btn = ctk.CTkButton(btn_f, text="Restore", width=60, height=28, fg_color="#2980B9", hover_color="#1F618D", font=(
-                "Inter", 11, "bold"), command=lambda r=row["project_id"]: self.restore_project(r))
-            btn.pack(expand=True, pady=10)
+    def _fetch_archived_projects(self, page, size):
+        conn = get_connection()
+        if not conn:
+            raise ConnectionError("The database is not reachable.")
+        try:
+            cur = conn.cursor(dictionary=True)
+            return fetch_page(cur, "SELECT project_id, name, client, status, end_date, archived_at",
+                              "FROM projects WHERE archived_at IS NOT NULL", [],
+                              "ORDER BY archived_at DESC, project_id DESC", page, size)
+        finally:
+            if conn.is_connected():
+                conn.close()
 
     def restore_project(self, project_id):
         if not messagebox.askyesno("Confirm Restore", f"Restore Project ID: {project_id}? It returns to the status it had before it was archived."):
@@ -803,7 +564,7 @@ class MaintenanceView(ctk.CTkFrame):
         if uid:
             log_action(uid, "Edited", "Maintenance", f"Restored Project '{res['name']}' (PID: {project_id}) to {res['status']}")
         messagebox.showinfo("Success", f"Project restored as {res['status']}.")
-        self.load_archived_projects()
+        self.load_archived_projects(keep_page=True)
 
     # ------------------------------------------
     # TAB 5: Backup & Restore
@@ -1090,120 +851,33 @@ class MaintenanceView(ctk.CTkFrame):
     def load_backup_history(self):
         if not hasattr(self, "_backup_hist_scroll"):
             return
-        for w in self._backup_hist_scroll.winfo_children():
-            w.destroy()
+        if getattr(self, "_backup_table", None) is None or not self._backup_table.winfo_exists():
+            for w in self._backup_hist_scroll.winfo_children():
+                w.destroy()
 
+            def fetch(page, size):
+                rows, total = backup_service.history_page(self.user_info, size, page * size)
+                return rows, PageInfo(page, size, total)
 
-        table_inner = ctk.CTkFrame(
-            self._backup_hist_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
+            def fetch_clamped(page, size):                 # the service returns the total; clamp here if the list shrank
+                rows, info = fetch(page, size)
+                if not rows and info.total and page:
+                    last = clamp_page(page, size, info.total)
+                    rows, info = fetch(last, size)
+                return rows, info
 
-        headers = ["#", "Type", "Filename", "File Size", "Note",
-                   "Created By", "Date & Time", "Status"]
-        weights = [1, 1, 4, 1, 3, 2, 3, 1]
-        min_sizes = [40, 80, 200, 80, 160, 120, 160, 80]
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(
-                col, weight=w, minsize=min_w, uniform="bk_cols")
-
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(
-                table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 12, "bold"),
-                               text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        loading_lbl = ctk.CTkLabel(table_inner,
-                                   text="↻ Loading backup history...",
-                                   text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        def _fetch():
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: loading_lbl.configure(text="Error: Could not connect to database.", text_color="red"))
-                return
-            try:
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute("""
-                    SELECT bl.backup_id, IFNULL(bl.type, 'Backup') as type,
-                           bl.filename, bl.file_size,
-                           IFNULL(bl.note, '—') as note,
-                           IFNULL(u.full_name, 'System') as created_by,
-                           bl.created_at,
-                           bl.status, bl.filepath
-                    FROM backup_logs bl
-                    LEFT JOIN `user` u ON bl.created_by = u.user_id
-                    ORDER BY bl.created_at DESC
-                    LIMIT 50
-                """)
-                rows = cursor.fetchall()
-                self.after(0, lambda: self._render_backup_history(
-                    rows, table_inner, loading_lbl, headers, min_sizes))
-            except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(
-                    text=friendly_message(err), text_color="red", wraplength=600))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
-
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def _render_backup_history(self, rows, table_inner, loading_lbl, headers, min_sizes):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-        loading_lbl.destroy()
-
-        if not rows:
-            ctk.CTkLabel(table_inner,
-                         text="No backup records found. Create your first backup above.",
-                         text_color="gray").grid(
-                row=1, column=0, columnspan=len(headers), pady=20)
-            return
-
-        for i, row in enumerate(rows):
-            status_ok = row["status"] == "Success"
-            entry_type = row.get("type") or "Backup"
-
-            # Format datetime in Python to avoid DATE_FORMAT driver inconsistencies
-            raw_dt = row["created_at"]
-            if hasattr(raw_dt, "strftime"):
-                created_at_str = raw_dt.strftime("%b %d, %Y %I:%M %p")
-            else:
-                created_at_str = str(raw_dt) if raw_dt else "—"
-
-            vals = [
-                str(len(rows) - i),
-                entry_type,
-                row["filename"],
-                row["file_size"],
-                row["note"],
-                row["created_by"],
-                created_at_str,
-                row["status"],
-            ]
-            bg = "#F0FFF4" if status_ok else "#FFF5F5"
-            r_idx = i + 1
-
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-
-                txt_col = "#1A1A1A"
-                font_w = "normal"
-                if col == 1:  # Type
-                    txt_col = "#1E4528" if entry_type == "Backup" else "#C07A00"
-                    font_w = "bold"
-                elif col == 7:  # Status
-                    txt_col = "#1E4528" if status_ok else "#D8000C"
-                    font_w = "bold"
-
-                lbl = ctk.CTkLabel(cell, text=val,
-                                   font=("Inter", 12, font_w),
-                                   text_color=txt_col,
-                                   justify="center", anchor="center")
-                lbl.configure(wraplength=min_sizes[col] - 10)
-                lbl.pack(fill="both", expand=True, padx=4, pady=10)
+            def when(r):
+                d = r["created_at"]
+                return d.strftime("%b %d, %Y %I:%M %p") if hasattr(d, "strftime") else (str(d) if d else "—")
+            self._backup_table = PagedTable(
+                self._backup_hist_scroll, [("Type", 1, 80), ("Filename", 4, 200), ("File Size", 1, 80), ("Checksum (SHA-256)", 2, 140),
+                                           ("Note", 3, 160), ("Created By", 2, 120), ("Date & Time", 3, 160), ("Status", 1, 80)],
+                fetch=fetch_clamped,
+                cells=lambda r: [r["type"], r["filename"], r["file_size"], (r["sha256"] or "—")[:12] + ("…" if r["sha256"] else ""),
+                                 r["note"], r["created_by"], when(r), r["status"]],
+                row_bg=lambda r, i: "#F0FFF4" if r["status"] == "Success" else "#FFF5F5",
+                cell_style=lambda r, c, v: (("#1E4528" if r["type"] == "Backup" else "#C07A00"), True) if c == 0 else
+                                           ((("#1E4528" if r["status"] == "Success" else "#D8000C"), True) if c == 7 else ("#1A1A1A", False)),
+                empty_text="No backup records found. Create your first backup above.", font_size=12, cell_pady=10, uniform="bk_cols")
+            self._backup_table.pack(fill="x", expand=True)
+        self._backup_table.reload(0)

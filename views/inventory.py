@@ -11,6 +11,9 @@ import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 from datetime import datetime
 from services.errors import friendly_message
+from services.paging import fetch_page
+from services.validators import like_pattern
+from views.paged_table import PagedTable
 from services import inventory_service as inv_svc
 
 
@@ -340,7 +343,7 @@ class InventoryView(ctk.CTkFrame):
             os.startfile(file_path)
 
             self.selected_for_print.clear()
-            self.load_inventory_data(self.search_entry.get().strip(), self.sort_menu.get())
+            self.load_inventory_data(self.search_entry.get().strip(), self.sort_menu.get(), keep_page=True)
 
         except Exception as e:
             messagebox.showerror("Print Error", f"Failed to generate batch print document.\n{e}", parent=self.winfo_toplevel())
@@ -392,53 +395,47 @@ class InventoryView(ctk.CTkFrame):
                 cursor.close()
                 conn.close()
 
-    def load_inventory_data(self, query="", sort_type="Most Recent"):
-        for widget in self.data_scroll.winfo_children():
-            widget.destroy()
-        self.tool_hash_table.clear()
-        
+    INV_COLUMNS = [("Print", 1, 40), ("PID", 1, 50), ("Type", 2, 80), ("Name", 4, 150), ("Tag ID", 3, 120),
+                   ("Qty Avail.", 2, 80), ("UoM", 1, 50), ("Location", 4, 150), ("Status", 2, 80)]
+
+    def load_inventory_data(self, query=None, sort_type=None, keep_page=False):
+        """(Re)load the table from page 1. The table is built once and its rows are recycled (views/paged_table.py)."""
         if not hasattr(self, 'selected_for_print'):
             self.selected_for_print = set()
+        if query is None:
+            query = getattr(self, "_inv_query", "")
+        if sort_type is None:
+            sort_type = getattr(self, "_inv_sort", "Most Recent")
+        self._inv_query, self._inv_sort = query, sort_type
+        if getattr(self, "_inv_table", None) is None or not self._inv_table.winfo_exists():
+            for widget in self.data_scroll.winfo_children():
+                widget.destroy()
+            self._inv_table = PagedTable(
+                self.data_scroll, self.INV_COLUMNS, fetch=self._fetch_inventory_page, cells=self._inventory_cells,
+                row_bg=self._inventory_row_bg, cell_style=self._inventory_cell_style, on_row_click=lambda r: self.open_tool_modal(str(r['tool_id'])),
+                on_loaded=self._inventory_loaded, empty_text="No inventory found.", font_size=12, cell_pady=8, uniform="inv_cols",
+                checkbox={"col": 0, "state": self._inventory_check_state, "toggle": lambda r, on: self.toggle_print_selection(str(r['tool_id']), "on" if on else "off")})
+            self._inv_table.pack(fill="x", expand=True)
+        self._inv_table.reload(self._inv_table.page if keep_page else 0)
 
-        table_inner = ctk.CTkFrame(self.data_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
-
-        headers = ["Print", "PID", "Type", "Name", "Tag ID",
-                   "Qty Avail.", "UoM", "Location", "Status"]
-
-        weights = [1, 1, 2, 4, 3, 2, 1, 4, 2]
-        min_sizes = [40, 50, 80, 150, 120, 80, 50, 150, 80]
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            # uniform="inv_cols" strictly ties the columns together mathematically
-            table_inner.grid_columnconfigure(
-                col, weight=w, minsize=min_w, uniform="inv_cols")
-
-        # Header Row
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(
-                table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=(
-                "Inter", 13, "bold"), text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=4, pady=14)
-
-        loading_lbl = ctk.CTkLabel(table_inner, text="Fetching data from database, please wait...",
-                                   text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        def fetch_data():
-            is_archived = 0
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: self._render_inventory_data(
-                    None, table_inner, loading_lbl, headers, min_sizes, query, sort_type))
-                return
-
-            try:
-                cursor = conn.cursor(dictionary=True)
-                base_query = """
-                    SELECT t.tool_id, IFNULL(t.item_type, 'Equipment') as item_type,
+    def _fetch_inventory_page(self, page, size):
+        """Runs in the worker thread (own connection, own cursor; reads the filter values saved on the main thread)."""
+        query, sort_type = self._inv_query, self._inv_sort
+        low_only = getattr(self, 'highlight_low_stock', False)
+        where, params = "WHERE t.is_archived = 0", []
+        if low_only:
+            where += " AND i.minimum_stock > 0 AND i.quantity_available < i.minimum_stock"
+        if query:
+            where += (" AND (t.name LIKE %s OR CAST(t.tool_id AS CHAR) LIKE %s OR t.category LIKE %s OR t.item_type LIKE %s OR t.supplier LIKE %s"
+                      " OR IFNULL(t.tag_id,'') LIKE %s OR t.location LIKE %s OR t.description LIKE %s)")
+            params += [like_pattern(query)] * 8
+        if sort_type == "Needs Tag":
+            where += " AND (t.tag_id IS NULL OR t.tag_id = '')"
+        elif sort_type == "Already Tagged":
+            where += " AND t.tag_id IS NOT NULL AND t.tag_id != ''"
+        order = {"Oldest": "t.tool_id ASC", "PID (Low-High)": "t.tool_id ASC", "A-Z (Name)": "t.name ASC, t.tool_id ASC",
+                 "Z-A (Name)": "t.name DESC, t.tool_id DESC"}.get(sort_type, "t.tool_id DESC")
+        select = """SELECT t.tool_id, IFNULL(t.item_type, 'Equipment') as item_type,
                            IFNULL(t.unit_of_measure, 'pcs') as uom,
                            t.name, IFNULL(t.description, '') as description, t.price,
                            IFNULL(i.quantity_available, 0) as qty_avail,
@@ -448,158 +445,69 @@ class InventoryView(ctk.CTkFrame):
                            IFNULL(t.category, 'Uncategorized') as category,
                            IFNULL(t.supplier, 'N/A') as supplier,
                            t.tag_id,
-                           DATE_FORMAT(t.date_acquired, '%Y-%m-%d') as date_acquired,
-                           (SELECT DATE_FORMAT(MAX(flagged_at), '%Y-%m-%d') FROM tool_issues WHERE tool_id = t.tool_id) as last_checked_date,
-                           (SELECT p.name FROM transaction tr 
-                            JOIN projects p ON tr.project_id = p.project_id 
-                            WHERE tr.tool_id = t.tool_id AND tr.status = 'Active' 
-                            LIMIT 1) as active_project
-                    FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id
-                    WHERE t.is_archived = %s
-                """
-                params = [is_archived]
+                           DATE_FORMAT(t.date_acquired, '%%Y-%%m-%%d') as date_acquired,
+                           (SELECT DATE_FORMAT(MAX(flagged_at), '%%Y-%%m-%%d') FROM tool_issues WHERE tool_id = t.tool_id) as last_checked_date,
+                           (SELECT p.name FROM transaction tr
+                            JOIN projects p ON tr.project_id = p.project_id
+                            WHERE tr.tool_id = t.tool_id AND tr.status = 'Active'
+                            LIMIT 1) as active_project"""
+        conn = get_connection()
+        if not conn:
+            raise ConnectionError("The database is not reachable.")
+        try:
+            cursor = conn.cursor(dictionary=True)
+            return fetch_page(cursor, select, f"FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id {where}", params,
+                              f"ORDER BY {order}", page, size)
+        finally:
+            if conn.is_connected():
+                conn.close()
 
-                if getattr(self, 'highlight_low_stock', False):
-                    base_query += " AND i.minimum_stock > 0 AND i.quantity_available < i.minimum_stock"
-
-                if query:
-                    base_query += " AND (t.name LIKE %s OR CAST(t.tool_id AS CHAR) LIKE %s OR t.category LIKE %s OR t.item_type LIKE %s OR t.supplier LIKE %s OR IFNULL(t.tag_id,'') LIKE %s OR t.location LIKE %s OR t.description LIKE %s)"
-                    params.extend([f"%{query}%"] * 8)
-
-                if sort_type == "Needs Tag":
-                    base_query += " AND (t.tag_id IS NULL OR t.tag_id = '')"
-                elif sort_type == "Already Tagged":
-                    base_query += " AND t.tag_id IS NOT NULL AND t.tag_id != ''"
-
-                if sort_type == "Oldest":
-                    base_query += " ORDER BY t.tool_id ASC"
-                elif sort_type == "A-Z (Name)":
-                    base_query += " ORDER BY t.name ASC"
-                elif sort_type == "Z-A (Name)":
-                    base_query += " ORDER BY t.name DESC"
-                elif sort_type == "PID (Low-High)":
-                    base_query += " ORDER BY t.tool_id ASC"
-                else:
-                    base_query += " ORDER BY t.tool_id DESC"
-
-                base_query += " LIMIT 100"
-                cursor.execute(base_query, tuple(params))
-                results = cursor.fetchall()
-
-                self.after(0, lambda: self._render_inventory_data(
-                    results, table_inner, loading_lbl, headers, min_sizes, query, sort_type))
-            except Exception as e:
-                print(f"Fetch Error: {e}")
-                self.after(0, lambda: self._render_inventory_data(
-                    None, table_inner, loading_lbl, headers, min_sizes, query, sort_type))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
-
-        threading.Thread(target=fetch_data, daemon=True).start()
-
-    def _render_inventory_data(self, results, table_inner, loading_lbl, headers, min_sizes, query, sort_type):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-
-        loading_lbl.destroy()
-
-        if results is None:
-            ctk.CTkLabel(table_inner, text="Failed to fetch inventory data.", text_color="red").grid(
-                row=1, column=0, columnspan=len(headers), pady=20)
-            return
-
-        if not results:
-            ctk.CTkLabel(table_inner, text="No inventory found.", text_color="gray").grid(
-                row=1, column=0, columnspan=len(headers), pady=20)
-            return
-
-        for i, row in enumerate(results):
-            pid = str(row['tool_id'])
+    def _inventory_loaded(self, rows, info):
+        """Main thread: remember the shown rows by id (the row-click and the panel read them), open a requested item, log searches."""
+        self.tool_hash_table.clear()
+        for row in rows:
             row['location'] = row['base_location']
-            self.tool_hash_table[pid] = row
-
-            avail = f"{row['qty_avail']:g}" if row['qty_avail'] else "0"
-            tot = f"{row['qty_tot']:g}" if row['qty_tot'] else "0"
-
-            display_loc = row['base_location']
-            if row.get('active_project') and float(row['qty_avail']) < float(row['qty_tot']):
-                display_loc = f"Deployed: {row['active_project']}"
-
-            tag_display = row['tag_id'] if row['tag_id'] else "Unassigned"
-
-            is_low_stock = row.get(
-                'min_stock', 0) > 0 and row['qty_avail'] < row['min_stock']
-            qty_display = f"⚠ {avail}/{tot}" if is_low_stock else f"{avail}/{tot}"
-
-            vals = [
-                "",
-                pid,
-                row['item_type'],
-                row['name'],
-                tag_display,
-                qty_display,
-                row['uom'],
-                display_loc,
-                row['status']
-            ]
-
-            r_idx = i + 1
-            if is_low_stock:
-                bg = "#FFF3F3" if i % 2 == 0 else "#FFEBEB"
-            else:
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
-
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg,
-                                    corner_radius=0, cursor="hand2")
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-                
-                if col == 0:
-                    if tag_display != "Unassigned":
-                        chk_var = ctk.StringVar(value="on" if pid in self.selected_for_print else "off")
-                        chk = ctk.CTkCheckBox(cell, text="", variable=chk_var, onvalue="on", offvalue="off", width=20, height=20, 
-                                              command=lambda p=pid, v=chk_var: self.toggle_print_selection(p, v.get()))
-                        chk.pack(expand=True, pady=8)
-                    else:
-                        chk = ctk.CTkCheckBox(cell, text="", width=20, height=20, state="disabled")
-                        chk.pack(expand=True, pady=8)
-                else:
-                    txt_col = "#1A1A1A"
-                    if col == 7 and "Deployed:" in val:
-                        txt_col = "#2980B9"
-                    elif col == 2 and val == "Consumable":
-                        txt_col = "#D37F00"
-                    elif col == 4 and val == "Unassigned":
-                        txt_col = "#D8000C"
-                    elif col == 5 and is_low_stock:
-                        txt_col = "#D8000C"
-
-                    font_w = "bold" if col == 2 or col == 4 or (col == 5 and is_low_stock) or (
-                        col == 7 and "Deployed:" in val) else "normal"
-
-                    lbl = ctk.CTkLabel(cell, text=val, font=(
-                        "Inter", 12, font_w), text_color=txt_col, justify="center", anchor="center", cursor="hand2")
-
-                    lbl.configure(wraplength=min_sizes[col] - 10)
-
-                    lbl.pack(fill="both", expand=True, padx=4, pady=8)
-
-                    cell.bind("<Button-1>", lambda e,
-                              lookup_id=pid: self.open_tool_modal(lookup_id))
-                    lbl.bind("<Button-1>", lambda e,
-                             lookup_id=pid: self.open_tool_modal(lookup_id))
-
+            self.tool_hash_table[str(row['tool_id'])] = row
         if getattr(self, 'highlight_tool_id', None):
-            self.after(
-                100, lambda t=self.highlight_tool_id: self.open_tool_modal(str(t)))
+            self.after(100, lambda t=self.highlight_tool_id: self.open_tool_modal(str(t)))
             self.highlight_tool_id = None
-
         uid = self.user_info.get("user_id")
-        if uid and query:
-            log_action(uid, "Searched", "Inventory",
-                       f"Searched inventory: '{query}' (Sort: {sort_type})")
+        if uid and self._inv_query and not getattr(self, "_inv_search_logged", None) == (self._inv_query, self._inv_sort):
+            self._inv_search_logged = (self._inv_query, self._inv_sort)
+            log_action(uid, "Searched", "Inventory", f"Searched inventory: '{self._inv_query}' (Sort: {self._inv_sort})")
+
+    @staticmethod
+    def _is_low(row):
+        return row.get('min_stock', 0) > 0 and row['qty_avail'] < row['min_stock']
+
+    def _inventory_cells(self, row):
+        avail = f"{row['qty_avail']:g}" if row['qty_avail'] else "0"
+        tot = f"{row['qty_tot']:g}" if row['qty_tot'] else "0"
+        display_loc = row['base_location']
+        if row.get('active_project') and float(row['qty_avail']) < float(row['qty_tot']):
+            display_loc = f"Deployed: {row['active_project']}"
+        qty = f"⚠ {avail}/{tot}" if self._is_low(row) else f"{avail}/{tot}"
+        return ["", str(row['tool_id']), row['item_type'], row['name'], row['tag_id'] or "Unassigned", qty, row['uom'], display_loc, row['status']]
+
+    def _inventory_row_bg(self, row, i):
+        if self._is_low(row):
+            return "#FFF3F3" if i % 2 == 0 else "#FFEBEB"
+        return "#F9FAFB" if i % 2 == 0 else "white"
+
+    def _inventory_cell_style(self, row, col, val):
+        low = self._is_low(row)
+        if col == 7 and "Deployed:" in val:
+            return "#2980B9", True
+        if col == 2:
+            return ("#D37F00" if val == "Consumable" else "#1A1A1A"), True
+        if col == 4:
+            return ("#D8000C" if val == "Unassigned" else "#1A1A1A"), True
+        if col == 5:
+            return ("#D8000C" if low else "#1A1A1A"), low
+        return "#1A1A1A", False
+
+    def _inventory_check_state(self, row):
+        return bool(row['tag_id']), str(row['tool_id']) in self.selected_for_print
 
     def perform_search(self):
         self.load_inventory_data(
@@ -609,7 +517,7 @@ class InventoryView(ctk.CTkFrame):
         self.search_entry.delete(0, 'end')
         self.sort_menu.set("Most Recent")
         self.highlight_low_stock = False
-        self.load_inventory_data()
+        self.load_inventory_data("", "Most Recent")
 
     def validate_and_save(self):
         itype = self.type_menu.get()
@@ -829,7 +737,7 @@ class InventoryView(ctk.CTkFrame):
                     tag_ui["save_btn"].configure(state="disabled", text="Tag saved")
             update_preview()
             messagebox.showinfo("Success", "Tag successfully linked to tool.", parent=modal)
-            self.load_inventory_data()
+            self.load_inventory_data(keep_page=True)
 
         def unlink_tag():
             if messagebox.askyesno("Remove Tag", "Unlink the tag from this tool?", parent=modal):
@@ -843,7 +751,7 @@ class InventoryView(ctk.CTkFrame):
                 if uid:
                     log_action(uid, "Edited", "Inventory", f"Unlinked tag {res['old_tag']} from '{res['name']}' (PID: {lookup_id})")
                 update_preview()
-                self.load_inventory_data()
+                self.load_inventory_data(keep_page=True)
 
         if not is_staff_modal or staff_can_tag:
             tag_btn_row = ctk.CTkFrame(form_scroll, fg_color="transparent")
@@ -974,7 +882,7 @@ class InventoryView(ctk.CTkFrame):
             if uid:
                 log_action(uid, "Edited", "Inventory", f"Edited item '{name_entry.get()}' (PID: {lookup_id})")
             modal.destroy()
-            self.load_inventory_data()
+            self.load_inventory_data(keep_page=True)
 
         def execute_archive():
             if is_arch:
@@ -995,7 +903,7 @@ class InventoryView(ctk.CTkFrame):
             if uid:
                 log_action(uid, action_str, "Inventory", f"{action_str} item '{data['name']}'")
             modal.destroy()
-            self.load_inventory_data()
+            self.load_inventory_data(keep_page=True)
             dashboard = self.winfo_toplevel()
             if hasattr(dashboard, "show_toast"):
                 dashboard.show_toast("✓ Tool restored successfully." if is_arch else "✓ Tool archived and passed to Maintenance.")

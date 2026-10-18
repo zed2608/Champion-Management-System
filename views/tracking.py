@@ -3,7 +3,21 @@ from tkinter import messagebox
 from database import get_connection, log_action
 from datetime import datetime
 from services.errors import friendly_message
+from services.paging import fetch_page
+from services.validators import like_pattern
+from views.paged_table import PagedTable
 
+
+
+def _status_style(status_col, tag_col):
+    """Cell colours shared by the transaction tables: Active in red, Retrieved in green, an untagged tool in red."""
+    def style(row, col, val):
+        if col == status_col:
+            return ("#D8000C" if val == "Active" else "#2ECC71"), True
+        if col == tag_col and val == "Unassigned":
+            return "#D8000C", True
+        return "#1A1A1A", False
+    return style
 
 
 def _with_quantity(rows):
@@ -172,109 +186,52 @@ class TrackingView(ctk.CTkFrame):
         self._log_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
         return frame
 
+    def _format_tx_dates(self, rows):
+        """Receipt / table text for the two dates (done in the worker thread, so the Tk thread only copies strings)."""
+        for r in rows:
+            for key in ("borrow_date", "return_date"):
+                if hasattr(r[key], 'strftime'):
+                    r[key] = r[key].strftime('%b %d, %Y %I:%M %p')
+                elif not r[key]:
+                    r[key] = "—"
+        return rows
+
+    LOG_COLUMNS = [("TRN", 1, 50), ("Type", 1, 70), ("Tool Name", 3, 160), ("Tag ID", 2, 100), ("Assignee", 2, 120),
+                   ("Date Issued", 3, 150), ("Date Retrieved", 3, 150), ("Status", 1, 80)]
+
     def load_logs(self):
-        for w in self._log_scroll.winfo_children():
-            w.destroy()
+        self._log_query = self.log_search.get().strip() if hasattr(self, "log_search") else ""     # read on the main thread
+        if getattr(self, "_log_table", None) is None or not self._log_table.winfo_exists():
+            for w in self._log_scroll.winfo_children():
+                w.destroy()
+            self._log_table = PagedTable(
+                self._log_scroll, self.LOG_COLUMNS, fetch=self._fetch_logs_page,
+                cells=lambda r: [str(r["transaction_id"]), r["type"], r["tool_name"], r["tag_id"], r["full_name"], r["borrow_date"], r["return_date"], r["status"]],
+                cell_style=_status_style(7, 3), on_row_click=self.view_deployment_details, empty_text="No transaction records found.",
+                font_size=11, cell_pady=12, uniform="log_cols")
+            self._log_table.pack(fill="x", expand=True)
+        self._log_table.reload(0)
 
-        # Hard-Bounded Uniform Grid setup
-        table_inner = ctk.CTkFrame(self._log_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
-
-        headers = ["TRN", "Type", "Tool Name", "Tag ID", "Assignee", "Date Issued", "Date Retrieved", "Status"]
-        weights = [1, 1, 3, 2, 2, 3, 3, 1]
-        min_sizes = [50, 70, 160, 100, 120, 150, 150, 80]
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(col, weight=w, minsize=min_w, uniform="log_cols")
-
-        # Header Row
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        q = self.log_search.get().strip() if hasattr(self, "log_search") else ""
-
-        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading transaction logs... Please wait", text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        def _fetch():
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: loading_lbl.configure(text="Connection failed.", text_color="red"))
-                return
-            try:
-                cursor = conn.cursor(dictionary=True)
-                sql = """
-                    SELECT tr.transaction_id, tr.quantity, tr.type, t.name as tool_name,
-                           IFNULL(t.tag_id,'Unassigned') as tag_id,
-                           u.full_name,
-                       tr.borrow_date,
-                       tr.return_date,
-                           tr.status
-                    FROM transaction tr
-                    JOIN tool t ON tr.tool_id = t.tool_id
-                    JOIN user u ON tr.user_id = u.user_id
-                """
-                params = []
-                if q:
-                    sql += " WHERE u.full_name LIKE %s OR t.name LIKE %s OR t.tag_id LIKE %s"
-                    params = [f"%{q}%", f"%{q}%", f"%{q}%"]
-                sql += " ORDER BY tr.borrow_date DESC LIMIT 200"
-                cursor.execute(sql, params)
-                rows = cursor.fetchall()
-                rows = _with_quantity(rows)
-                self.after(0, lambda: self._render_logs(rows, table_inner, loading_lbl, headers, min_sizes))
-            except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(text=friendly_message(err), text_color="red", wraplength=600))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
-
-        import threading
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def _render_logs(self, rows, table_inner, loading_lbl, headers, min_sizes):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-        loading_lbl.destroy()
-
-        if not rows:
-            ctk.CTkLabel(table_inner, text="No transaction records found.",
-                         text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-            return
-
-        for i, row in enumerate(rows):
-            r_idx = i + 1
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
-            
-            if hasattr(row["borrow_date"], 'strftime'): row["borrow_date"] = row["borrow_date"].strftime('%b %d, %Y %I:%M %p')
-            if hasattr(row["return_date"], 'strftime'): row["return_date"] = row["return_date"].strftime('%b %d, %Y %I:%M %p')
-            elif not row["return_date"]: row["return_date"] = "—"
-            
-            vals = [
-                str(row["transaction_id"]), row["type"], row["tool_name"],
-                row["tag_id"], row["full_name"],
-                row["borrow_date"], row["return_date"], row["status"],
-            ]
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-                txt_color = "#1A1A1A"
-                font_w = "normal"
-                if col == 7:
-                    txt_color = "#D8000C" if val == "Active" else "#2ECC71"
-                    font_w = "bold"
-                elif col == 3 and val == "Unassigned":
-                    txt_color = "#D8000C"
-                    font_w = "bold"
-                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
-                lbl.configure(wraplength=min_sizes[col] - 10)
-                lbl.pack(fill="both", expand=True, padx=4, pady=12)
-                cell.bind("<Button-1>", lambda e, r=row: self.view_deployment_details(r))
-                lbl.bind("<Button-1>", lambda e, r=row: self.view_deployment_details(r))
+    def _fetch_logs_page(self, page, size):
+        q = self._log_query
+        where, params = "WHERE 1=1", []
+        if q:
+            where += " AND (u.full_name LIKE %s OR t.name LIKE %s OR t.tag_id LIKE %s)"
+            params = [like_pattern(q)] * 3
+        conn = get_connection()
+        if not conn:
+            raise ConnectionError("The database is not reachable.")
+        try:
+            cur = conn.cursor(dictionary=True)
+            rows, info = fetch_page(
+                cur, """SELECT tr.transaction_id, tr.quantity, tr.type, t.name as tool_name, IFNULL(t.tag_id,'Unassigned') as tag_id,
+                               u.full_name, tr.borrow_date, tr.return_date, tr.status""",
+                f"FROM transaction tr JOIN tool t ON tr.tool_id = t.tool_id JOIN user u ON tr.user_id = u.user_id {where}", params,
+                "ORDER BY tr.borrow_date DESC, tr.transaction_id DESC", page, size)
+            return self._format_tx_dates(_with_quantity(rows)), info
+        finally:
+            if conn.is_connected():
+                conn.close()
 
     # ------------------------------------------
     # TAB 2: Audit Records
@@ -326,119 +283,56 @@ class TrackingView(ctk.CTkFrame):
             fill="both", expand=True, padx=20, pady=(5, 20))
         return frame
 
+    AUDIT_COLUMNS = [("TRN", 1, 50), ("Assignee", 2, 120), ("Tool", 3, 150), ("Tag ID", 2, 100), ("Date Issued", 3, 150), ("Date Retrieved", 3, 150),
+                     ("Cond@Issuance", 2, 90), ("Cond@Retrieval", 2, 90), ("Status", 1, 80)]
+
     def load_audit(self):
-        for w in self._audit_scroll.winfo_children():
-            w.destroy()
+        self._audit_status = self.audit_filter.get() if hasattr(self, "audit_filter") else "All"      # read on the main thread
+        self._audit_query = self.audit_search.get().strip() if hasattr(self, "audit_search") else ""
+        if getattr(self, "_audit_table", None) is None or not self._audit_table.winfo_exists():
+            for w in self._audit_scroll.winfo_children():
+                w.destroy()
+            self._audit_table = PagedTable(
+                self._audit_scroll, self.AUDIT_COLUMNS, fetch=self._fetch_audit_page,
+                cells=lambda r: [str(r["transaction_id"]), r["full_name"], r["tool_name"], r["tag_id"], r["borrow_date"], r["return_date"],
+                                 r["cond_borrow"], r["cond_return"], r["status"]],
+                row_bg=lambda r, i: "#FFF8F0" if r["status"] == "Active" else ("#F9FAFB" if i % 2 == 0 else "white"),
+                cell_style=_status_style(8, 3), on_loaded=self._audit_loaded, empty_text="No records match the audit criteria.",
+                font_size=11, cell_pady=12, uniform="audit_cols")
+            self._audit_table.pack(fill="x", expand=True)
+        self._audit_table.reload(0)
 
-        table_inner = ctk.CTkFrame(self._audit_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
+    def _fetch_audit_page(self, page, size):
+        where, params = "WHERE 1=1", []
+        if self._audit_status != "All":
+            where += " AND tr.status = %s"
+            params.append("Returned" if self._audit_status == "Retrieved" else self._audit_status)
+        if self._audit_query:
+            where += " AND (u.full_name LIKE %s OR t.name LIKE %s)"
+            params += [like_pattern(self._audit_query)] * 2
+        frm = f"FROM transaction tr JOIN tool t ON tr.tool_id = t.tool_id JOIN user u ON tr.user_id = u.user_id {where}"
+        conn = get_connection()
+        if not conn:
+            raise ConnectionError("The database is not reachable.")
+        try:
+            cur = conn.cursor(dictionary=True)
+            rows, info = fetch_page(
+                cur, """SELECT tr.transaction_id, tr.quantity, u.full_name, t.name as tool_name, IFNULL(t.tag_id,'Unassigned') as tag_id,
+                               tr.borrow_date, tr.return_date, IFNULL(tr.condition_at_borrow,'N/A') as cond_borrow,
+                               IFNULL(tr.condition_at_return,'N/A') as cond_return, tr.status""",
+                frm, params, "ORDER BY tr.borrow_date DESC, tr.transaction_id DESC", page, size)
+            cur.execute(f"SELECT SUM(tr.status = 'Active') AS active, SUM(tr.status = 'Returned') AS returned {frm}", tuple(params))
+            c = cur.fetchone() or {}
+            self._audit_counts = (info.total, int(c.get("active") or 0), int(c.get("returned") or 0))     # whole result set, not just this page
+            return self._format_tx_dates(_with_quantity(rows)), info
+        finally:
+            if conn.is_connected():
+                conn.close()
 
-        headers = ["TRN", "Assignee", "Tool", "Tag ID", "Date Issued", "Date Retrieved", "Cond@Issuance", "Cond@Retrieval", "Status"]
-        weights = [1, 2, 3, 2, 3, 3, 2, 2, 1]
-        min_sizes = [50, 120, 150, 100, 150, 150, 90, 90, 80]
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(col, weight=w, minsize=min_w, uniform="audit_cols")
-
-        # Header Row
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        status_filter = self.audit_filter.get() if hasattr(self, "audit_filter") else "All"
-        q = self.audit_search.get().strip() if hasattr(self, "audit_search") else ""
-
-        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading audit records... Please wait", text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        def _fetch():
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: loading_lbl.configure(text="Connection failed.", text_color="red"))
-                return
-            try:
-                cursor = conn.cursor(dictionary=True)
-                sql = """
-                    SELECT tr.transaction_id, tr.quantity, u.full_name, t.name as tool_name,
-                           IFNULL(t.tag_id,'Unassigned') as tag_id,
-                       tr.borrow_date,
-                       tr.return_date,
-                           IFNULL(tr.condition_at_borrow,'N/A') as cond_borrow,
-                           IFNULL(tr.condition_at_return,'N/A')  as cond_return,
-                           tr.status
-                    FROM transaction tr
-                    JOIN tool t ON tr.tool_id = t.tool_id
-                    JOIN user u ON tr.user_id = u.user_id
-                    WHERE 1=1
-                """
-                params = []
-                if status_filter != "All":
-                    actual_status = "Returned" if status_filter == "Retrieved" else status_filter
-                    sql += " AND tr.status = %s"
-                    params.append(actual_status)
-                if q:
-                    sql += " AND (u.full_name LIKE %s OR t.name LIKE %s)"
-                    params += [f"%{q}%", f"%{q}%"]
-                sql += " ORDER BY tr.borrow_date DESC"
-                cursor.execute(sql, params)
-                rows = cursor.fetchall()
-                rows = _with_quantity(rows)
-                self.after(0, lambda: self._render_audit(rows, table_inner, loading_lbl, headers, min_sizes))
-            except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(text=friendly_message(err), text_color="red", wraplength=600))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
-
-        import threading
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def _render_audit(self, rows, table_inner, loading_lbl, headers, min_sizes):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-        loading_lbl.destroy()
-
-        total = len(rows)
-        active = sum(1 for r in rows if r["status"] == "Active")
-        returned = sum(1 for r in rows if r["status"] == "Returned")
+    def _audit_loaded(self, rows, info):
+        total, active, returned = getattr(self, "_audit_counts", (info.total, 0, 0))
         if hasattr(self, "audit_summary") and self.audit_summary.winfo_exists():
             self.audit_summary.configure(text=f"  Total: {total}   |   Active: {active}   |   Retrieved: {returned}")
-
-        if not rows:
-            ctk.CTkLabel(table_inner, text="No records match the audit criteria.",
-                         text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-            return
-
-        for i, row in enumerate(rows):
-            r_idx = i + 1
-            bg = "#FFF8F0" if row["status"] == "Active" else ("#F9FAFB" if i % 2 == 0 else "white")
-            
-            if hasattr(row["borrow_date"], 'strftime'): row["borrow_date"] = row["borrow_date"].strftime('%b %d, %Y %I:%M %p')
-            if hasattr(row["return_date"], 'strftime'): row["return_date"] = row["return_date"].strftime('%b %d, %Y %I:%M %p')
-            elif not row["return_date"]: row["return_date"] = "—"
-            
-            vals = [
-                str(row["transaction_id"]), row["full_name"], row["tool_name"],
-                row["tag_id"], row["borrow_date"], row["return_date"],
-                row["cond_borrow"], row["cond_return"], row["status"],
-            ]
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-                txt_color = "#1A1A1A"
-                font_w = "normal"
-                if col == 8:
-                    txt_color = "#D8000C" if val == "Active" else "#2ECC71"
-                    font_w = "bold"
-                elif col == 3 and val == "Unassigned":
-                    txt_color = "#D8000C"
-                    font_w = "bold"
-                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center")
-                lbl.configure(wraplength=min_sizes[col] - 10)
-                lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
     # ------------------------------------------
     # TAB 3: Activity Log
@@ -495,161 +389,56 @@ class TrackingView(ctk.CTkFrame):
             frame, fg_color="transparent")
         self._act_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 5))
         
-        self.pagination_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        self.pagination_frame.pack(fill="x", padx=20, pady=(0, 20))
-
-        self.act_prev_btn = ctk.CTkButton(self.pagination_frame, text="◀ Previous", width=100, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=self.act_prev_page)
-        self.act_prev_btn.pack(side="left", padx=5)
-
-        self.act_page_label = ctk.CTkLabel(self.pagination_frame, text="Page 1", font=("Inter", 11, "bold"))
-        self.act_page_label.pack(side="left", expand=True)
-
-        self.act_next_btn = ctk.CTkButton(self.pagination_frame, text="Next ▶", width=100, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 11, "bold"), command=self.act_next_page)
-        self.act_next_btn.pack(side="right", padx=5)
-
-        self.current_act_page = 1
-        self.act_page_size = 50
-
         return frame
 
+    ACT_COLORS = {"Login": "#2ECC71", "Logout": "#E74C3C", "Added": "#3498DB", "Edited": "#F39C12", "Archived": "#95A5A6", "Searched": "#9B59B6",
+                  "Viewed": "#1A1A1A", "Issued": "#27AE60", "Retrieved": "#16A085", "Submitted": "#2980B9", "Approved": "#27AE60",
+                  "Flagged": "#D8000C", "Resolved": "#2ECC71"}
+
     def do_act_search(self):
-        self.current_act_page = 1
         self.load_activity()
 
-    def act_prev_page(self):
-        if self.current_act_page > 1:
-            self.current_act_page -= 1
-            self.load_activity()
-
-    def act_next_page(self):
-        if getattr(self, "has_more_act_pages", False):
-            self.current_act_page += 1
-            self.load_activity()
-
     def load_activity(self):
-        for w in self._act_scroll.winfo_children():
-            w.destroy()
+        self._act_module = self.act_module_filter.get() if hasattr(self, "act_module_filter") else "All"      # read on the main thread
+        self._act_query = self.act_search.get().strip() if hasattr(self, "act_search") else ""
+        if getattr(self, "_act_table", None) is None or not self._act_table.winfo_exists():
+            for w in self._act_scroll.winfo_children():
+                w.destroy()
+            self._act_table = PagedTable(
+                self._act_scroll, [("Log ID", 1, 60), ("Timestamp", 3, 150), ("Employee", 3, 150), ("Action Type", 2, 100), ("Module", 2, 120),
+                                   ("Details", 5, 250)],
+                fetch=self._fetch_activity_page,
+                cells=lambda r: [str(r["log_id"]), r["ts"], r["employee"], r["action_type"], r["module"], r["details"]],
+                cell_style=lambda r, c, v: (self.ACT_COLORS.get(v, "#555555"), True) if c == 3 else ("#1A1A1A", False),
+                on_loaded=lambda rows, info: self.act_summary.configure(text=f"  {info.label()} entries") if self.act_summary.winfo_exists() else None,
+                empty_text="No activity records found.", page_size=50, font_size=11, cell_pady=12, uniform="act_cols")
+            self._act_table.pack(fill="x", expand=True)
+        self._act_table.reload(0)
 
-        table_inner = ctk.CTkFrame(self._act_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
-
-        headers = ["Log ID", "Timestamp", "Employee", "Action Type", "Module", "Details"]
-        weights = [1, 3, 3, 2, 2, 5]
-        min_sizes = [60, 150, 150, 100, 120, 250]
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(col, weight=w, minsize=min_w, uniform="act_cols")
-
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        module_filter = self.act_module_filter.get() if hasattr(self, "act_module_filter") else "All"
-        q = self.act_search.get().strip() if hasattr(self, "act_search") else ""
-
-        loading_lbl = ctk.CTkLabel(table_inner, text="↻ Loading activity log... Please wait", text_color="gray", font=("Inter", 12, "italic"))
-        loading_lbl.grid(row=1, column=0, columnspan=len(headers), pady=20)
-
-        page = self.current_act_page
-        page_size = self.act_page_size
-
-        def _fetch():
-            conn = get_connection()
-            if not conn:
-                self.after(0, lambda: loading_lbl.configure(text="Connection failed.", text_color="red"))
-                return
-            try:
-                cursor = conn.cursor(dictionary=True)
-                count_sql = """
-                    SELECT COUNT(*) as cnt
-                    FROM system_logs sl
-                    LEFT JOIN user u ON sl.user_id = u.user_id
-                    WHERE 1=1
-                """
-                count_params = []
-                if module_filter != "All":
-                    count_sql += " AND sl.module = %s"
-                    count_params.append(module_filter)
-                if q:
-                    count_sql += " AND (u.full_name LIKE %s OR sl.details LIKE %s OR sl.action_type LIKE %s)"
-                    count_params += [f"%{q}%", f"%{q}%", f"%{q}%"]
-                cursor.execute(count_sql, tuple(count_params))
-                total_records = cursor.fetchone()["cnt"]
-
-                sql = """
-                    SELECT sl.log_id,
-                       sl.timestamp as ts,
-                           IFNULL(u.full_name, CONCAT('UID:', sl.user_id)) as employee,
-                           sl.action_type, sl.module, IFNULL(sl.details,'—') as details
-                    FROM system_logs sl
-                    LEFT JOIN user u ON sl.user_id = u.user_id
-                    WHERE 1=1
-                """
-                params = list(count_params)
-                offset = (page - 1) * page_size
-                sql += f" ORDER BY sl.log_id DESC LIMIT {page_size} OFFSET {offset}"
-                cursor.execute(sql, tuple(params))
-                rows = cursor.fetchall()
-                self.after(0, lambda: self._render_activity(rows, table_inner, loading_lbl, headers, min_sizes, total_records, page, page_size, offset))
-            except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(text=friendly_message(err), text_color="red", wraplength=600))
-            finally:
-                if conn.is_connected():
-                    cursor.close()
-                    conn.close()
-
-        import threading
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def _render_activity(self, rows, table_inner, loading_lbl, headers, min_sizes, total_records, page, page_size, offset):
-        if not self.winfo_exists() or not table_inner.winfo_exists():
-            return
-        loading_lbl.destroy()
-
-        total_pages = max(1, (total_records + page_size - 1) // page_size)
-        self.has_more_act_pages = page < total_pages
-        if hasattr(self, "act_page_label") and self.act_page_label.winfo_exists():
-            self.act_page_label.configure(text=f"Page {page} of {total_pages}")
-            self.act_prev_btn.configure(state="normal" if page > 1 else "disabled")
-            self.act_next_btn.configure(state="normal" if self.has_more_act_pages else "disabled")
-
-        start_idx = offset + 1 if total_records > 0 else 0
-        end_idx = min(offset + page_size, total_records)
-        if hasattr(self, "act_summary") and self.act_summary.winfo_exists():
-            self.act_summary.configure(text=f"  Showing {start_idx}-{end_idx} of {total_records} entries")
-
-        if not rows:
-            ctk.CTkLabel(table_inner, text="No activity records found.",
-                         text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-            return
-
-        action_colors = {
-            "Login": "#2ECC71", "Logout": "#E74C3C", "Added": "#3498DB",
-            "Edited": "#F39C12", "Archived": "#95A5A6", "Searched": "#9B59B6",
-            "Viewed": "#1A1A1A", "Issued": "#27AE60", "Retrieved": "#16A085",
-            "Submitted": "#2980B9", "Approved": "#27AE60", "Flagged": "#D8000C",
-            "Resolved": "#2ECC71",
-        }
-
-        for i, row in enumerate(rows):
-            r_idx = i + 1
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
-            
-            if hasattr(row["ts"], 'strftime'): row["ts"] = row["ts"].strftime('%b %d, %Y %I:%M %p')
-            vals = [str(row["log_id"]), str(row["ts"]), row["employee"], row["action_type"], row["module"], row["details"]]
-            for col, val in enumerate(vals):
-                cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                cell.grid(row=r_idx, column=col, sticky="nsew")
-                txt_color = "#1A1A1A"
-                font_w = "normal"
-                if col == 3:
-                    txt_color = action_colors.get(val, "#555555")
-                    font_w = "bold"
-                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center")
-                lbl.configure(wraplength=min_sizes[col] - 10)
-                lbl.pack(fill="both", expand=True, padx=4, pady=12)
+    def _fetch_activity_page(self, page, size):
+        where, params = "WHERE 1=1", []
+        if self._act_module != "All":
+            where += " AND sl.module = %s"
+            params.append(self._act_module)
+        if self._act_query:
+            where += " AND (u.full_name LIKE %s OR sl.details LIKE %s OR sl.action_type LIKE %s)"
+            params += [like_pattern(self._act_query)] * 3
+        conn = get_connection()
+        if not conn:
+            raise ConnectionError("The database is not reachable.")
+        try:
+            cur = conn.cursor(dictionary=True)
+            rows, info = fetch_page(
+                cur, """SELECT sl.log_id, sl.timestamp as ts, IFNULL(u.full_name, CONCAT('UID:', sl.user_id)) as employee,
+                               sl.action_type, sl.module, IFNULL(sl.details,'—') as details""",
+                f"FROM system_logs sl LEFT JOIN user u ON sl.user_id = u.user_id {where}", params, "ORDER BY sl.log_id DESC", page, size)
+        finally:
+            if conn.is_connected():
+                conn.close()
+        for r in rows:
+            if hasattr(r["ts"], 'strftime'):
+                r["ts"] = r["ts"].strftime('%b %d, %Y %I:%M %p')
+        return rows, info
 
     def build_staff_view(self):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
@@ -689,23 +478,6 @@ class TrackingView(ctk.CTkFrame):
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
 
-        table_inner = ctk.CTkFrame(scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
-
-        headers = ["TRN", "Tool Name", "Tag ID", "Date Issued", "Date Retrieved", "Cond@Retrieval", "Status"]
-        weights = [1, 3, 2, 3, 3, 2, 1]
-        min_sizes = [50, 160, 100, 150, 150, 100, 80]
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(col, weight=w, minsize=min_w, uniform="staff_cols")
-
-        # Header Row
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(table_inner, fg_color="#1E4528", corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
         user_id = self.user_info.get("user_id")
         if not user_id:
             emp_id = self.user_info.get("employee_id")
@@ -714,8 +486,7 @@ class TrackingView(ctk.CTkFrame):
                 if conn2:
                     try:
                         c2 = conn2.cursor(dictionary=True)
-                        c2.execute(
-                            "SELECT user_id FROM user WHERE employee_id = %s", (emp_id,))
+                        c2.execute("SELECT user_id FROM user WHERE employee_id = %s", (emp_id,))
                         row2 = c2.fetchone()
                         if row2:
                             user_id = row2["user_id"]
@@ -723,83 +494,34 @@ class TrackingView(ctk.CTkFrame):
                         pass
                     finally:
                         if conn2.is_connected():
-                            c2.close()
                             conn2.close()
 
         if not user_id:
-            ctk.CTkLabel(table_inner, text="Could not resolve user session. Please log out and log back in.",
-                         text_color="red").grid(row=1, column=0, columnspan=len(headers), pady=20)
-            ctk.CTkLabel(scroll, text="Could not resolve user session. Please log out and log back in.",
-                         text_color="red").pack(pady=20)
+            ctk.CTkLabel(scroll, text="Could not resolve user session. Please log out and log back in.", text_color="red").pack(pady=20)
             return
 
-        conn = get_connection()
-        if not conn:
-            return
-        try:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("""
-                SELECT tr.transaction_id, tr.quantity, t.name as tool_name,
-                       IFNULL(t.tag_id,'Unassigned') as tag_id,
-                   tr.borrow_date,
-                   tr.return_date,
-                       IFNULL(tr.condition_at_return,'—') as cond_return,
-                       tr.status
-                FROM transaction tr
-                JOIN tool t ON tr.tool_id = t.tool_id
-                WHERE tr.user_id = %s
-                ORDER BY tr.borrow_date DESC
-            """, (user_id,))
-            rows = cursor.fetchall()
-            rows = _with_quantity(rows)
+        def fetch(page, size):
+            conn = get_connection()
+            if not conn:
+                raise ConnectionError("The database is not reachable.")
+            try:
+                cur = conn.cursor(dictionary=True)
+                rows, info = fetch_page(
+                    cur, """SELECT tr.transaction_id, tr.quantity, t.name as tool_name, IFNULL(t.tag_id,'Unassigned') as tag_id,
+                                   tr.borrow_date, tr.return_date, IFNULL(tr.condition_at_return,'—') as cond_return, tr.status""",
+                    "FROM transaction tr JOIN tool t ON tr.tool_id = t.tool_id WHERE tr.user_id = %s", [user_id],
+                    "ORDER BY tr.borrow_date DESC, tr.transaction_id DESC", page, size)
+                return self._format_tx_dates(_with_quantity(rows)), info
+            finally:
+                if conn.is_connected():
+                    conn.close()
 
-            if not rows:
-                ctk.CTkLabel(
-                    table_inner, text="You have no deployment history.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
-                return
-
-            for i, row in enumerate(rows):
-                r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
-
-                if hasattr(row["borrow_date"], 'strftime'): row["borrow_date"] = row["borrow_date"].strftime('%b %d, %Y %I:%M %p')
-                if hasattr(row["return_date"], 'strftime'): row["return_date"] = row["return_date"].strftime('%b %d, %Y %I:%M %p')
-                elif not row["return_date"]: row["return_date"] = "—"
-
-                vals = [
-                    str(row["transaction_id"]), row["tool_name"], row["tag_id"],
-                    row["borrow_date"], row["return_date"],
-                    row["cond_return"], row["status"]
-                ]
-                
-                for col, val in enumerate(vals):
-                    cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0, cursor="hand2")
-                    cell.grid(row=r_idx, column=col, sticky="nsew")
-
-                    txt_color = "#1A1A1A"
-                    font_w = "normal"
-                    if col == 6:
-                        txt_color = "#D8000C" if val == "Active" else "#2ECC71"
-                        font_w = "bold"
-                    elif col == 2 and val == "Unassigned":
-                        txt_color = "#D8000C"
-                        font_w = "bold"
-
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_color, justify="center", anchor="center", cursor="hand2")
-                    
-                    # High-performance static wrapping
-                    lbl.configure(wraplength=min_sizes[col] - 10)
-
-                    lbl.pack(fill="both", expand=True, padx=4, pady=12)
-
-                    # Binds whole cell & text to open the modal
-                    cell.bind("<Button-1>", lambda e, r=row: self.view_deployment_details(r))
-                    lbl.bind("<Button-1>", lambda e, r=row: self.view_deployment_details(r))
-
-        except Exception as e:
-            ctk.CTkLabel(
-                scroll, text=friendly_message(e), text_color="red").pack(pady=10)
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+        self._my_table = PagedTable(
+            scroll, [("TRN", 1, 50), ("Tool Name", 3, 160), ("Tag ID", 2, 100), ("Date Issued", 3, 150), ("Date Retrieved", 3, 150),
+                     ("Cond@Retrieval", 2, 100), ("Status", 1, 80)],
+            fetch=fetch,
+            cells=lambda r: [str(r["transaction_id"]), r["tool_name"], r["tag_id"], r["borrow_date"], r["return_date"], r["cond_return"], r["status"]],
+            cell_style=_status_style(6, 2), on_row_click=self.view_deployment_details, empty_text="You have no deployment history.",
+            font_size=11, cell_pady=12, uniform="staff_cols")
+        self._my_table.pack(fill="x", expand=True)
+        self._my_table.reload(0)
