@@ -119,6 +119,19 @@ Decisions marked **(you)** were set by your defaults; the rest are mine, applyin
 | 83 | Batch-print checkboxes | the box is greyed out for a tool with no tag and nothing explained why | unchanged rule (**only tagged items can be ticked**), now explained in the hint above the table: tick tagged items, then Batch Print Tags | mention in the Inventory section |
 | 84 | Missing / blank supplier and location | the panel shows a blank as 'N/A'; saving an untouched panel stored the text 'N/A' | 'N/A' is never stored as data | none |
 
+### Manuscript spots to update for the Tagging removal (approved)
+The Scope already reads "Products and Inventory Module (with integrated Tagging)", so the code now matches the Scope; these places still describe a separate module and must change:
+
+| Where | What to change |
+|---|---|
+| Tagging flowcharts, **Figs. 13-16** | remove them, or redraw them as steps inside the Inventory item panel (assign / generate tag, unlink [Admin only], print tag, batch print) |
+| **Fig. 97** | it says "QR/RFID" and shows a Tagging screen: replace it with the Inventory item panel's QR tag section and say **QR only** (no RFID) |
+| **Fig. 118** "Tagging Module (Staff)" | remove the Tagging Module (Staff) figure; Staff tagging is now the Inventory item panel: assign a tag only to an untagged tool, always print, never change an assigned tag |
+| **User Manual: the "Tagging" page** | delete the page; move its steps under Inventory (item panel > QR Tag Management; Batch Print Tags by ticking tagged rows; the *Needs Tag* and *Already Tagged* filters) |
+| **Admin Quick Start** | replace "go to the Tagging module" with "open Inventory, click the item, use QR Tag Management" |
+| Module count / sidebar figures | the sidebar no longer has a Tagging entry (Admin: Dashboard, Project Management, Inventory, Issuance & Retrieval, Tracking, Reports, Maintenance, Role Management, Help; Staff: the same minus Reports, Maintenance, Role Management); also adjust any "10 modules" statement and DFD / use-case diagrams that show Tagging as its own module |
+| DOC_SYNC row 15 above | "QR/RFID" is resolved by this: QR only |
+
 ## A9. Other fixes from your hand-test
 | # | Topic | Old behaviour | New behaviour |
 |---|---|---|---|
