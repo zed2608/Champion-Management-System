@@ -4,6 +4,7 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageDraw, ImageFont
 from database import get_connection, generate_id_badge
+from db import db, user_message
 import re
 import bcrypt
 import qrcode
@@ -14,7 +15,7 @@ class ProfileView(ctk.CTkFrame):
 
         self.user_info = user_info
         self.dashboard = dashboard_app
-        self.db_conn = get_connection()
+        # [CONCURRENCY] no pooled connection is held for the lifetime of this view (it used to leak one per visit)
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=2)
@@ -277,31 +278,32 @@ class ProfileView(ctk.CTkFrame):
             return
 
         if messagebox.askyesno("Confirm Update", "Are you sure you want to save these changes?"):
+            problem = None
             try:
-                cursor = self.db_conn.cursor()
-                
-                cursor.execute("SELECT user_id FROM user WHERE full_name = %s AND employee_id != %s", (new_name, self.user_info['employee_id']))
-                if cursor.fetchone():
-                    messagebox.showerror("Duplicate", "A user with this full name already exists.")
-                    return
-                    
-                cursor.execute("SELECT user_id FROM user WHERE email = %s AND employee_id != %s", (new_email, self.user_info['employee_id']))
-                if cursor.fetchone():
-                    messagebox.showerror("Duplicate", "A user with this email already exists.")
-                    return
-
-                cursor.execute("UPDATE user SET full_name = %s, email = %s WHERE employee_id = %s",
-                               (new_name, new_email, self.user_info['employee_id']))
-                self.db_conn.commit()
-
-                self.user_info['full_name'] = new_name
-                self.user_info['email'] = new_email
-                self.dashboard.refresh_topbar()
-                self.build_left_card()
-                messagebox.showinfo("Success", "Profile updated securely.")
+                with db.transaction() as cursor:
+                    emp = self.user_info['employee_id']
+                    cursor.execute("SELECT user_id FROM user WHERE full_name = %s AND employee_id != %s", (new_name, emp))
+                    if cursor.fetchone():
+                        problem = "A user with this full name already exists."
+                    else:
+                        cursor.execute("SELECT user_id FROM user WHERE email = %s AND employee_id != %s", (new_email, emp))
+                        if cursor.fetchone():
+                            problem = "A user with this email already exists."
+                        else:
+                            cursor.execute("UPDATE user SET full_name = %s, email = %s WHERE employee_id = %s",
+                                           (new_name, new_email, emp))
             except Exception as e:
-                messagebox.showerror(
-                    "Database Error", f"Failed to save profile: {e}")
+                messagebox.showerror("Could not save", user_message(e))
+                return
+            # dialogs only AFTER the connection has been returned to the pool
+            if problem:
+                messagebox.showerror("Duplicate", problem)
+                return
+            self.user_info['full_name'] = new_name
+            self.user_info['email'] = new_email
+            self.dashboard.refresh_topbar()
+            self.build_left_card()
+            messagebox.showinfo("Success", "Profile updated securely.")
 
     def open_password_modal(self):
         dialog = ctk.CTkToplevel(self)
@@ -374,29 +376,27 @@ class ProfileView(ctk.CTkFrame):
                 return
 
             if messagebox.askyesno("Confirm", "Change password?", parent=dialog):
+                outcome = None
                 try:
-                    cursor = self.db_conn.cursor(dictionary=True)
-                    cursor.execute(
-                        "SELECT password_hash FROM user WHERE employee_id = %s", (self.user_info['employee_id'],))
-                    result = cursor.fetchone()
-
-                    if result and bcrypt.checkpw(curr_pwd.encode('utf-8'), result['password_hash'].encode('utf-8')):
-                        new_hashed = bcrypt.hashpw(
-                            new_pwd.encode('utf-8'), bcrypt.gensalt())
-                        cursor.execute("UPDATE user SET password_hash = %s WHERE employee_id = %s",
-                                       (new_hashed.decode('utf-8'), self.user_info['employee_id']))
-                        self.db_conn.commit()
-                        messagebox.showinfo(
-                            "Success", "Password updated successfully!", parent=dialog)
-                        dialog.destroy()
-                    else:
-                        messagebox.showerror(
-                            "Error", "Incorrect current password.", parent=dialog)
+                    with db.transaction() as cursor:
+                        cursor.execute(
+                            "SELECT password_hash FROM user WHERE employee_id = %s", (self.user_info['employee_id'],))
+                        result = cursor.fetchone()
+                        if result and result['password_hash'] and bcrypt.checkpw(curr_pwd.encode('utf-8'), result['password_hash'].encode('utf-8')):
+                            new_hashed = bcrypt.hashpw(new_pwd.encode('utf-8'), bcrypt.gensalt())
+                            cursor.execute("UPDATE user SET password_hash = %s WHERE employee_id = %s",
+                                           (new_hashed.decode('utf-8'), self.user_info['employee_id']))
+                            outcome = "ok"
+                        else:
+                            outcome = "wrong"
                 except Exception as e:
-                    messagebox.showerror(
-                        "Database Error", f"Failed to update password: {e}", parent=dialog)
-                finally:
-                    cursor.close()
+                    messagebox.showerror("Could not update", user_message(e), parent=dialog)
+                    return
+                if outcome == "ok":
+                    messagebox.showinfo("Success", "Password updated successfully!", parent=dialog)
+                    dialog.destroy()
+                else:
+                    messagebox.showerror("Error", "Incorrect current password.", parent=dialog)
 
         ctk.CTkButton(btn_frame, text="Change Password", fg_color="#1E4528", hover_color="#14301C",
                       command=process_pwd_change).pack(side="left", expand=True, fill="x", padx=(0, 10))

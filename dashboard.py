@@ -63,6 +63,8 @@ class DashboardApp(ctk.CTkToplevel):
         self.dashboard_refresh_job = self.after(
             15000, self._auto_refresh_dashboard)
 
+        self._init_offline_banner()
+
         # Reset inactivity timer on any user interaction
         self.bind_all("<Motion>", self._reset_inactivity_timer)
         self.bind_all("<Key>", self._reset_inactivity_timer)
@@ -249,6 +251,56 @@ class DashboardApp(ctk.CTkToplevel):
             row_frame.grid_columnconfigure(
                 col, weight=weight, minsize=min_sizes[col])
         return row_frame
+
+    # ---- [UNHAPPY-PATH] "Database offline - retrying" banner ---------------------------------------------------------
+    def _init_offline_banner(self):
+        """Non-blocking overlay (never shifts the layout, never a modal). Shown when the pool cannot reach MySQL and
+        hidden again when a connection succeeds. While offline, a background ping retries every 5 s."""
+        from db import db
+        self._db = db
+        self._offline_banner = ctk.CTkLabel(
+            self, text="⚠  Database offline – retrying…  Nothing is being saved.", font=("Inter", 12, "bold"),
+            fg_color="#D8000C", text_color="white", corner_radius=8, height=34)
+        self._offline_retry_job = None
+
+        def on_status(online):               # called from whichever thread noticed: hop to the Tk thread
+            try:
+                self.after(0, lambda: self._apply_db_status(online))
+            except Exception:
+                pass                          # window is closing
+        self._db_status_cb = on_status
+        db.add_status_listener(on_status)
+        if db.online is False:
+            self._apply_db_status(False)
+
+    def _apply_db_status(self, online):
+        if not self.winfo_exists():
+            return
+        if online:
+            self._offline_banner.place_forget()
+            if self._offline_retry_job:
+                self.after_cancel(self._offline_retry_job)
+                self._offline_retry_job = None
+        else:
+            self._offline_banner.place(relx=0.5, y=64, anchor="n")
+            self._offline_banner.lift()
+            if not self._offline_retry_job:
+                self._offline_retry_job = self.after(5000, self._retry_db)
+
+    def _retry_db(self):
+        self._offline_retry_job = None
+        if not self.winfo_exists() or self._db.online is not False:
+            return
+        import threading
+        threading.Thread(target=self._db.ping, daemon=True).start()   # a success flips the status listener
+        self._offline_retry_job = self.after(5000, self._retry_db)
+
+    def destroy(self):
+        try:
+            self._db.remove_status_listener(self._db_status_cb)
+        except Exception:
+            pass
+        super().destroy()
 
     def confirm_logout(self):
         if hasattr(self, "_clock_job"):

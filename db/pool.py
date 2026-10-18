@@ -102,6 +102,12 @@ class Database:
         a Tk UI must hand it to the main thread with ``widget.after(0, ...)``."""
         self._listeners.append(callback)
 
+    def remove_status_listener(self, callback):
+        try:
+            self._listeners.remove(callback)
+        except ValueError:
+            pass
+
     def _set_online(self, online: bool, exc: BaseException | None = None):
         self.last_error = None if online else exc
         if online != self._online:
