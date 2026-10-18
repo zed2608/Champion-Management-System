@@ -7,6 +7,7 @@ import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 import os
 import tempfile
+from services.errors import friendly_message
 
 
 class TaggingView(ctk.CTkFrame):
@@ -197,7 +198,7 @@ class TaggingView(ctk.CTkFrame):
 
         except Exception as e:
             messagebox.showerror(
-                "Database Error", f"Failed to load tags: {e}", parent=self.winfo_toplevel())
+                "Database Error", friendly_message(e), parent=self.winfo_toplevel())
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -234,7 +235,7 @@ class TaggingView(ctk.CTkFrame):
             """, tuple(self.selected_tool_ids))
             tools = cursor.fetchall()
         except Exception as e:
-            messagebox.showerror("Database Error", str(e),
+            messagebox.showerror("Database Error", friendly_message(e),
                                  parent=self.winfo_toplevel())
             return
         finally:
@@ -389,7 +390,7 @@ class TaggingView(ctk.CTkFrame):
                 messagebox.showwarning(
                     "Unknown Tag", f"The tag '{tag_id}' was scanned, but it is not linked to any active tool in the database.", parent=self.winfo_toplevel())
         except Exception as e:
-            messagebox.showerror("Database Error", str(e),
+            messagebox.showerror("Database Error", friendly_message(e),
                                  parent=self.winfo_toplevel())
         finally:
             if conn.is_connected():
@@ -477,7 +478,7 @@ class TaggingView(ctk.CTkFrame):
                     "Success", "Tag successfully linked to tool.", parent=modal)
                 self.load_tagging_data()
             except Exception as e:
-                messagebox.showerror("Database Error", str(e), parent=modal)
+                messagebox.showerror("Database Error", friendly_message(e), parent=modal)
             finally:
                 if conn.is_connected():
                     cursor.close()

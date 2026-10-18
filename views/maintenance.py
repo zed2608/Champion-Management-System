@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import subprocess
 import threading
+from services.errors import friendly_message
 
 
 class MaintenanceView(ctk.CTkFrame):
@@ -249,7 +250,7 @@ class MaintenanceView(ctk.CTkFrame):
             self.flag_notes.delete(0, "end")
             self.load_issues()
         except Exception as e:
-            messagebox.showerror("Database Error", str(e),
+            messagebox.showerror("Database Error", friendly_message(e),
                                  parent=self.winfo_toplevel())
         finally:
             if conn.is_connected():
@@ -335,7 +336,7 @@ class MaintenanceView(ctk.CTkFrame):
                     rows, table_inner, loading_lbl, headers, min_sizes))
             except Exception as e:
                 self.after(0, lambda err=e: loading_lbl.configure(
-                    text=f"Error: {err}", text_color="red", wraplength=600))
+                    text=friendly_message(err), text_color="red", wraplength=600))
             finally:
                 if conn.is_connected():
                     cursor.close()
@@ -499,7 +500,7 @@ class MaintenanceView(ctk.CTkFrame):
                 modal.destroy()
                 self.load_issues()
             except Exception as e:
-                messagebox.showerror("Error", str(e), parent=modal)
+                messagebox.showerror("Error", friendly_message(e), parent=modal)
             finally:
                 if conn.is_connected():
                     cursor.close()
@@ -584,7 +585,7 @@ class MaintenanceView(ctk.CTkFrame):
                     rows, table_inner, loading_lbl, headers, min_sizes))
             except Exception as e:
                 self.after(0, lambda err=e: loading_lbl.configure(
-                    text=f"Error: {err}", text_color="red", wraplength=600))
+                    text=friendly_message(err), text_color="red", wraplength=600))
             finally:
                 if conn.is_connected():
                     cursor.close()
@@ -650,7 +651,7 @@ class MaintenanceView(ctk.CTkFrame):
                 "Success", "Tool restored to active inventory.")
             self.load_archived_tools()
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", friendly_message(e))
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -722,7 +723,7 @@ class MaintenanceView(ctk.CTkFrame):
                     rows, table_inner, loading_lbl, headers, min_sizes))
             except Exception as e:
                 self.after(0, lambda err=e: loading_lbl.configure(
-                    text=f"Error: {err}", text_color="red", wraplength=600))
+                    text=friendly_message(err), text_color="red", wraplength=600))
             finally:
                 if conn.is_connected():
                     cursor.close()
@@ -791,7 +792,7 @@ class MaintenanceView(ctk.CTkFrame):
             messagebox.showinfo("Success", "Employee access restored.")
             self.load_archived_employees()
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", friendly_message(e))
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -863,7 +864,7 @@ class MaintenanceView(ctk.CTkFrame):
                     rows, table_inner, loading_lbl, headers, min_sizes))
             except Exception as e:
                 self.after(0, lambda err=e: loading_lbl.configure(
-                    text=f"Error: {err}", text_color="red", wraplength=600))
+                    text=friendly_message(err), text_color="red", wraplength=600))
             finally:
                 if conn.is_connected():
                     cursor.close()
@@ -934,7 +935,7 @@ class MaintenanceView(ctk.CTkFrame):
                 "Success", "Project marked as Approved and restored from archive.")
             self.load_archived_projects()
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", friendly_message(e))
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -1534,7 +1535,7 @@ class MaintenanceView(ctk.CTkFrame):
                     rows, table_inner, loading_lbl, headers, min_sizes))
             except Exception as e:
                 self.after(0, lambda err=e: loading_lbl.configure(
-                    text=f"Error: {err}", text_color="red", wraplength=600))
+                    text=friendly_message(err), text_color="red", wraplength=600))
             finally:
                 if conn.is_connected():
                     cursor.close()

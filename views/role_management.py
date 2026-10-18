@@ -9,6 +9,7 @@ import qrcode
 from PIL import Image, ImageDraw, ImageFont
 import re
 import difflib
+from services.errors import friendly_message
 
 
 class RoleManagementView(ctk.CTkFrame):
@@ -278,7 +279,7 @@ class RoleManagementView(ctk.CTkFrame):
                 dashboard._auto_refresh_dashboard()
             
         except Exception as e:
-            messagebox.showerror("Database Error", str(e), parent=self.reg_modal)
+            messagebox.showerror("Database Error", friendly_message(e), parent=self.reg_modal)
         finally:
             if conn.is_connected(): cursor.close(); conn.close()
 
@@ -419,7 +420,7 @@ class RoleManagementView(ctk.CTkFrame):
 
         except Exception as e:
             ctk.CTkLabel(self.user_scroll,
-                         text=f"Error: {e}", text_color="red").pack(pady=10)
+                         text=friendly_message(e), text_color="red").pack(pady=10)
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -445,7 +446,7 @@ class RoleManagementView(ctk.CTkFrame):
                 if hasattr(dashboard, "_auto_refresh_dashboard"):
                     dashboard._auto_refresh_dashboard()
             except Exception as e:
-                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
+                messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
             finally:
                 if conn.is_connected(): cursor.close(); conn.close()
 
@@ -684,7 +685,7 @@ class RoleManagementView(ctk.CTkFrame):
                 if hasattr(dashboard, "_auto_refresh_dashboard"):
                     dashboard._auto_refresh_dashboard()
             except Exception as e:
-                messagebox.showerror("Error", str(e), parent=modal)
+                messagebox.showerror("Error", friendly_message(e), parent=modal)
             finally:
                 if conn.is_connected():
                     cursor.close()

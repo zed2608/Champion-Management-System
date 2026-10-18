@@ -10,6 +10,7 @@ from dashboard import DashboardApp
 from database import log_action
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
+from services.errors import friendly_message
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
@@ -266,7 +267,7 @@ class LoginApp(ctk.CTk):
                     f"Invalid Credentials. {3 - failed_attempts} attempt(s) left.")
                 self.login_button.configure(state="normal", text="Login")
         except Exception as e:
-            self.show_error(f"System Error: {e}")
+            self.show_error(friendly_message(e))
             self.login_button.configure(state="normal", text="Login")
         finally:
             if conn and conn.is_connected():
@@ -319,7 +320,7 @@ class LoginApp(ctk.CTk):
                 self.user_entry.delete(0, 'end')
             self.pass_entry.delete(0, 'end')
         except Exception as e:
-            self.show_error(f"Dashboard Error: {e}")
+            self.show_error(friendly_message(e))
             self.deiconify()
             self.login_button.configure(state="normal", text="Login")
 
@@ -368,7 +369,7 @@ class LoginApp(ctk.CTk):
                         "Not Found", "No account found with that email.", parent=dialog)
             except Exception as e:
                 messagebox.showerror(
-                    "Error", f"Database error: {e}", parent=dialog)
+                    "Error", friendly_message(e), parent=dialog)
             finally:
                 if conn.is_connected():
                     cursor.close()
@@ -441,7 +442,7 @@ class LoginApp(ctk.CTk):
                         "Not Found", "No account matches that Employee ID.", parent=dialog)
             except Exception as e:
                 messagebox.showerror(
-                    "Error", f"Database error: {e}", parent=dialog)
+                    "Error", friendly_message(e), parent=dialog)
             finally:
                 if conn.is_connected():
                     cursor.close()

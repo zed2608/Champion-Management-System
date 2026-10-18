@@ -8,6 +8,7 @@ from db import db, user_message
 import re
 import bcrypt
 import qrcode
+from services.errors import friendly_message
 
 class ProfileView(ctk.CTkFrame):
     def __init__(self, parent, user_info, dashboard_app):
@@ -221,7 +222,7 @@ class ProfileView(ctk.CTkFrame):
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
         except Exception as e:
-            ctk.CTkLabel(table_inner, text=f"Error: {e}", text_color="red").grid(row=1, column=0, columnspan=len(headers), pady=10)
+            ctk.CTkLabel(table_inner, text=friendly_message(e), text_color="red").grid(row=1, column=0, columnspan=len(headers), pady=10)
         finally:
             if conn.is_connected():
                 cursor.close()

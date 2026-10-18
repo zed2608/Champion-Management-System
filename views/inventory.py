@@ -10,6 +10,7 @@ import threading
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 from datetime import datetime
+from services.errors import friendly_message
 
 
 class InventoryView(ctk.CTkFrame):
@@ -416,7 +417,7 @@ class InventoryView(ctk.CTkFrame):
             else:
                 messagebox.showwarning("Unknown Tag", f"The tag '{tag_id}' was scanned, but it is not linked to any active tool in the database.", parent=self.winfo_toplevel())
         except Exception as e:
-            messagebox.showerror("Database Error", str(e), parent=self.winfo_toplevel())
+            messagebox.showerror("Database Error", friendly_message(e), parent=self.winfo_toplevel())
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -735,7 +736,7 @@ class InventoryView(ctk.CTkFrame):
             self.add_modal.destroy()
             self.load_inventory_data()
         except Exception as e:
-            messagebox.showerror("Database Error", str(e),
+            messagebox.showerror("Database Error", friendly_message(e),
                                  parent=self.add_modal)
         finally:
             if conn.is_connected():
@@ -905,7 +906,7 @@ class InventoryView(ctk.CTkFrame):
                     "Success", "Tag successfully linked to tool.", parent=modal)
                 self.load_inventory_data()
             except Exception as e:
-                messagebox.showerror("Error", str(e), parent=modal)
+                messagebox.showerror("Error", friendly_message(e), parent=modal)
             finally:
                 if conn.is_connected():
                     c.close()
@@ -1094,7 +1095,7 @@ class InventoryView(ctk.CTkFrame):
                     self.load_inventory_data()
                 except Exception as e:
                     messagebox.showerror(
-                        "Database Error", str(e), parent=modal)
+                        "Database Error", friendly_message(e), parent=modal)
                 finally:
                     if conn.is_connected():
                         cursor.close()

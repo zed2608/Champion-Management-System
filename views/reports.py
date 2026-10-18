@@ -9,6 +9,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from services.errors import friendly_message
 
 
 class ReportsView(ctk.CTkFrame):
@@ -239,7 +240,7 @@ class ReportsView(ctk.CTkFrame):
                 """, tuple(params))
                 tools = cursor.fetchall()
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=f"Error: {err}", text_color="red").pack(pady=10))
+                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
             finally:
                 if conn.is_connected():
@@ -467,7 +468,7 @@ class ReportsView(ctk.CTkFrame):
                 cursor.execute(query, tuple(params))
                 rows = cursor.fetchall()
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and self._show_error(scroll, f"Error: {err}"))
+                self.after(0, lambda err=e: scroll.winfo_exists() and self._show_error(scroll, friendly_message(err)))
                 return
             finally:
                 if conn and conn.is_connected():
@@ -676,7 +677,7 @@ class ReportsView(ctk.CTkFrame):
                 """, tuple(params))
                 rows = cursor.fetchall()
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=f"Error: {err}", text_color="red").pack(pady=10))
+                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
             finally:
                 if conn.is_connected():
@@ -860,7 +861,7 @@ class ReportsView(ctk.CTkFrame):
                 """, params)
                 rows = cursor.fetchall()
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=f"Error: {err}", text_color="red").pack(pady=10))
+                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
             finally:
                 if conn.is_connected(): cursor.close(); conn.close()
@@ -1018,7 +1019,7 @@ class ReportsView(ctk.CTkFrame):
                 """, params)
                 summary = cursor.fetchone()
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=f"Error: {err}", text_color="red").pack(pady=10))
+                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
             finally:
                 if conn.is_connected(): cursor.close(); conn.close()
@@ -1148,7 +1149,7 @@ class ReportsView(ctk.CTkFrame):
                 """)
                 rows = cursor.fetchall()
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=f"Error: {err}", text_color="red").pack(pady=10))
+                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
             finally:
                 if conn.is_connected(): cursor.close(); conn.close()
@@ -1271,7 +1272,7 @@ class ReportsView(ctk.CTkFrame):
                 """, tuple(params))
                 rows = cursor.fetchall()
             except Exception as e:
-                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=f"Error: {err}", text_color="red").pack(pady=10))
+                self.after(0, lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
                 return
             finally:
                 if conn.is_connected(): cursor.close(); conn.close()

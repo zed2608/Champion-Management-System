@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 from database import get_connection, log_action
 from datetime import datetime
+from services.errors import friendly_message
 
 
 class TrackingView(ctk.CTkFrame):
@@ -214,7 +215,7 @@ class TrackingView(ctk.CTkFrame):
                 rows = cursor.fetchall()
                 self.after(0, lambda: self._render_logs(rows, table_inner, loading_lbl, headers, min_sizes))
             except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(text=f"Error: {err}", text_color="red", wraplength=600))
+                self.after(0, lambda err=e: loading_lbl.configure(text=friendly_message(err), text_color="red", wraplength=600))
             finally:
                 if conn.is_connected():
                     cursor.close()
@@ -373,7 +374,7 @@ class TrackingView(ctk.CTkFrame):
                 rows = cursor.fetchall()
                 self.after(0, lambda: self._render_audit(rows, table_inner, loading_lbl, headers, min_sizes))
             except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(text=f"Error: {err}", text_color="red", wraplength=600))
+                self.after(0, lambda err=e: loading_lbl.configure(text=friendly_message(err), text_color="red", wraplength=600))
             finally:
                 if conn.is_connected():
                     cursor.close()
@@ -580,7 +581,7 @@ class TrackingView(ctk.CTkFrame):
                 rows = cursor.fetchall()
                 self.after(0, lambda: self._render_activity(rows, table_inner, loading_lbl, headers, min_sizes, total_records, page, page_size, offset))
             except Exception as e:
-                self.after(0, lambda err=e: loading_lbl.configure(text=f"Error: {err}", text_color="red", wraplength=600))
+                self.after(0, lambda err=e: loading_lbl.configure(text=friendly_message(err), text_color="red", wraplength=600))
             finally:
                 if conn.is_connected():
                     cursor.close()
@@ -783,7 +784,7 @@ class TrackingView(ctk.CTkFrame):
 
         except Exception as e:
             ctk.CTkLabel(
-                scroll, text=f"Error: {e}", text_color="red").pack(pady=10)
+                scroll, text=friendly_message(e), text_color="red").pack(pady=10)
         finally:
             if conn.is_connected():
                 cursor.close()

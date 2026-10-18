@@ -5,6 +5,7 @@ from datetime import datetime
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 import difflib
+from services.errors import friendly_message
 
 
 class ProjectsView(ctk.CTkFrame):
@@ -496,7 +497,7 @@ class ProjectsView(ctk.CTkFrame):
                     btn.pack(expand=True, pady=10)
 
             except Exception as e:
-                ctk.CTkLabel(cat_inner, text=f"Error: {e}", text_color="red").grid(
+                ctk.CTkLabel(cat_inner, text=friendly_message(e), text_color="red").grid(
                     row=1, column=0, columnspan=len(cols), pady=10)
             finally:
                 if conn.is_connected():
@@ -745,7 +746,7 @@ class ProjectsView(ctk.CTkFrame):
             self.load_projects()
 
         except Exception as e:
-            messagebox.showerror("DB Error", str(e), parent=self.draft_modal)
+            messagebox.showerror("DB Error", friendly_message(e), parent=self.draft_modal)
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -882,7 +883,7 @@ class ProjectsView(ctk.CTkFrame):
                 btn.pack(expand=True, pady=10)
 
         except Exception as e:
-            ctk.CTkLabel(table_inner, text=f"Error loading projects: {e}", text_color="red").grid(
+            ctk.CTkLabel(table_inner, text=friendly_message(e), text_color="red").grid(
                 row=1, column=0, columnspan=len(headers), pady=20)
         finally:
             if conn.is_connected():
@@ -1063,7 +1064,7 @@ class ProjectsView(ctk.CTkFrame):
             if hasattr(dashboard, "show_toast"):
                 dashboard.show_toast(f"✓ Project '{project_name}' archived.")
         except Exception as e:
-            messagebox.showerror("Database Error", str(e), parent=modal)
+            messagebox.showerror("Database Error", friendly_message(e), parent=modal)
         finally:
             if conn.is_connected():
                 cursor.close()

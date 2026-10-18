@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
 from database import get_connection
+from services.errors import friendly_message
 
 class HelpView(ctk.CTkFrame):
     """
@@ -400,7 +401,7 @@ class HelpView(ctk.CTkFrame):
                 conn.commit()
                 self._render_guide_sections(self._guide_search_entry.get().strip() if hasattr(self, '_guide_search_entry') else "")
             except Exception as e:
-                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
+                messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
             finally:
                 if conn.is_connected(): c.close(); conn.close()
 
@@ -477,7 +478,7 @@ class HelpView(ctk.CTkFrame):
                     if hasattr(self, '_guide_search_entry'):
                         self._render_guide_sections(self._guide_search_entry.get().strip())
                 except Exception as e:
-                    messagebox.showerror("Error", str(e), parent=modal)
+                    messagebox.showerror("Error", friendly_message(e), parent=modal)
                 finally:
                     if conn.is_connected(): c.close(); conn.close()
 
@@ -567,7 +568,7 @@ class HelpView(ctk.CTkFrame):
                 conn.commit()
                 self._render_faq_items(self._faq_search_entry.get().strip() if hasattr(self, '_faq_search_entry') else "")
             except Exception as e:
-                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
+                messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
             finally:
                 if conn.is_connected(): c.close(); conn.close()
 
@@ -626,7 +627,7 @@ class HelpView(ctk.CTkFrame):
                     if hasattr(self, '_faq_search_entry'):
                         self._render_faq_items(self._faq_search_entry.get().strip())
                 except Exception as e:
-                    messagebox.showerror("Error", str(e), parent=modal)
+                    messagebox.showerror("Error", friendly_message(e), parent=modal)
                 finally:
                     if conn.is_connected(): c.close(); conn.close()
 
@@ -713,7 +714,7 @@ class HelpView(ctk.CTkFrame):
                 conn.commit()
                 self._render_sysreq_content()
             except Exception as e:
-                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
+                messagebox.showerror("Error", friendly_message(e), parent=self.winfo_toplevel())
             finally:
                 if conn.is_connected(): c.close(); conn.close()
 
@@ -776,7 +777,7 @@ class HelpView(ctk.CTkFrame):
                     dialog.destroy()
                     self._render_sysreq_content()
                 except Exception as e:
-                    messagebox.showerror("Error", str(e), parent=dialog)
+                    messagebox.showerror("Error", friendly_message(e), parent=dialog)
                 finally:
                     if conn.is_connected(): c.close(); conn.close()
 
