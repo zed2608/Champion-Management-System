@@ -378,67 +378,32 @@ class LoginApp(ctk.CTk):
                       command=dialog.destroy).pack(side="right")
 
     def open_scanner(self):
-        self.scanner_window = ctk.CTkToplevel(self)
-        self.scanner_window.title("Scan ID Badge")
-        self.center_window(self.scanner_window, 450, 500)
-        self.scanner_window.attributes("-topmost", True)
-        self.scanner_window.grab_set()
-        self.scanner_window.protocol("WM_DELETE_WINDOW", self.close_scanner)
+        """Badge scan: the shared scanner window (worker thread, camera probing, reconnect) fills the ID box."""
+        from views.scan_dialog import open_scan_dialog
+        if getattr(self, "scanner_window", None) is not None:
+            try:
+                if self.scanner_window.winfo_exists():
+                    return
+            except Exception:
+                pass
 
-        ctk.CTkLabel(self.scanner_window, text="Align your QR ID Badge with the camera", font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(pady=(20, 10))
-
-        self.video_label = ctk.CTkLabel(self.scanner_window, text="Initializing camera feed...", font=("Inter", 12), text_color="gray")
-        self.video_label.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-
-        # Initialize laptop webcam (0 is the default camera)
-        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        
-        # Limit resolution for lightning-fast QR processing
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self.scan_loop()
-
-    def scan_loop(self):
-        if not hasattr(self, 'cap') or not self.cap.isOpened():
-            return
-        
-        ret, frame = self.cap.read()
-        if ret:
-            # Check the frame for QR Codes
-            decoded_objects = decode(frame, symbols=[ZBarSymbol.QRCODE])
-            for obj in decoded_objects:
-                raw_qr = obj.data.decode('utf-8', 'replace')
-                scan = _v.parse_scan(raw_qr)           # one shared parser for badge QR payloads
-                qr_data = scan.value if scan.kind == 'worker' else raw_qr.strip()
-                
-                # We caught an ID! Stop the camera and fill the box.
-                self.user_entry.delete(0, 'end')
-                self.user_entry.insert(0, qr_data)
-                self.close_scanner()
-                self.pass_entry.focus_set()
-                return  # Kill the loop instantly
-
-            # If no QR code, convert the OpenCV frame to Tkinter format and display it
-            cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(cv2image)
-            ctk_img = ctk.CTkImage(light_image=img, size=(400, 300))
-            
-            self.video_label.configure(image=ctk_img, text="")
-        
-        # Loop every 15 milliseconds for a smooth video feed
-        self.scanner_job = self.after(15, self.scan_loop)
+        def got(code):
+            self.user_entry.delete(0, 'end')
+            self.user_entry.insert(0, code)
+            self.pass_entry.focus_set()
+        self.scanner_window = open_scan_dialog(self, got, "Scan ID Badge")
 
     def close_scanner(self):
-        """Safely shuts down the hardware camera and destroys the window."""
-        if hasattr(self, 'scanner_job'):
-            self.after_cancel(self.scanner_job)
-        if hasattr(self, 'cap') and self.cap.isOpened():
-            self.cap.release()
-        if hasattr(self, 'scanner_window') and self.scanner_window.winfo_exists():
-            self.scanner_window.destroy()
+        w = getattr(self, "scanner_window", None)
+        if w is not None:
+            try:
+                w.close()
+            except Exception:
+                pass
 
     def on_closing(self):
         if messagebox.askyesno("Exit Application", "Close the entire system?"):
+            self.close_scanner()
             os._exit(0)
 
 

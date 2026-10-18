@@ -346,47 +346,14 @@ class InventoryView(ctk.CTkFrame):
             messagebox.showerror("Print Error", f"Failed to generate batch print document.\n{e}", parent=self.winfo_toplevel())
 
     def open_test_scanner(self):
-        try:
-            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        except:
-            cap = cv2.VideoCapture(0)
-
-        if not cap.isOpened():
-            messagebox.showerror("Camera Error", "No webcam detected.", parent=self.winfo_toplevel())
-            return
-
-        detected_tag = None
-        while True:
-            ret, frame = cap.read()
-            if not ret: break
-            
-            height, width, _ = frame.shape
-            top_left = (int(width*0.25), int(height*0.3))
-            bottom_right = (int(width*0.75), int(height*0.7))
-            cv2.rectangle(frame, top_left, bottom_right, (0, 255, 0), 2)
-            cv2.putText(frame, "Align QR Code inside box", (top_left[0], top_left[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            cv2.putText(frame, "Press 'Q' to Cancel", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-            
-            detected_codes = decode(frame, symbols=[ZBarSymbol.QRCODE])
-            for barcode in detected_codes:
-                raw_data = barcode.data.decode('utf-8')
-                if "Tag ID:" in raw_data:
-                    first_line = raw_data.split('\n')[0]
-                    detected_tag = first_line.replace("Tag ID: ", "").strip()
-                else:
-                    detected_tag = raw_data.strip()
-                break 
-                
-            cv2.imshow('Champion Scanner - Turbo Mode', frame)
-            
-            if detected_tag or cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-
-        cap.release()
-        cv2.destroyAllWindows()
-        
-        if detected_tag:
-            self.fetch_and_display_scanned_tool(detected_tag)
+        from views.scan_dialog import open_scan_dialog
+        if getattr(self, "_scan_win", None) is not None:
+            try:
+                if self._scan_win.winfo_exists():
+                    return
+            except Exception:
+                pass
+        self._scan_win = open_scan_dialog(self.winfo_toplevel(), self.fetch_and_display_scanned_tool, "Scan & Test QR")
 
     def fetch_and_display_scanned_tool(self, tag_id):
         conn = get_connection()

@@ -16,3 +16,6 @@ backups/
 
 # runtime logs (rotating, written by services.errors)
 logs/
+
+# per-computer remembered webcam
+scanner_config.json

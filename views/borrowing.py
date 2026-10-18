@@ -849,47 +849,20 @@ class IssuanceView(ctk.CTkFrame):
         self.print_master_receipt(trn_range, row['full_name'], tool_names, purpose, issued_at=row.get('borrow_date_full'))
 
     def open_scanner(self, target_entry, trigger_method):
-        try: cap = cv2.VideoCapture(0, cv2.CAP_DSHOW) 
-        except: cap = cv2.VideoCapture(0) 
-        if not cap.isOpened(): return messagebox.showerror("Camera Error", "No webcam detected.", parent=target_entry.winfo_toplevel())
+        """Shared scanner window; the code lands in the box and the screen's own check runs (same as pressing Enter)."""
+        from views.scan_dialog import open_scan_dialog
+        if getattr(self, "_scan_win", None) is not None:
+            try:
+                if self._scan_win.winfo_exists():
+                    return
+            except Exception:
+                pass
 
-        detected_data = None
-        cv2.namedWindow('Champion Scanner - Turbo Mode', cv2.WINDOW_NORMAL)
-        cv2.setWindowProperty('Champion Scanner - Turbo Mode', cv2.WND_PROP_TOPMOST, 1)
-        
-        while True:
-            ret, frame = cap.read()
-            if not ret: break
-            height, width, _ = frame.shape
-            top_left = (int(width*0.25), int(height*0.3))
-            bottom_right = (int(width*0.75), int(height*0.7))
-            
-            cv2.rectangle(frame, top_left, bottom_right, (0, 255, 0), 2)
-            cv2.putText(frame, "Align QR Code inside box", (top_left[0], top_left[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            cv2.putText(frame, "Press 'Q' to Cancel", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-            
-            detected_codes = decode(frame, symbols=[ZBarSymbol.QRCODE])
-            for barcode in detected_codes:
-                raw_data = barcode.data.decode('utf-8')
-                if "Tag ID:" in raw_data:
-                    first_line = raw_data.split('\n')[0]
-                    detected_data = first_line.replace("Tag ID:", "").strip()
-                elif "Employee ID:" in raw_data:
-                    first_line = raw_data.split('\n')[0]
-                    detected_data = first_line.replace("Employee ID:", "").strip()
-                else:
-                    detected_data = raw_data.strip()
-                break 
-                
-            cv2.imshow('Champion Scanner - Turbo Mode', frame)
-            if detected_data or cv2.waitKey(1) & 0xFF == ord('q'): break
-
-        cap.release()
-        cv2.destroyAllWindows()
-        if detected_data:
+        def got(code):
             target_entry.delete(0, 'end')
-            target_entry.insert(0, detected_data)
+            target_entry.insert(0, code)
             trigger_method()
+        self._scan_win = open_scan_dialog(target_entry.winfo_toplevel(), got, "Scan QR Code")
 
     def _reset_borrower_ui(self, message, color="#D8000C"):
         self.active_borrow_user_id = None
