@@ -49,10 +49,19 @@ CREATE TABLE IF NOT EXISTS tool (
   archived_at      DATETIME     NULL,
   date_acquired    DATETIME     NULL,
   price            DECIMAL(10,2) NULL DEFAULT 0.00,
+  service_interval_hours INT NULL,          -- [PANEL-AWE] own service interval; NULL = use the category default
+  last_serviced_at       DATETIME NULL,     -- [PANEL-AWE] the service clock restarts here
   updated_at       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   UNIQUE KEY tag_id (tag_id),
   KEY idx_tool_archived (is_archived, category),
   KEY idx_tool_updated (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- [PANEL-AWE] Service interval per category (Admin-editable). The row '*' is the fallback for categories without their own row.
+CREATE TABLE IF NOT EXISTS category_service_defaults (
+  category               VARCHAR(100) NOT NULL PRIMARY KEY,
+  service_interval_hours INT NOT NULL,
+  CONSTRAINT chk_csd_hours CHECK (service_interval_hours > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS inventory (

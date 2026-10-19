@@ -192,3 +192,11 @@ The built-in guide text now says 15 minutes of inactivity. An existing database 
   does not stop that; it makes it DETECTABLE (Verify Audit Chain reports the first broken entry, or that the newest entries were removed).
 - Each login now has a session id, stored with every entry of that login.
 - Tracking > Activity Log has "Verify Audit Chain" and "Audit Report PDF" (the verdict and the chain head hash are printed on the PDF).
+
+## L. Wear and maintenance forecast (Phase 4 step 2) [PANEL-AWE]
+Maintenance > "Wear Forecast" (Admin). Hours out per tool come from the transaction dates (issuance to retrieval; a tool still out counts up to now),
+weighted by quantity. The service interval is the tool's own, else its category's, else the '*' default (500 h, editable on the same screen);
+`tool.service_interval_hours` and `tool.last_serviced_at` are new columns (added by the migration). Marking a tool serviced, or resolving a repair
+ticket as "Good", restarts its clock. "Due in N days" uses the last 30 days of use; a tool not used in 30 days shows "not used lately" instead of a made-up date.
+Flags: 90% or more of the interval used; damage rate (tickets + damaged/lost returns without a ticket, per 100 hours out) more than 2 standard
+deviations above the category average (needs at least 3 tools with 10+ hours). Only Equipment is forecast; consumables have no wear.

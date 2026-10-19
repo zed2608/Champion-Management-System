@@ -402,6 +402,11 @@ def step_audit_chain(ctx: Ctx):
     ctx.note(f"audit log: {n} existing entries chained")
 
 
+def step_seed_service_defaults(ctx: Ctx):
+    """[PANEL-AWE] The fallback service interval ('*' = 500 hours). Never overwrites an Admin's value."""
+    ctx.q("INSERT IGNORE INTO category_service_defaults (category, service_interval_hours) VALUES ('*', 500)")
+
+
 STEPS = [
     (1, "baseline_tables", step_baseline_tables, True),
     (2, "rename_requirement_id", step_rename_requirement_id, True),
@@ -415,6 +420,7 @@ STEPS = [
     (10, "project_transitions_exact", step_sync_transitions, False),
     (11, "workers_without_password", step_workers_without_password, False),
     (12, "audit_chain_backfill", step_audit_chain, False),
+    (13, "seed_service_defaults", step_seed_service_defaults, False),
 ]
 
 

@@ -7,10 +7,10 @@ import os
 import subprocess
 import threading
 from services.errors import friendly_message
-from services import backup_service
+from services import backup_service, wear_forecast
 from services.paging import PageInfo, clamp_page, fetch_page
 from services.validators import like_pattern
-from views.paged_table import PagedTable
+from views.paged_table import PagedTable, list_table
 from services import maintenance_service as mnt, inventory_service as inv_svc, project_service as proj_svc, user_service
 
 
@@ -49,6 +49,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             "📦 Archived Tools",
             "👥 Archived Employees",
             "📋 Archived Projects",
+            "📈 Wear Forecast",
             "💾 Backup & Restore",
         ]
         self.tab_var = ctk.StringVar(value=tab_labels[0])
@@ -82,6 +83,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                 self.cached_tabs[selected_tab] = self.render_employees_tab()
             elif "Projects" in selected_tab:
                 self.cached_tabs[selected_tab] = self.render_projects_tab()
+            elif "Wear" in selected_tab:
+                self.cached_tabs[selected_tab] = self.render_wear_tab()
             elif "Backup" in selected_tab:
                 self.cached_tabs[selected_tab] = self.render_backup_tab()
 
@@ -96,6 +99,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             self.load_archived_employees()
         elif "Projects" in selected_tab:
             self.load_archived_projects()
+        elif "Wear" in selected_tab:
+            self.load_wear()
         elif "Backup" in selected_tab:
             self.load_backup_history()
 
@@ -377,6 +382,119 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkButton(btn_row, text="Close", fg_color="#E0E0E0",
                       text_color="black", hover_color="#CCCCCC", width=80,
                       command=modal.destroy).pack(side="right")
+
+    # ------------------------------------------
+    # [PANEL-AWE] Wear Forecast
+    # ------------------------------------------
+    def render_wear_tab(self):
+        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_rowconfigure(2, weight=1)
+        top = ctk.CTkFrame(frame, fg_color="transparent")
+        top.pack(fill="x", padx=20, pady=(20, 5))
+        ctk.CTkLabel(top, text="Wear & Maintenance Forecast", font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
+        ctk.CTkLabel(frame, text="Hours each tool has been out on jobs (open issuances count up to now), how much of its service interval is used, "
+                                 "and when service is due at the last 30 days' pace. Click a row to set that tool's own interval or mark it serviced.",
+                     font=("Inter", 11), text_color="gray", wraplength=900, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
+        row = ctk.CTkFrame(frame, fg_color="#F9FAFB", corner_radius=8)
+        row.pack(fill="x", padx=20, pady=(0, 8))
+        ctk.CTkLabel(row, text="Default interval - category:", font=("Inter", 11, "bold")).pack(side="left", padx=(12, 6), pady=10)
+        self.wear_cat = ctk.CTkEntry(row, placeholder_text="e.g. Drills (or * for all others)", width=220)
+        self.wear_cat.pack(side="left", padx=4)
+        self.wear_hours = ctk.CTkEntry(row, placeholder_text="hours", width=90)
+        self.wear_hours.pack(side="left", padx=4)
+        ctk.CTkButton(row, text="Save default", width=110, fg_color="#1E4528", hover_color="#14301C", command=self.save_wear_default).pack(side="left", padx=8)
+        self.wear_defaults_lbl = ctk.CTkLabel(row, text="", font=("Inter", 10), text_color="gray")
+        self.wear_defaults_lbl.pack(side="left", padx=8)
+        self._wear_scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
+        self._wear_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
+        return frame
+
+    WEAR_COLUMNS = [("Tool", 4, 150), ("Category", 2, 100), ("Hours used", 2, 90), ("Interval", 2, 80), ("% used", 1, 70), ("Due in", 2, 100),
+                    ("Damage / 100 h", 2, 100), ("Flags", 4, 170)]
+
+    def load_wear(self, keep_page=False):
+        for w in self._wear_scroll.winfo_children():
+            w.destroy()
+        loading = ctk.CTkLabel(self._wear_scroll, text="Calculating...", text_color="gray", font=("Inter", 12, "italic"))
+        loading.pack(pady=20)
+
+        def work():
+            try:
+                rows = wear_forecast.forecast(self.user_info)
+                defaults = wear_forecast.list_defaults(self.user_info)
+            except Exception as e:
+                msg = friendly_message(e)
+                self.post_ui(lambda: loading.winfo_exists() and loading.configure(text=msg, text_color="red"))
+                return
+            self.post_ui(lambda: self._show_wear(rows, defaults, loading))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _show_wear(self, rows, defaults, loading):
+        if not loading.winfo_exists():
+            return
+        loading.destroy()
+        self.wear_defaults_lbl.configure(text="Now: " + ", ".join(f"{d['category']} = {d['hours']} h" for d in defaults))
+
+        def due(r):
+            if r["days_to_due"] is None:
+                return "not used lately"
+            return "overdue" if r["days_to_due"] <= 0 else f"{r['days_to_due']:g} days"
+        self._wear_table = list_table(
+            self._wear_scroll, self.WEAR_COLUMNS, rows,
+            lambda r: [r["name"], r["category"], f"{r['hours_since_service']:g}", f"{r['interval']:g}", f"{r['pct_used']:g}%", due(r),
+                       "-" if r["damage_rate"] is None else f"{r['damage_rate']:g}", ", ".join(r["flags"]) or "-"],
+            row_bg=lambda r, i: "#FFF3F3" if r["flags"] else ("#F9FAFB" if i % 2 == 0 else "white"),
+            cell_style=lambda r, c, v: ("#D8000C", True) if (c == 7 and v != "-") else ("#1A1A1A", False),
+            on_row_click=self.open_wear_modal, empty_text="No equipment to forecast yet.", font_size=11, cell_pady=10, uniform="wear_cols")
+
+    def save_wear_default(self):
+        cat, hours = self.wear_cat.get().strip(), self.wear_hours.get().strip()
+        try:
+            wear_forecast.set_category_default(self.user_info, cat, hours)
+        except Exception as e:
+            messagebox.showerror("Could not save", friendly_message(e), parent=self.winfo_toplevel())
+            return
+        log_action(self.user_info.get("user_id"), "Edited", "Maintenance", f"Service interval for '{cat}' set to {hours} hours")
+        self.wear_cat.delete(0, "end")
+        self.wear_hours.delete(0, "end")
+        self.load_wear()
+
+    def open_wear_modal(self, row):
+        modal = ctk.CTkToplevel(self)
+        modal.title(f"Service - {row['name']}")
+        modal.configure(fg_color="white")
+        modal.attributes("-topmost", True)
+        modal.grab_set()
+        modal.geometry("460x330")
+        ctk.CTkLabel(modal, text=row["name"], font=("Inter", 15, "bold")).pack(pady=(18, 4))
+        ctk.CTkLabel(modal, text=wear_forecast.summary_line(row), font=("Inter", 11), text_color="#555555", wraplength=400, justify="left").pack(padx=24, pady=(0, 10))
+        ctk.CTkLabel(modal, text="Own service interval in hours (empty = category default):", font=("Inter", 11, "bold")).pack(anchor="w", padx=24)
+        entry = ctk.CTkEntry(modal)
+        entry.pack(fill="x", padx=24, pady=(4, 10))
+
+        def save():
+            try:
+                wear_forecast.set_tool_interval(self.user_info, row["tool_id"], entry.get().strip())
+            except Exception as e:
+                messagebox.showerror("Could not save", friendly_message(e), parent=modal)
+                return
+            modal.destroy()
+            self.load_wear()
+
+        def serviced():
+            if not messagebox.askyesno("Mark serviced", f"Restart the service clock of '{row['name']}' from now?", parent=modal):
+                return
+            try:
+                wear_forecast.mark_serviced(self.user_info, row["tool_id"])
+            except Exception as e:
+                messagebox.showerror("Could not save", friendly_message(e), parent=modal)
+                return
+            modal.destroy()
+            self.load_wear()
+        ctk.CTkButton(modal, text="Save interval", fg_color="#1E4528", hover_color="#14301C", command=save).pack(fill="x", padx=24, pady=4)
+        ctk.CTkButton(modal, text="Mark serviced now", fg_color="#2980B9", hover_color="#1F618D", command=serviced).pack(fill="x", padx=24, pady=4)
+        ctk.CTkButton(modal, text="Close", fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=modal.destroy).pack(fill="x", padx=24, pady=4)
 
     # ------------------------------------------
     # TAB 2: Archived Tools

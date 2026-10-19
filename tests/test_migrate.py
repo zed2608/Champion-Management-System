@@ -13,7 +13,7 @@ pytestmark = pytest.mark.db
 EXPECTED_TABLES = {
     "user", "id_sequences", "tool", "inventory", "projects", "project_transitions", "project_requirements",
     "project_workers", "transaction", "tool_issues", "system_logs", "backup_logs", "help_guides", "help_faqs",
-    "system_requirements", "help_tickets", "schema_migrations", "schema_meta", "v_activity_feed", "audit_chain_head", "system_logs_archive"}
+    "system_requirements", "help_tickets", "schema_migrations", "schema_meta", "v_activity_feed", "audit_chain_head", "system_logs_archive", "category_service_defaults"}
 QUIET = dict(log=lambda *_: None)
 
 

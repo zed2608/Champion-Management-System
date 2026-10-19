@@ -96,6 +96,7 @@ def resolve_issue(actor, issue_id, outcome, restock_quantity, resolution_notes) 
             if movable > 0:
                 if outcome == "Good":
                     resolve_maintenance(cur, t["tool_id"], movable, repaired=True)
+                    cur.execute("UPDATE tool SET last_serviced_at = NOW() WHERE tool_id = %s", (t["tool_id"],))   # [PANEL-AWE] a repair restarts the service clock
                     effect = f"{v.fmt_qty(movable)} unit(s) returned to stock"
                 elif outcome == "Lost":
                     resolve_maintenance_as_lost(cur, t["tool_id"], movable)
