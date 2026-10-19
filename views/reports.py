@@ -12,7 +12,7 @@ matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from services.errors import friendly_message
-from services import report_service as rs, anomaly
+from services import report_service as rs, anomaly, wear_forecast
 from views.paged_table import list_table
 from utils.pdf_table import render_pdf
 
@@ -70,7 +70,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         self.seg_btn = ctk.CTkSegmentedButton(
             tab_bar,
             values=["▤ Inventory ABC Analysis", "⛭ Tool Usage Report", "🖹 Employee Activity",
-                    "📋 Project Allocation", "⚠ Damage & Loss", "⭣ Low Stock", "⧖ Overdue Transactions", "🔎 Anomalies"],
+                    "📋 Project Allocation", "⚠ Damage & Loss", "⭣ Low Stock", "⧖ Overdue Transactions", "🔧 Wear", "🔎 Anomalies"],
             variable=self.tab_var,
             fg_color="#F0F0F0",
             selected_color="#1E4528",
@@ -206,6 +206,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             self.render_low_stock_tab()
         elif selected == "⧖ Overdue Transactions":
             self.render_overdue_tab()
+        elif selected == "🔧 Wear":
+            self.render_wear_report_tab()
         elif selected == "🔎 Anomalies":
             self.render_anomaly_tab()
 
@@ -1078,6 +1080,45 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # ==========================================
+    # [PANEL-AWE] Wear Forecast (printable copy of the Maintenance tab)
+    # ==========================================
+    def render_wear_report_tab(self):
+        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame.grid(row=0, column=0, sticky="nsew")
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_rowconfigure(1, weight=1)
+        top = ctk.CTkFrame(frame, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
+        ctk.CTkLabel(top, text="Wear & Maintenance Forecast", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
+                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("wear")).pack(side="right")
+        scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
+        scroll.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 10))
+        loading = ctk.CTkLabel(scroll, text="Calculating…", text_color="gray", font=("Inter", 12))
+        loading.pack(pady=40)
+
+        def _fetch():
+            try:
+                rows = wear_forecast.forecast(self.user_info)
+            except Exception as e:
+                self.post_ui(lambda err=e: scroll.winfo_exists() and self._show_error(scroll, friendly_message(err)))
+                return
+            self.post_ui(lambda: _render(rows))
+
+        def _render(rows):
+            if not self.winfo_exists() or not scroll.winfo_exists():
+                return
+            loading.destroy()
+            self._wear_report_data = rows
+            labels, body, _notes = wear_forecast.pdf_table(rows)
+            list_table(scroll, [(l, w, m) for l, (w, m) in zip(labels, [(4, 150), (2, 100), (2, 90), (2, 80), (1, 70), (2, 100), (2, 100), (4, 170)])],
+                       body, lambda cells: cells, row_bg=lambda cells, i: "#FFF3F3" if cells[7] != "-" else ("#F9FAFB" if i % 2 == 0 else "white"),
+                       cell_style=lambda cells, c, v: ("#D8000C", True) if (c == 7 and v != "-") else ("#1A1A1A", False),
+                       empty_text="No equipment to forecast yet.", font_size=11, cell_pady=10, uniform="wearrep_cols")
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    # ==========================================
     # [PANEL-AWE] TAB 8: Anomalies & Recommendations
     # ==========================================
     def render_anomaly_tab(self):
@@ -1088,6 +1129,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
         ctk.CTkLabel(top, text="Anomalies & Recommendations", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
+                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("anomaly")).pack(side="right")
         self._anomaly_summary = ctk.CTkLabel(frame, text="", font=("Inter", 11), text_color="gray", wraplength=900, justify="left")
         self._anomaly_summary.grid(row=1, column=0, sticky="w", padx=30, pady=(0, 6))
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
@@ -1144,6 +1187,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             "damage": "Damage, Loss & Maintenance Report",
             "lowstock": "Low Stock / Procurement Report",
             "overdue": "Overdue Transactions Report",
+            "wear": "Wear & Maintenance Forecast",
+            "anomaly": "Anomalies & Recommendations",
         }
         title = report_titles.get(report_type, "Report")
 
@@ -1240,6 +1285,12 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
     def _export_document(self, report_type, sd, ed):
         """(title, sections, notes): sections = [(heading, labels, rows)]. Every type uses the same query functions as its screen."""
+        if report_type == "wear":
+            labels, rows, notes = wear_forecast.pdf_table(wear_forecast.forecast(self.user_info))
+            return "Wear & Maintenance Forecast", [(None, labels, rows, [4, 3, 2, 2, 2, 3, 2, 4])], notes
+        if report_type == "anomaly":
+            notes, sections = anomaly.pdf_sections(anomaly.analyse(self.user_info), anomaly.blocked_attempts_summary(self.user_info))
+            return "Anomalies & Recommendations", sections, notes
         title, labels, rows = self._export_rows(report_type, sd, ed)
         return title, [(None, labels, rows)], []
 

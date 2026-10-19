@@ -205,3 +205,18 @@ def _interval(value):
     if not 1 <= n <= 100000:
         raise ValidationError("Service interval must be between 1 and 100,000 hours.")
     return n
+
+
+def pdf_table(rows):
+    """[PANEL-AWE] (labels, rows, notes) for the printed report, built from the same rows the screen shows."""
+    def due(r):
+        if r["days_to_due"] is None:
+            return "not used lately"
+        return "overdue" if r["days_to_due"] <= 0 else f"{r['days_to_due']:g} days"
+    labels = ["Tool", "Category", "Hours since service", "Interval (h)", "% used", "Due in", "Damage / 100 h", "Flags"]
+    body = [[r["name"], r["category"], f"{r['hours_since_service']:g}", f"{r['interval']:g}", f"{r['pct_used']:g}%", due(r),
+             "-" if r["damage_rate"] is None else f"{r['damage_rate']:g}", ", ".join(r["flags"]) or "-"] for r in rows]
+    flagged = sum(1 for r in rows if r["flags"])
+    notes = [f"{flagged} of {len(rows)} tools flagged. Hours = quantity-weighted time out on jobs since the last service; due-in uses the last "
+             f"{RATE_WINDOW_DAYS} days of use; flagged at {DUE_SOON_PCT:g}% of the interval or a damage rate above 2 standard deviations over the category average."]
+    return labels, body, notes

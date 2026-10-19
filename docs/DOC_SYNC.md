@@ -214,3 +214,8 @@ The Executive Dashboard shows an "ADMIN INSIGHTS" panel to Admin only (Staff nev
 counts and head only beyond that), the 5 tools nearest their service limit, and the top 5 recommendations. All four are computed in a worker thread by
 `dashboard_service.admin_insights`; a failing part shows its own short message and does not hide the others. The cards are loaded when the dashboard opens
 and by the Refresh button, not by the 15-second auto-refresh.
+
+## O. PDF sections (Phase 4 step 5) [PANEL-AWE]
+Reports now has two more tabs, "Wear" and "Anomalies", each with Export PDF. The PDF is built from the same query functions as the screen
+(`wear_forecast.forecast` / `anomaly.analyse`); the anomaly PDF prints the recommendations, then the numbers behind each one, then the raw findings
+(damage outliers, Category A bottlenecks, overdue clusters). These two reports describe the CURRENT state, so the date filter does not apply to them.

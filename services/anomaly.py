@@ -224,3 +224,27 @@ def blocked_attempts_summary(actor):
         cur.execute("SELECT reason, COUNT(*) AS n FROM issuance_attempts WHERE attempted_at >= NOW() - INTERVAL %s DAY GROUP BY reason", (WINDOW_DAYS,))
         got = {r["reason"]: r["n"] for r in cur.fetchall()}
     return {r: got.get(r, 0) for r in REASONS}
+
+
+def pdf_sections(result, counts):
+    """[PANEL-AWE] (notes, sections) for the printed report: recommendations, the numbers behind them, then each raw finding table.
+    Built from the same ``analyse`` result the screen shows."""
+    recs = result["recommendations"]
+    sections = [("Recommendations (largest estimated peso impact first)", ["#", "Recommendation", "Peso impact"],
+                 [[str(i), r["text"], peso(r["peso_impact"])] for i, r in enumerate(recs, start=1)] or [["-", "Nothing unusual was found.", "-"]], [1, 9, 2])]
+    if recs:
+        sections.append(("The numbers behind each recommendation", ["#", "Evidence"],
+                         [[str(i), line] for i, r in enumerate(recs, start=1) for line in r["evidence"]], [1, 11]))
+    sections.append(("Damage and loss outliers (above Q3 + 1.5 x IQR of their group)",
+                     ["Group", "Name", "Issued", "Damaged/lost", "Rate", "Peer median", "Upper limit", "Value"],
+                     [[f["dimension"], str(f["label"]), _q(f["issued"]), _q(f["bad"]), f"{f['rate'] * 100:.1f}%", f"{f['peer_median'] * 100:.1f}%",
+                       f"{f['fence'] * 100:.1f}%", peso(f["value"])] for f in result["damage"]] or [["-", "none", "", "", "", "", "", ""]]))
+    sections.append((f"Category A bottlenecks (blocked attempts, last {WINDOW_DAYS} days, above stock)", ["Tool", "Blocked", "Stock", "Shortfall", "Unit price", "Cost"],
+                     [[f["name"], str(f["blocked"]), _q(f["stock"]), str(f["shortfall"]), peso(f["price"]), peso(f["value"])] for f in result["bottlenecks"]]
+                     or [["none", "", "", "", "", ""]]))
+    sections.append(("Overdue clusters (3 or more overdue issuances)", ["Group", "Name", "Overdue", "Units", "Value at risk", "Longest (days)"],
+                     [[f["dimension"], str(f["label"]), str(f["count"]), _q(f["units"]), peso(f["value"]), str(f["max_days"])] for f in result["clusters"]]
+                     or [["none", "", "", "", "", ""]]))
+    notes = [f"Refused issuances in the last {WINDOW_DAYS} days: {counts['out_of_stock']} out of stock, {counts['over_quota']} over the approved quantity, "
+             f"{counts['past_end']} after the project ended."]
+    return notes, sections

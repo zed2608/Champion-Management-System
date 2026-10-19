@@ -39,16 +39,19 @@ def _wrap(text, font, max_w):
 
 
 def render_pdf(title, criteria, sections, path, notes=(), generated=None):
-    """sections: [(heading or None, [column labels], [[cell, ...], ...])]. notes: extra lines under the header. Returns ``path``."""
+    """sections: [(heading or None, [column labels], [[cell, ...], ...], optional [relative column widths])]. notes: extra lines under the header. Returns ``path``."""
     f_title, f_head, f_body = _fonts()
     generated = generated or datetime.now().strftime("%B %d, %Y %I:%M %p")
     laid_out = []
-    for heading, labels, rows in sections:
-        col_w = (CANVAS_W - 60) // max(1, len(labels))
-        col_x = [30 + i * col_w for i in range(len(labels))]
+    for section in sections:
+        heading, labels, rows = section[:3]
+        weights = list(section[3]) if len(section) > 3 else [1] * len(labels)       # optional relative column widths
+        unit = (CANVAS_W - 60) / sum(weights)
+        widths = [int(unit * w) for w in weights]
+        col_x = [30 + sum(widths[:i]) for i in range(len(labels))]
         wrapped_rows = []
         for row in rows:
-            wrapped = [_wrap(cell, f_body, col_w) for cell in row]
+            wrapped = [_wrap(cell, f_body, widths[j]) for j, cell in enumerate(row)]
             wrapped_rows.append((wrapped, max(len(lines) for lines in wrapped) * LINE_H))
         laid_out.append((heading, labels, col_x, wrapped_rows))
     note_lines = [line for n in notes for line in _wrap(n, f_body, CANVAS_W - 60)]
