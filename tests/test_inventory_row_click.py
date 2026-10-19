@@ -138,3 +138,13 @@ def test_archive_restore_and_tag_buttons_also_work_from_a_clicked_row(real_scree
     button(modal, "Archive").invoke()
     assert not [s for s in shown if s[0] == "showerror"], shown
     assert rows(d, "SELECT is_archived FROM tool WHERE tool_id=%s", (tool,))[0]["is_archived"] == 1
+
+
+def test_dates_shown_in_the_item_panel_are_real_dates_not_format_codes(real_screen):
+    """REGRESSION: with query parameters the driver does not collapse '%%', so the dates came back as the literal text '%Y-%m-%d'."""
+    view, d, tool, shown, ctk, root = real_screen
+    run(d, "UPDATE tool SET date_acquired = '2025-03-04 10:00:00' WHERE tool_id = %s", (tool,))
+    run(d, "INSERT INTO tool_issues (tool_id, condition_flag, quantity, flagged_at) VALUES (%s, 'Damaged', 1, '2026-02-05 09:00:00')", (tool,))
+    rows_, info = view._fetch_inventory_page(0, 25)
+    row = next(r for r in rows_ if r["tool_id"] == tool)
+    assert row["date_acquired"] == "2025-03-04" and row["last_checked_date"] == "2026-02-05"

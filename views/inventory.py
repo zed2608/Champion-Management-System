@@ -447,8 +447,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                            IFNULL(t.category, 'Uncategorized') as category,
                            IFNULL(t.supplier, 'N/A') as supplier,
                            t.tag_id,
-                           DATE_FORMAT(t.date_acquired, '%%Y-%%m-%%d') as date_acquired,
-                           (SELECT DATE_FORMAT(MAX(flagged_at), '%%Y-%%m-%%d') FROM tool_issues WHERE tool_id = t.tool_id) as last_checked_date,
+                           DATE_FORMAT(t.date_acquired, '%Y-%m-%d') as date_acquired,
+                           (SELECT DATE_FORMAT(MAX(flagged_at), '%Y-%m-%d') FROM tool_issues WHERE tool_id = t.tool_id) as last_checked_date,
                            (SELECT p.name FROM transaction tr
                             JOIN projects p ON tr.project_id = p.project_id
                             WHERE tr.tool_id = t.tool_id AND tr.status = 'Active'
