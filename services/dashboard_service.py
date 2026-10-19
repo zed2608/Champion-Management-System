@@ -103,3 +103,22 @@ def live_metrics(actor):
                        GROUP BY t.tool_id, t.name, tr.borrow_date, p.name ORDER BY tr.borrow_date DESC LIMIT 8""", (actor["user_id"],))
         mine = [(_label(r["tool_name"], r["qty"]), r["issued_date"], r["project_name"]) for r in cur.fetchall()]
     return m, activities, chart, deployed, mine
+
+
+@require_role("Admin")
+def admin_insights(actor):
+    """[PANEL-AWE] The Admin-only dashboard cards. Each part is computed on its own, so one failing part (say, a missing table on a
+    database that has not been upgraded yet) shows its own error and never hides the others. {"backup"|"audit"|"wear"|"recommendations": {"data"|"error"}}."""
+    from services import anomaly, audit_chain, backup_service, wear_forecast
+    from services.errors import friendly_message
+    parts = (("backup", lambda: backup_service.last_backup_status(actor)),
+             ("audit", lambda: audit_chain.quick_status(actor)),
+             ("wear", lambda: wear_forecast.forecast(actor, limit=5)),
+             ("recommendations", lambda: anomaly.top_recommendations(actor, 5)))
+    out = {}
+    for key, fn in parts:
+        try:
+            out[key] = {"data": fn()}
+        except Exception as e:
+            out[key] = {"error": friendly_message(e)}
+    return out

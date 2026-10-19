@@ -89,3 +89,19 @@ def describe(result):
     if result["intact"]:
         return f"INTACT: {result['checked']} entries checked, none altered, none missing."
     return f"BROKEN at entry #{result['first_broken_log_id']}: {result['reason']}"
+
+
+VERIFY_ON_LOAD_LIMIT = 100_000
+
+
+@require_role("Admin")
+def quick_status(actor):
+    """[PANEL-AWE] Chain status for the dashboard card: a fresh verification when the log is small enough to check in about a second,
+    otherwise the counts and head only (``verified`` False). Writes no audit entry, so loading the dashboard never spams the log."""
+    st = chain_status.__wrapped__(actor)
+    out = {**st, "verified": False, "intact": None, "checked": 0, "first_broken_log_id": None, "reason": ""}
+    if st["live"] + st["archived"] <= VERIFY_ON_LOAD_LIMIT:
+        with db.read() as cur:
+            res = audit_core.verify(cur)
+        out.update(verified=True, intact=res["intact"], checked=res["checked"], first_broken_log_id=res["first_broken_log_id"], reason=res["reason"])
+    return out

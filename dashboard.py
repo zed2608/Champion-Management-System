@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 import customtkinter as ctk
 from views.ui_thread import UiMixin
@@ -595,6 +596,115 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             print(f"Dashboard Sync Error: {friendly_message(e)}")
             return dict(_EMPTY_METRICS), [], [], [], []
 
+    # ── [PANEL-AWE] Admin insight cards ──────────────────────────────────────────────────────────────────────────────
+    def _build_insights(self, parent):
+        """Four cards for the Admin only: last backup, audit chain, top wear forecasts, top recommendations. They start as "Loading…" and are
+        filled from a worker thread (services.dashboard_service.admin_insights), so building the dashboard never waits for them."""
+        panel = ctk.CTkFrame(parent, fg_color="white", corner_radius=10)
+        panel.pack(fill="x", pady=(0, 10))
+        head = ctk.CTkFrame(panel, fg_color="transparent")
+        head.pack(fill="x", padx=15, pady=(10, 0))
+        ctk.CTkLabel(head, text="ADMIN INSIGHTS", font=("Inter", 13, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkButton(head, text="↻ Refresh", width=80, height=24, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
+                      font=("Inter", 11, "bold"), command=self._load_insights).pack(side="right")
+        grid = ctk.CTkFrame(panel, fg_color="transparent")
+        grid.pack(fill="x", padx=10, pady=(4, 10))
+        grid.grid_columnconfigure((0, 1), weight=1, uniform="ins")
+        self.ins_labels = {}
+        for key, title, row, col, go in (("backup", "Last backup", 0, 0, "Maintenance"), ("audit", "Audit chain", 0, 1, "Tracking"),
+                                         ("wear", "Wear forecast - top 5", 1, 0, "Maintenance"), ("recommendations", "Recommendations - top 5", 1, 1, "Reports")):
+            card = ctk.CTkFrame(grid, fg_color="#F9FAFB", corner_radius=8)
+            card.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+            t = ctk.CTkFrame(card, fg_color="transparent")
+            t.pack(fill="x", padx=12, pady=(8, 2))
+            ctk.CTkLabel(t, text=title, font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(side="left")
+            ctk.CTkButton(t, text="Open", width=50, height=20, fg_color="transparent", text_color="#2980B9", hover_color="#EAF2F8",
+                          font=("Inter", 10, "bold"), command=lambda g=go: self.show_frame(g)).pack(side="right")
+            lbl = ctk.CTkLabel(card, text="Loading...", font=("Inter", 11), text_color="gray", justify="left", anchor="w", wraplength=520)
+            lbl.pack(fill="x", padx=12, pady=(0, 10))
+            self.ins_labels[key] = lbl
+        self._load_insights()
+
+    def _load_insights(self):
+        for lbl in getattr(self, "ins_labels", {}).values():
+            lbl.configure(text="Loading...", text_color="gray")
+
+        def work():
+            try:
+                result = dashboard_service.admin_insights(self.user_info)
+            except Exception as e:
+                msg = friendly_message(e)
+                self.post_ui(lambda: self._apply_insights({k: {"error": msg} for k in ("backup", "audit", "wear", "recommendations")}))
+                return
+            self.post_ui(lambda: self._apply_insights(result))
+        threading.Thread(target=work, daemon=True).start()
+
+    @staticmethod
+    def insight_texts(result):
+        """{key: (text, colour)} for the four cards (pure: the unit tests read this)."""
+        green, red, grey, dark = "#1E4528", "#D8000C", "gray", "#1A1A1A"
+        out = {}
+        part = result.get("backup", {})
+        if not part:
+            pass
+        elif "error" in part:
+            out["backup"] = (part["error"], red)
+        else:
+            b = part["data"]
+            if b["last"] is None:
+                out["backup"] = ("No backup has been recorded. Make one in Maintenance > Backup & Restore.", red)
+            else:
+                text = f"{b['age_days']:g} days ago ({b['last']:%b %d, %Y %I:%M %p})"
+                out["backup"] = ((f"WARNING: last backup was {text}. Backups older than {b['warn_after_days']} days are not safe enough." if b["warn"]
+                                  else f"OK: {text}"), red if b["warn"] else green)
+        part = result.get("audit", {})
+        if not part:
+            pass
+        elif "error" in part:
+            out["audit"] = (part["error"], red)
+        else:
+            a = part["data"]
+            head = (a["head_hash"] or "")[:12]
+            if not a["verified"]:
+                out["audit"] = (f"{a['live'] + a['archived']} entries, head {head}... (too large to check on load - use Verify in Tracking).", grey)
+            elif a["intact"]:
+                out["audit"] = (f"INTACT: {a['checked']} entries checked, head {head}...", green)
+            else:
+                out["audit"] = (f"BROKEN at entry #{a['first_broken_log_id']}: {a['reason']}", red)
+        part = result.get("wear", {})
+        if not part:
+            pass
+        elif "error" in part:
+            out["wear"] = (part["error"], red)
+        elif not part["data"]:
+            out["wear"] = ("No equipment to forecast yet.", grey)
+        else:
+            from services import wear_forecast
+            lines = []
+            for r in part["data"]:
+                due = "not used lately" if r["days_to_due"] is None else ("overdue" if r["days_to_due"] <= 0 else f"due in {r['days_to_due']:g} days")
+                flag = f"  [{', '.join(r['flags'])}]" if r["flags"] else ""
+                lines.append(f"{r['name']}: {r['pct_used']:g}% of {r['interval']:g} h used, {due}{flag}")
+            out["wear"] = ("\n".join(lines), dark)
+        part = result.get("recommendations", {})
+        if not part:
+            pass
+        elif "error" in part:
+            out["recommendations"] = (part["error"], red)
+        elif not part["data"]:
+            out["recommendations"] = ("Nothing unusual right now.", grey)
+        else:
+            out["recommendations"] = ("\n".join(f"{i}. {r['text']}" for i, r in enumerate(part["data"], start=1)), dark)
+        return out
+
+    def _apply_insights(self, result):
+        if not self.winfo_exists():
+            return
+        for key, (text, color) in self.insight_texts(result).items():
+            lbl = getattr(self, "ins_labels", {}).get(key)
+            if lbl is not None and lbl.winfo_exists():
+                lbl.configure(text=text, text_color=color)
+
     def create_home_dashboard(self):
         is_admin = self.user_info.get("role", "Staff") == "Admin"
 
@@ -738,6 +848,9 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             self.dash_proj_done_lbl.pack()
             self._bind_widget_tree(
                 strip, lambda *_: self.show_frame("Project Management"))
+
+        if is_admin:
+            self._build_insights(inner_frame)
 
         # ── Row 3: Bottom 2-column layout ─────────────────────────────────────
         bottom_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")

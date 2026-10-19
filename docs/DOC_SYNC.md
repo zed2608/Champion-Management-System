@@ -207,3 +207,10 @@ Reports > "Anomalies" (Admin). Every refused issuance (out of stock, over the ap
 above Q3 + 1.5 x IQR of the group (needs 4+ peers, 5+ units issued, 2+ bad units; the data window is 180 days); (b) Category A tools (ABC top 20%) whose
 blocked attempts in the last 30 days exceed total stock; (c) 3+ overdue issuances held by one project or worker. Recommendations are ranked by peso impact
 (`tool.price` x units) and every one lists its numbers. The method is a robust outlier rule on purpose: with few projects a z-score is dominated by the outlier itself.
+
+## N. Admin dashboard cards (Phase 4 step 4) [PANEL-AWE]
+The Executive Dashboard shows an "ADMIN INSIGHTS" panel to Admin only (Staff never see it and their screen never calls the service): last backup (red after
+7 days or when none is recorded; the automatic safety copy before a restore counts), audit-chain status (a fresh check on load for logs up to 100,000 entries,
+counts and head only beyond that), the 5 tools nearest their service limit, and the top 5 recommendations. All four are computed in a worker thread by
+`dashboard_service.admin_insights`; a failing part shows its own short message and does not hide the others. The cards are loaded when the dashboard opens
+and by the Refresh button, not by the 15-second auto-refresh.

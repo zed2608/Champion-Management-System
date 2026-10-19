@@ -297,3 +297,23 @@ def history_page(actor, limit=50, offset=0):
                     "FROM backup_logs bl LEFT JOIN `user` u ON bl.created_by = u.user_id "
                     "ORDER BY bl.created_at DESC, bl.backup_id DESC LIMIT %s OFFSET %s", (limit, offset))
         return cur.fetchall(), total
+
+
+# ---- dashboard ---------------------------------------------------------------------------------------------------------------------------------
+BACKUP_WARN_DAYS = 7
+
+
+@require_role("Admin")
+def last_backup_status(actor):
+    """[PANEL-AWE] When was the newest successful backup (including the automatic safety copy before a restore)? warn = none, or older than 7 days."""
+    with db.read() as cur:
+        cur.execute("SELECT NOW() AS now")
+        now = cur.fetchone()["now"]
+        cur.execute("SELECT created_at, filename FROM backup_logs WHERE IFNULL(type, 'Backup') = 'Backup' AND status = 'Success' "
+                    "ORDER BY created_at DESC, backup_id DESC LIMIT 1")
+        row = cur.fetchone()
+    if not row or row["created_at"] is None:
+        return {"last": None, "filename": None, "age_days": None, "warn": True, "warn_after_days": BACKUP_WARN_DAYS}
+    age = max(0.0, (now - row["created_at"]).total_seconds() / 86400.0)
+    return {"last": row["created_at"], "filename": row["filename"], "age_days": round(age, 1), "warn": age > BACKUP_WARN_DAYS,
+            "warn_after_days": BACKUP_WARN_DAYS}
