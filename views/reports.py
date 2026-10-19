@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import threading
 from views.ui_thread import UiMixin
 from tkinter import messagebox
 from database import get_connection
@@ -11,7 +12,7 @@ matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from services.errors import friendly_message
-from services import report_service as rs
+from services import report_service as rs, anomaly
 from views.paged_table import list_table
 from utils.pdf_table import render_pdf
 
@@ -69,7 +70,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         self.seg_btn = ctk.CTkSegmentedButton(
             tab_bar,
             values=["▤ Inventory ABC Analysis", "⛭ Tool Usage Report", "🖹 Employee Activity",
-                    "📋 Project Allocation", "⚠ Damage & Loss", "⭣ Low Stock", "⧖ Overdue Transactions"],
+                    "📋 Project Allocation", "⚠ Damage & Loss", "⭣ Low Stock", "⧖ Overdue Transactions", "🔎 Anomalies"],
             variable=self.tab_var,
             fg_color="#F0F0F0",
             selected_color="#1E4528",
@@ -205,6 +206,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             self.render_low_stock_tab()
         elif selected == "⧖ Overdue Transactions":
             self.render_overdue_tab()
+        elif selected == "🔎 Anomalies":
+            self.render_anomaly_tab()
 
     # ==========================================
     # TAB 1: ABC Analysis 
@@ -1072,6 +1075,61 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                        empty_text="✓ No overdue transactions found.", font_size=11, cell_pady=10, uniform="ov_cols", header_bg="#D8000C")
 
         import threading
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    # ==========================================
+    # [PANEL-AWE] TAB 8: Anomalies & Recommendations
+    # ==========================================
+    def render_anomaly_tab(self):
+        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame.grid(row=0, column=0, sticky="nsew")
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_rowconfigure(2, weight=1)
+        top = ctk.CTkFrame(frame, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
+        ctk.CTkLabel(top, text="Anomalies & Recommendations", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
+        self._anomaly_summary = ctk.CTkLabel(frame, text="", font=("Inter", 11), text_color="gray", wraplength=900, justify="left")
+        self._anomaly_summary.grid(row=1, column=0, sticky="w", padx=30, pady=(0, 6))
+        scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
+        scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
+        loading = ctk.CTkLabel(scroll, text="Analysing…", text_color="gray", font=("Inter", 12))
+        loading.pack(pady=40)
+
+        def _fetch():
+            try:
+                result = anomaly.analyse(self.user_info)
+                counts = anomaly.blocked_attempts_summary(self.user_info)
+            except Exception as e:
+                self.post_ui(lambda err=e: scroll.winfo_exists() and self._show_error(scroll, friendly_message(err)))
+                return
+            self.post_ui(lambda: _render(result, counts))
+
+        def _render(result, counts):
+            if not self.winfo_exists() or not scroll.winfo_exists():
+                return
+            loading.destroy()
+            self._anomaly_data = result
+            self._anomaly_summary.configure(text=(
+                f"Refused issuances in the last {anomaly.WINDOW_DAYS} days: {counts['out_of_stock']} out of stock, {counts['over_quota']} over the "
+                f"approved quantity, {counts['past_end']} after the project ended.  Ranked by estimated peso impact; every line shows the numbers behind it."))
+            recs = result["recommendations"]
+            if not recs:
+                ctk.CTkLabel(scroll, text="✓ Nothing unusual: no damage outliers, no Category A bottlenecks, no overdue clusters.",
+                             text_color="gray", font=("Inter", 12)).pack(pady=30)
+                return
+            colors = {"procure": "#2980B9", "damage": "#D8000C", "overdue": "#E67E22"}
+            for i, r in enumerate(recs, start=1):
+                card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
+                card.pack(fill="x", padx=10, pady=(0, 8))
+                head = ctk.CTkFrame(card, fg_color="transparent")
+                head.pack(fill="x", padx=14, pady=(8, 2))
+                ctk.CTkLabel(head, text=f"{i}. {r['title']}", font=("Inter", 12, "bold"), text_color=colors.get(r["kind"], "#1A1A1A")).pack(side="left")
+                ctk.CTkLabel(head, text=f"≈ P{r['peso_impact']:,.2f}", font=("Inter", 12, "bold"), text_color="#1E4528").pack(side="right")
+                ctk.CTkLabel(card, text=r["text"], font=("Inter", 11), text_color="#1A1A1A", wraplength=820, justify="left").pack(anchor="w", padx=14, pady=(0, 4))
+                for line in r["evidence"]:
+                    ctk.CTkLabel(card, text=f"   • {line}", font=("Inter", 10), text_color="#555555", justify="left").pack(anchor="w", padx=14)
+                ctk.CTkFrame(card, height=6, fg_color="transparent").pack()
+
         threading.Thread(target=_fetch, daemon=True).start()
 
     # ==========================================

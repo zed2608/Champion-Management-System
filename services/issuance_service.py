@@ -14,6 +14,7 @@ from decimal import Decimal
 
 from db import db
 from services import validators as v
+from services import anomaly
 from services.errors import Conflict, NotFound, ServiceError
 from services.security import require_role
 from services.stock_ledger import (InsufficientStock, lock_inventory, refresh_tool_condition, return_units, take_stock)
@@ -22,6 +23,15 @@ from services.tool_cache import tool_cache
 STAFF = ("Admin", "Staff")
 CONDITIONS = ("Good", "Needs Repair", "Damaged", "Lost")
 ISSUABLE_PROJECT_STATUSES = ("Approved", "Ongoing")
+
+
+class Blocked(Conflict):
+    """[PANEL-AWE] A refusal worth counting (out of stock, over the approved quantity, project ended). It is still an ordinary Conflict for
+    every caller; ``reason`` and the numbers are also written to ``issuance_attempts`` so the anomaly detector can see the demand we turned away."""
+
+    def __init__(self, reason, message, tool_id=None, quantity=None, available=None):
+        super().__init__(message)
+        self.reason, self.tool_id, self.quantity, self.available = reason, tool_id, quantity, available
 
 
 def _is_whole_only(item_type) -> bool:
@@ -135,9 +145,10 @@ def lookup_tool(actor, scanned) -> ToolInfo:
     if archived:
         raise Conflict(f"'{info.name}' is archived and cannot be issued.")
     if info.available <= 0:
-        if info.in_maintenance > 0:
-            raise Conflict(f"'{info.name}' cannot be issued: all remaining units are in maintenance.")
-        raise Conflict(f"'{info.name}' is currently out of stock.")
+        why = (f"'{info.name}' cannot be issued: all remaining units are in maintenance." if info.in_maintenance > 0
+               else f"'{info.name}' is currently out of stock.")
+        anomaly.log_attempt("out_of_stock", tool_id=info.tool_id, actor_id=actor["user_id"], quantity=1, available=info.available, detail="scan")
+        raise Blocked("out_of_stock", why, info.tool_id, 1, info.available)
     return info
 
 
@@ -180,7 +191,7 @@ def issue(actor, borrower_id, project_id, cart, purpose) -> IssueResult:
         if proj["status"] not in ISSUABLE_PROJECT_STATUSES:
             raise Conflict(f"Project is {proj['status']}; tools can only be issued to Approved or Ongoing projects.")
         if proj["end_date"] is not None and proj["end_date"] < proj["today"]:
-            raise Conflict("This project has ended; tools cannot be issued to it.")
+            raise Blocked("past_end", "This project has ended; tools cannot be issued to it.")
         cur.execute("SELECT 1 AS x FROM project_workers WHERE project_id = %s AND user_id = %s", (project_id, borrower_id))
         if not cur.fetchone():
             raise Conflict("This employee is not assigned to the selected project.")
@@ -204,11 +215,11 @@ def issue(actor, borrower_id, project_id, cart, purpose) -> IssueResult:
                         "AND type = 'Issue' AND status = 'Active'", (project_id, tid))
             deployed = _num(cur.fetchone()["d"])
             if deployed + qty > reqs[tid]["quantity"]:
-                raise Conflict(f"Cannot issue {v.fmt_qty(qty)} x '{row['name']}': approved {v.fmt_qty(reqs[tid]['quantity'])}, "
-                               f"already deployed {v.fmt_qty(deployed)}.")
+                raise Blocked("over_quota", f"Cannot issue {v.fmt_qty(qty)} x '{row['name']}': approved {v.fmt_qty(reqs[tid]['quantity'])}, "
+                              f"already deployed {v.fmt_qty(deployed)}.", tid, qty, row["quantity_available"])
             if qty > row["quantity_available"]:
                 if row["quantity_in_maintenance"] > 0 and row["quantity_available"] <= 0:
-                    raise Conflict(f"'{row['name']}': all remaining units are in maintenance.")
+                    raise Blocked("out_of_stock", f"'{row['name']}': all remaining units are in maintenance.", tid, qty, row["quantity_available"])
                 raise InsufficientStock(tid, qty, row["quantity_available"])
 
         # -- writes
@@ -244,7 +255,16 @@ def issue(actor, borrower_id, project_id, cart, purpose) -> IssueResult:
             res.project_now_ongoing = cur.rowcount == 1
         return res
 
-    return db.run_in_transaction(work)
+    try:
+        return db.run_in_transaction(work)
+    except Blocked as e:                                                  # [PANEL-AWE] remember the demand we turned away
+        anomaly.log_attempt(e.reason, tool_id=e.tool_id, project_id=project_id, borrower_id=borrower_id, actor_id=actor["user_id"],
+                            quantity=e.quantity, available=e.available, detail=str(e))
+        raise
+    except InsufficientStock as e:
+        anomaly.log_attempt("out_of_stock", tool_id=e.tool_id, project_id=project_id, borrower_id=borrower_id, actor_id=actor["user_id"],
+                            quantity=e.requested, available=e.available, detail=str(e))
+        raise
 
 
 # =====================================================================================================================

@@ -64,6 +64,24 @@ CREATE TABLE IF NOT EXISTS category_service_defaults (
   CONSTRAINT chk_csd_hours CHECK (service_interval_hours > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- [PANEL-AWE] Every refused issuance (out of stock, over the approved quantity, project ended). The anomaly detector reads this to see the
+-- demand the store turned away. No foreign keys on purpose: a log row must never block anything.
+CREATE TABLE IF NOT EXISTS issuance_attempts (
+  attempt_id    INT AUTO_INCREMENT PRIMARY KEY,
+  tool_id       INT NULL,
+  project_id    INT NULL,
+  user_id       INT NULL,
+  actor_id      INT NULL,
+  quantity      DECIMAL(10,2) NULL,
+  available     DECIMAL(10,2) NULL,
+  reason        VARCHAR(20) NOT NULL,
+  detail        VARCHAR(255) NULL,
+  attempted_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_attempt_tool (tool_id, attempted_at),
+  KEY idx_attempt_ts (attempted_at),
+  CONSTRAINT chk_attempt_reason CHECK (reason IN ('out_of_stock', 'over_quota', 'past_end'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS inventory (
   inventory_id             INT AUTO_INCREMENT PRIMARY KEY,
   tool_id                  INT NOT NULL,

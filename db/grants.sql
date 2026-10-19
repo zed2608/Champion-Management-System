@@ -51,6 +51,7 @@ GRANT UPDATE (status)                 ON `{{DB}}`.`projects`             TO '{{S
 GRANT UPDATE (status)                 ON `{{DB}}`.`project_requirements` TO '{{STAFF_USER}}'@'{{HOST}}';   -- mark Fulfilled
 GRANT INSERT                          ON `{{DB}}`.`tool_issues`          TO '{{STAFF_USER}}'@'{{HOST}}';
 GRANT INSERT                          ON `{{DB}}`.`help_tickets`         TO '{{STAFF_USER}}'@'{{HOST}}';
+GRANT INSERT                          ON `{{DB}}`.`issuance_attempts`    TO '{{STAFF_USER}}'@'{{HOST}}';   -- refused issuances are counted
 
 -- Own profile + login bookkeeping. role, employee_id and archived_at are NOT updatable: no self-promotion.
 GRANT UPDATE (full_name, email, password_hash, failed_attempts, reset_requested, status) ON `{{DB}}`.`user` TO '{{STAFF_USER}}'@'{{HOST}}';

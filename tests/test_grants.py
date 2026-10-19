@@ -68,6 +68,8 @@ def test_staff_can_do_the_daily_work(accounts):
     allowed(s, "INSERT INTO help_tickets (user_id, subject, message) VALUES (1, 's', 'm')")
     allowed(s, "UPDATE `user` SET full_name = 'Stacy', failed_attempts = 1 WHERE employee_id = 'STF-2026-001'")   # profile + lockout bookkeeping
     allowed(s, "CALL sp_log_action(1, 'Viewed', 'X', 'y', NULL)")                          # the chained audit writer
+    allowed(s, "INSERT INTO issuance_attempts (tool_id, reason) VALUES (1, 'out_of_stock')")   # a refused issuance is counted
+    denied(s, "SELECT * FROM issuance_attempts")
 
 
 def test_staff_cannot_escalate_or_destroy(accounts):

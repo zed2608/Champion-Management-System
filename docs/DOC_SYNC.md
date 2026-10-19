@@ -200,3 +200,10 @@ weighted by quantity. The service interval is the tool's own, else its category'
 ticket as "Good", restarts its clock. "Due in N days" uses the last 30 days of use; a tool not used in 30 days shows "not used lately" instead of a made-up date.
 Flags: 90% or more of the interval used; damage rate (tickets + damaged/lost returns without a ticket, per 100 hours out) more than 2 standard
 deviations above the category average (needs at least 3 tools with 10+ hours). Only Equipment is forecast; consumables have no wear.
+
+## M. Anomaly and bottleneck detector (Phase 4 step 3) [PANEL-AWE]
+Reports > "Anomalies" (Admin). Every refused issuance (out of stock, over the approved quantity, project ended) is now written to `issuance_attempts`
+(re-run `python -m db.apply_grants` so Staff accounts may insert there). Findings: (a) damage/loss rate per project, client and worker, flagged when
+above Q3 + 1.5 x IQR of the group (needs 4+ peers, 5+ units issued, 2+ bad units; the data window is 180 days); (b) Category A tools (ABC top 20%) whose
+blocked attempts in the last 30 days exceed total stock; (c) 3+ overdue issuances held by one project or worker. Recommendations are ranked by peso impact
+(`tool.price` x units) and every one lists its numbers. The method is a robust outlier rule on purpose: with few projects a z-score is dominated by the outlier itself.
