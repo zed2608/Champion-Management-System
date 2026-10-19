@@ -7,7 +7,7 @@ from PIL import Image
 import bcrypt
 from database import get_connection, log_action
 from dashboard import DashboardApp
-from database import log_action
+from database import log_action, start_session
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 from services.errors import friendly_message
@@ -256,6 +256,7 @@ class LoginApp(ctk.CTk):
             else:
                 # -> LOG ACTION GOES HERE <-
                 try:
+                    start_session(user['user_id'])           # [PANEL-AWE] session id travels with every audit entry of this login
                     log_action(user['user_id'], "Login", "Authentication",
                                f"User '{user['full_name']}' logged in.")
                 except Exception as e:

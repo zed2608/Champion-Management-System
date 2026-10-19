@@ -13,6 +13,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from services.errors import friendly_message
 from services import report_service as rs
 from views.paged_table import list_table
+from utils.pdf_table import render_pdf
 
 
 def _fmt(x) -> str:
@@ -1179,97 +1180,26 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             return "Overdue Transactions Report", ["Emp ID", "Worker", "Tool", "Project", "Due Date", "Days Overdue", "Issued On", "Units", "Unit Price"], rows
         return "Report", [], []
 
+    def _export_document(self, report_type, sd, ed):
+        """(title, sections, notes): sections = [(heading, labels, rows)]. Every type uses the same query functions as its screen."""
+        title, labels, rows = self._export_rows(report_type, sd, ed)
+        return title, [(None, labels, rows)], []
+
     def export_pdf(self, report_type, criteria_note=None):
         try:
-            canvas_width = 900
-            line_h = 28
-            timestamp = datetime.now().strftime("%B %d, %Y %I:%M %p")
-
             sd, ed, valid = self.get_and_validate_dates()
             if not valid:
                 return
             try:
-                title, col_labels, rows = self._export_rows(report_type, sd, ed)
+                title, sections, notes = self._export_document(report_type, sd, ed)
             except Exception as e:
                 messagebox.showerror("Export Error", friendly_message(e), parent=self.winfo_toplevel())
                 return
-
-            total_rows = len(rows)
             criteria_parts = ["Period: " + (f"{sd or 'beginning'} to {ed or 'today'}" if (sd or ed) else "All Time (No filters applied)")]
             if criteria_note:
                 criteria_parts.append(f"Notes: {criteria_note}")
-            criteria = "  |  ".join(criteria_parts)
-
-            try:
-                font_title = ImageFont.truetype("arialbd.ttf", 26)
-                font_header = ImageFont.truetype("arialbd.ttf", 16)
-                font_body = ImageFont.truetype("arial.ttf", 14)
-            except IOError:
-                font_title = font_header = font_body = ImageFont.load_default()
-
-            col_count = len(col_labels)
-            col_w = (canvas_width - 60) // col_count
-            col_x = [30 + i * col_w for i in range(col_count)]
-
-            def wrap_cell(text, font, max_w):
-                words = str(text).split()
-                lines, cur = [], ""
-                for word in words:
-                    test = (cur + " " + word).strip()
-                    try:
-                        w = font.getlength(test)
-                    except AttributeError:
-                        w = len(test) * 8
-                    if w <= max_w - 4:
-                        cur = test
-                    else:
-                        if cur:
-                            lines.append(cur)
-                        cur = word
-                if cur:
-                    lines.append(cur)
-                return lines or [""]
-
-            wrapped_rows = []
-            for row in rows:
-                wrapped = [wrap_cell(cell, font_body, col_w) for cell in row]
-                row_h = max(len(lines) for lines in wrapped) * line_h
-                wrapped_rows.append((wrapped, row_h))
-
-            total_height = sum(rh for _, rh in wrapped_rows)
-            canvas_height = 185 + total_height + 80
-            canvas = Image.new("RGB", (canvas_width, canvas_height), "white")
-            draw = ImageDraw.Draw(canvas)
-
-            draw.text((30, 20), "CHAMPION FINE TOOLING CORPORATION", fill="#1E4528", font=font_title)
-            draw.text((30, 60), title, fill="black", font=font_header)
-            draw.text((30, 90), f"Generated: {timestamp}", fill="gray", font=font_body)
-            draw.text((30, 115), criteria, fill="#444444", font=font_body)
-            draw.line((30, 145, canvas_width - 30, 145), fill="#1E4528", width=2)
-
-            y = 160
-            for j, label in enumerate(col_labels):
-                draw.text((col_x[j], y), label, fill="#1E4528", font=font_header)
-            draw.line((30, y + 20, canvas_width - 30, y + 20), fill="#CCCCCC", width=1)
-            y += 28
-
-            for r_idx, (wrapped, row_h) in enumerate(wrapped_rows):
-                fill = "#F9FAFB" if r_idx % 2 == 0 else "white"
-                draw.rectangle([30, y - 2, canvas_width - 30, y + row_h - 4], fill=fill)
-                for j, lines in enumerate(wrapped):
-                    for li, line in enumerate(lines):
-                        draw.text((col_x[j], y + li * line_h), line, fill="black", font=font_body)
-                y += row_h
-
-            draw.line((30, y + 10, canvas_width - 30, y + 10), fill="#CCCCCC", width=1)
-            draw.text((30, y + 20), f"Total Records: {total_rows}", fill="gray", font=font_body)
-
-            temp_dir = tempfile.gettempdir()
-            fname = f"Report_{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-            fpath = os.path.join(temp_dir, fname)
-            canvas.save(fpath, "PDF", resolution=100.0)
+            fpath = os.path.join(tempfile.gettempdir(), f"Report_{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
+            render_pdf(title, "  |  ".join(criteria_parts), sections, fpath, notes)
             os.startfile(fpath)
-
         except Exception as e:
-            messagebox.showerror("Export Error", f"Failed to generate PDF:\n{e}",
-                                 parent=self.winfo_toplevel())
+            messagebox.showerror("Export Error", f"Failed to generate PDF:\n{e}", parent=self.winfo_toplevel())

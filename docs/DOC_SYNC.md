@@ -177,3 +177,18 @@ The built-in guide text now says 15 minutes of inactivity. An existing database 
 
 ## J. Logs and error codes (see section D)
 `logs\app.log` is created next to the program; it is git-ignored and rotates at 1 MB (5 old files kept).
+
+## K. Audit chain (Phase 4 step 1) [PANEL-AWE]
+- The manuscript says the audit log cannot be altered unnoticed. It is now true: every `system_logs` row stores `prev_hash` and `row_hash`
+  (SHA-256 over prev_hash, log_id, user_id, action, module, details, timestamp, session id). Differences from the formula you gave, all on purpose:
+  fields are joined with a separator character (so "ab"+"c" differs from "a"+"bc"); the timestamp is written in UTC (so the hash does not depend
+  on a PC's time zone); the session id is inside the hash (otherwise it could be edited undetected).
+- The old "keep only the newest 10,000 rows" deletion is gone. Rows older than the newest 20,000 are MOVED to `system_logs_archive`
+  (env `CHAMPION_AUDIT_KEEP_LIVE`); the chain runs through the archive, so history is never lost. The Activity Log tab shows the live part.
+- MySQL itself refuses UPDATE and DELETE on the audit log (a row can only be deleted after an identical copy is in the archive).
+  The dashboard feed for Staff still works through the existing view. Staff accounts now append only through a stored procedure
+  (`sp_log_action`); re-run `python -m db.apply_grants` so their account gets EXECUTE instead of INSERT.
+- Limit worth stating at the defense: someone with full database-administrator rights can still drop the triggers or the whole table. The chain
+  does not stop that; it makes it DETECTABLE (Verify Audit Chain reports the first broken entry, or that the newest entries were removed).
+- Each login now has a session id, stored with every entry of that login.
+- Tracking > Activity Log has "Verify Audit Chain" and "Audit Report PDF" (the verdict and the chain head hash are printed on the PDF).

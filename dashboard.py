@@ -6,7 +6,7 @@ import sys
 from tkinter import messagebox
 from datetime import datetime
 from PIL import Image
-from database import get_connection, log_action
+from database import get_connection, log_action, end_session
 
 # Data Visualization
 import matplotlib.pyplot as plt
@@ -360,6 +360,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         self._return_to_login()
 
     def _return_to_login(self):
+        end_session()
         self.destroy()
         self.master.deiconify()
         self.master.pass_entry.delete(0, "end")

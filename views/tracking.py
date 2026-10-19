@@ -3,7 +3,12 @@ from views.ui_thread import UiMixin
 from tkinter import messagebox
 from database import get_connection, log_action
 from datetime import datetime
+import os
+import tempfile
+import threading
+from services import audit_chain
 from services.errors import friendly_message
+from utils.pdf_table import render_pdf
 from services.paging import fetch_page
 from services.validators import like_pattern
 from views.paged_table import PagedTable
@@ -383,6 +388,16 @@ class TrackingView(UiMixin, ctk.CTkFrame):
             self._act_timer = self.after(300, self.do_act_search)
         self.act_search_var.trace_add("write", on_act_search)
 
+        # [PANEL-AWE] tamper-evidence: recompute the hash chain on demand and print it
+        self.verify_btn = ctk.CTkButton(filter_row, text="🔐 Verify Audit Chain", width=150, fg_color="#1E4528", hover_color="#14301C",
+                                        font=("Inter", 11, "bold"), command=self.verify_audit_chain)
+        self.verify_btn.pack(side="left", padx=(10, 5))
+        self.audit_pdf_btn = ctk.CTkButton(filter_row, text="⎙ Audit Report PDF", width=140, fg_color="#E0E0E0", text_color="black",
+                                           hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=self.export_audit_pdf)
+        self.audit_pdf_btn.pack(side="left", padx=5)
+        self.chain_lbl = ctk.CTkLabel(frame, text="", font=("Inter", 11, "bold"), text_color="gray", wraplength=900, justify="left")
+        self.chain_lbl.pack(anchor="w", padx=20, pady=(0, 4))
+
         self.act_summary = ctk.CTkLabel(frame, text="", font=(
             "Inter", 11, "bold"), text_color="#1E4528")
         self.act_summary.pack(anchor="w", padx=20, pady=(0, 5))
@@ -396,6 +411,72 @@ class TrackingView(UiMixin, ctk.CTkFrame):
     ACT_COLORS = {"Login": "#2ECC71", "Logout": "#E74C3C", "Added": "#3498DB", "Edited": "#F39C12", "Archived": "#95A5A6", "Searched": "#9B59B6",
                   "Viewed": "#1A1A1A", "Issued": "#27AE60", "Retrieved": "#16A085", "Submitted": "#2980B9", "Approved": "#27AE60",
                   "Flagged": "#D8000C", "Resolved": "#2ECC71"}
+
+    # ---- [PANEL-AWE] audit chain ---------------------------------------------------------------------------------------------------
+    def verify_audit_chain(self):
+        self.verify_btn.configure(state="disabled", text="Checking…")
+        self.chain_lbl.configure(text="Recomputing every hash, please wait…", text_color="gray")
+
+        def work():
+            try:
+                result = audit_chain.verify_chain(self.user_info)
+            except Exception as e:
+                msg = friendly_message(e)
+                self.post_ui(lambda: self._chain_done(None, msg))
+                return
+            self.post_ui(lambda: self._chain_done(result, None))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _chain_done(self, result, error):
+        self.verify_btn.configure(state="normal", text="🔐 Verify Audit Chain")
+        if error:
+            self.chain_lbl.configure(text=f"Could not verify: {error}", text_color="#D8000C")
+            return
+        head = f"   Head: {result['head_hash']}" if result.get("head_hash") else ""
+        self.chain_lbl.configure(text=("✓ " if result["intact"] else "✗ ") + audit_chain.describe(result) + head,
+                                 text_color="#1E4528" if result["intact"] else "#D8000C")
+
+    def export_audit_pdf(self):
+        self.audit_pdf_btn.configure(state="disabled", text="Preparing…")
+
+        def work():
+            try:
+                data = audit_chain.audit_report(self.user_info)
+            except Exception as e:
+                msg = friendly_message(e)
+                self.post_ui(lambda: self._audit_pdf_done(None, msg))
+                return
+            self.post_ui(lambda: self._audit_pdf_done(data, None))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _audit_pdf_done(self, data, error):
+        self.audit_pdf_btn.configure(state="normal", text="⎙ Audit Report PDF")
+        if error:
+            messagebox.showerror("Export Error", error, parent=self.winfo_toplevel())
+            return
+        try:
+            path = self.write_audit_pdf(data)
+            os.startfile(path)
+        except Exception as e:
+            messagebox.showerror("Export Error", friendly_message(e), parent=self.winfo_toplevel())
+
+    @staticmethod
+    def audit_pdf_sections(data):
+        """(notes, sections) for the printed audit report: the chain verdict and head hash first, then the newest entries."""
+        res = data["verify"]
+        verdict = [["Result", audit_chain.describe(res)], ["Entries checked", str(res["checked"])],
+                   ["Chain head (SHA-256)", res.get("head_hash") or "—"],
+                   ["First broken entry", "none" if res["intact"] else f"#{res['first_broken_log_id']}"]]
+        entries = [[str(r["log_id"]), r["ts"].strftime("%Y-%m-%d %H:%M:%S") if hasattr(r["ts"], "strftime") else str(r["ts"] or ""),
+                    r["employee"], r["action_type"] or "", r["module"] or "", r["details"], (r["session_id"] or "")[:8]] for r in data["rows"]]
+        notes = ["AUDIT CHAIN " + ("INTACT" if res["intact"] else "BROKEN") + " - head " + (res.get("head_hash") or "-")[:16] + "…"]
+        return notes, [("Audit chain verification", ["Check", "Value"], verdict),
+                       (f"Newest {len(entries)} audit entries", ["ID", "Time", "Employee", "Action", "Module", "Details", "Session"], entries)]
+
+    def write_audit_pdf(self, data):
+        notes, sections = self.audit_pdf_sections(data)
+        path = os.path.join(tempfile.gettempdir(), f"Audit_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
+        return render_pdf("Audit Trail Report", "Tamper-evident hash-chained audit log", sections, path, notes)
 
     def do_act_search(self):
         self.load_activity()

@@ -55,8 +55,9 @@ GRANT INSERT                          ON `{{DB}}`.`help_tickets`         TO '{{S
 -- Own profile + login bookkeeping. role, employee_id and archived_at are NOT updatable: no self-promotion.
 GRANT UPDATE (full_name, email, password_hash, failed_attempts, reset_requested, status) ON `{{DB}}`.`user` TO '{{STAFF_USER}}'@'{{HOST}}';
 
--- Audit log: Staff may only APPEND (no SELECT, UPDATE or DELETE).
-GRANT INSERT ON `{{DB}}`.`system_logs` TO '{{STAFF_USER}}'@'{{HOST}}';
+-- Audit log: Staff may only APPEND, and only through the chained stored procedure (no direct INSERT, SELECT, UPDATE or DELETE on the table).
+GRANT EXECUTE ON PROCEDURE `{{DB}}`.`sp_log_action` TO '{{STAFF_USER}}'@'{{HOST}}';
+GRANT EXECUTE ON PROCEDURE `{{DB}}`.`sp_archive_audit` TO '{{STAFF_USER}}'@'{{HOST}}';
 
 -- Deliberately NOT granted to Staff: DELETE anywhere, INSERT/UPDATE on tool/inventory rows beyond the columns above,
 -- INSERT/UPDATE on projects (Project Management is read-only for Staff), any DDL, id_sequences, backup_logs.

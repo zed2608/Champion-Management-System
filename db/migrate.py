@@ -388,6 +388,20 @@ def step_workers_without_password(ctx: Ctx):
         ctx.note(f"cleared the shared password hash of {n} Worker accounts")
 
 
+def step_audit_chain(ctx: Ctx):
+    """[PANEL-AWE] Chain every existing audit row once, in order, and create the chain head. Safe to re-run: it only ever
+    hashes rows that have no hash and come after the last hashed row."""
+    from db import audit_core
+    ctx.q("START TRANSACTION")
+    try:
+        n = audit_core.backfill(ctx.cur)
+        ctx.q("COMMIT")
+    except Exception:
+        ctx.q("ROLLBACK")
+        raise
+    ctx.note(f"audit log: {n} existing entries chained")
+
+
 STEPS = [
     (1, "baseline_tables", step_baseline_tables, True),
     (2, "rename_requirement_id", step_rename_requirement_id, True),
@@ -400,6 +414,7 @@ STEPS = [
     (9, "seed_project_transitions", step_seed_transitions, True),
     (10, "project_transitions_exact", step_sync_transitions, False),
     (11, "workers_without_password", step_workers_without_password, False),
+    (12, "audit_chain_backfill", step_audit_chain, False),
 ]
 
 

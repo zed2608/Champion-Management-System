@@ -13,7 +13,7 @@ pytestmark = pytest.mark.db
 EXPECTED_TABLES = {
     "user", "id_sequences", "tool", "inventory", "projects", "project_transitions", "project_requirements",
     "project_workers", "transaction", "tool_issues", "system_logs", "backup_logs", "help_guides", "help_faqs",
-    "system_requirements", "help_tickets", "schema_migrations", "schema_meta", "v_activity_feed"}
+    "system_requirements", "help_tickets", "schema_migrations", "schema_meta", "v_activity_feed", "audit_chain_head", "system_logs_archive"}
 QUIET = dict(log=lambda *_: None)
 
 
@@ -41,7 +41,7 @@ def test_fresh_install_creates_everything_and_rerun_is_a_noop(make_db):
     report = migrate.run(d, require_backup=False, **QUIET)
     assert {n for n, _ in report} >= {"baseline_tables", "triggers"}
     assert {r["t"] for r in _q(d, "SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE()")} == EXPECTED_TABLES
-    assert len(_q(d, "SELECT 1 FROM information_schema.triggers WHERE trigger_schema = DATABASE()")) == 10
+    assert len(_q(d, "SELECT 1 FROM information_schema.triggers WHERE trigger_schema = DATABASE()")) == 14
     assert migrate.run(d, require_backup=False, **QUIET) == []          # nothing pending: nothing touched
     assert migrate.check_schema_current(d) == (True, "")
     assert len(_q(d, "SELECT * FROM project_transitions")) == len(migrate.TRANSITIONS)
@@ -222,7 +222,7 @@ def test_legacy_upgrade_matches_fresh_install_and_is_rerunnable(migrated_legacy,
     migrate.run(fresh, require_backup=False, **QUIET)
     assert _columns(d) == _columns(fresh), "an upgraded database must have exactly the shape of a fresh one"
     assert migrate.run(d, require_backup=False, **QUIET) == []
-    assert len(_q(d, "SELECT 1 FROM information_schema.triggers WHERE trigger_schema = DATABASE()")) == 10
+    assert len(_q(d, "SELECT 1 FROM information_schema.triggers WHERE trigger_schema = DATABASE()")) == 14
 
 
 def test_editing_schema_sql_reaches_already_migrated_databases(fresh_db, monkeypatch, tmp_path):

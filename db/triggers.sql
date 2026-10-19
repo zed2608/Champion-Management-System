@@ -179,3 +179,94 @@ BEGIN
     END IF;
   END IF;
 END
+
+-- //
+-- [PANEL-AWE] AUDIT LOG IS APPEND-ONLY.
+--   * a row can be filled in ONCE (the hash columns), never edited afterwards
+--   * a row can be deleted only after an identical copy exists in system_logs_archive (this is how old rows are moved, never lost)
+--   * the archive itself accepts neither UPDATE nor DELETE
+DROP TRIGGER IF EXISTS trg_system_logs_bu
+-- //
+CREATE TRIGGER trg_system_logs_bu BEFORE UPDATE ON system_logs FOR EACH ROW
+BEGIN
+  IF OLD.row_hash IS NOT NULL OR NEW.row_hash IS NULL
+     OR NOT (NEW.log_id <=> OLD.log_id AND NEW.user_id <=> OLD.user_id AND NEW.action_type <=> OLD.action_type
+             AND NEW.module <=> OLD.module AND NEW.details <=> OLD.details AND NEW.`timestamp` <=> OLD.`timestamp`
+             AND NEW.session_id <=> OLD.session_id) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CHAMPION: The audit log is append-only; entries cannot be changed.';
+  END IF;
+END
+-- //
+DROP TRIGGER IF EXISTS trg_system_logs_bd
+-- //
+CREATE TRIGGER trg_system_logs_bd BEFORE DELETE ON system_logs FOR EACH ROW
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM system_logs_archive a
+                 WHERE a.log_id = OLD.log_id AND a.row_hash <=> OLD.row_hash AND a.prev_hash <=> OLD.prev_hash
+                   AND a.details <=> OLD.details AND a.action_type <=> OLD.action_type AND a.module <=> OLD.module) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CHAMPION: The audit log is append-only; entries cannot be deleted.';
+  END IF;
+END
+-- //
+DROP TRIGGER IF EXISTS trg_system_logs_archive_bu
+-- //
+CREATE TRIGGER trg_system_logs_archive_bu BEFORE UPDATE ON system_logs_archive FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CHAMPION: The audit archive is append-only; entries cannot be changed.';
+END
+-- //
+DROP TRIGGER IF EXISTS trg_system_logs_archive_bd
+-- //
+CREATE TRIGGER trg_system_logs_archive_bd BEFORE DELETE ON system_logs_archive FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CHAMPION: The audit archive is append-only; entries cannot be deleted.';
+END
+-- //
+-- [PANEL-AWE] The ONLY way the application writes the audit log. SQL SECURITY DEFINER lets a Staff account append without any
+-- privilege on system_logs itself. The head row is locked first, so two terminals take turns and the chain can never fork.
+-- The hash text is built exactly like db/audit_core.py::row_digest.
+DROP PROCEDURE IF EXISTS sp_log_action
+-- //
+CREATE PROCEDURE sp_log_action(IN p_user INT, IN p_action VARCHAR(100), IN p_module VARCHAR(100), IN p_details TEXT, IN p_session VARCHAR(36))
+SQL SECURITY DEFINER
+BEGIN
+  DECLARE v_prev CHAR(64);
+  DECLARE v_id BIGINT;
+  DECLARE v_ts TIMESTAMP;
+  DECLARE v_hash CHAR(64);
+  SELECT head_hash INTO v_prev FROM audit_chain_head WHERE id = 1 FOR UPDATE;
+  IF v_prev IS NULL THEN
+    SET v_prev = REPEAT('0', 64);
+    INSERT INTO audit_chain_head (id, head_hash, last_log_id) VALUES (1, v_prev, 0);
+  END IF;
+  SET v_ts = NOW();
+  INSERT INTO system_logs (user_id, action_type, module, details, `timestamp`, session_id, prev_hash)
+  VALUES (p_user, p_action, p_module, p_details, v_ts, p_session, v_prev);
+  SET v_id = LAST_INSERT_ID();
+  SET v_hash = SHA2(CONCAT_WS(CHAR(31 USING utf8mb4), v_prev, v_id, IFNULL(p_user, ''), IFNULL(p_action, ''), IFNULL(p_module, ''),
+                              IFNULL(p_details, ''), DATE_FORMAT(DATE_ADD('1970-01-01 00:00:00', INTERVAL UNIX_TIMESTAMP(v_ts) SECOND), '%Y-%m-%dT%H:%i:%s'), IFNULL(p_session, '')), 256);
+  UPDATE system_logs SET row_hash = v_hash WHERE log_id = v_id;
+  UPDATE audit_chain_head SET head_hash = v_hash, last_log_id = v_id WHERE id = 1;
+END
+-- //
+-- [PANEL-AWE] Moves old audit rows into system_logs_archive (copy first, then delete; the delete trigger checks the copy exists).
+-- Nothing is ever lost. At most 5000 rows per call; a named lock stops two terminals doing it at once.
+DROP PROCEDURE IF EXISTS sp_archive_audit
+-- //
+CREATE PROCEDURE sp_archive_audit(IN p_keep INT)
+SQL SECURITY DEFINER
+BEGIN
+  DECLARE v_cut BIGINT;
+  DECLARE v_top BIGINT;
+  IF GET_LOCK('champion_audit_archive', 0) = 1 THEN
+    SELECT MAX(log_id) INTO v_top FROM system_logs;
+    IF v_top IS NOT NULL AND v_top - p_keep > 0 THEN
+      SET v_cut = v_top - p_keep;
+      INSERT IGNORE INTO system_logs_archive (log_id, user_id, action_type, module, details, `timestamp`, session_id, prev_hash, row_hash)
+        SELECT log_id, user_id, action_type, module, details, `timestamp`, session_id, prev_hash, row_hash
+        FROM system_logs WHERE log_id <= v_cut ORDER BY log_id LIMIT 5000;
+      DELETE s FROM system_logs s JOIN system_logs_archive a ON a.log_id = s.log_id WHERE s.log_id <= v_cut;
+    END IF;
+    DO RELEASE_LOCK('champion_audit_archive');
+  END IF;
+END

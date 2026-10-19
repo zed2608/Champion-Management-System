@@ -191,9 +191,35 @@ CREATE TABLE IF NOT EXISTS system_logs (
   module       VARCHAR(100) NULL,
   details      TEXT NULL,
   `timestamp`  TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  session_id   VARCHAR(36) NULL,
+  prev_hash    CHAR(64) NULL,
+  row_hash     CHAR(64) NULL,
   KEY idx_user (user_id),
   KEY idx_ts (`timestamp`),
   KEY idx_module (module)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- [PANEL-AWE] Tamper-evident audit trail. Every system_logs row stores the hash of the row before it (prev_hash) and its own hash
+-- (row_hash = SHA-256 over prev_hash, log_id, user_id, action, module, details, timestamp, session). sp_log_action appends rows under a
+-- lock on audit_chain_head so two terminals can never fork the chain. Old rows are MOVED to system_logs_archive (never deleted).
+CREATE TABLE IF NOT EXISTS audit_chain_head (
+  id           TINYINT NOT NULL PRIMARY KEY,
+  head_hash    CHAR(64) NOT NULL,
+  last_log_id  INT NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS system_logs_archive (
+  log_id       INT NOT NULL PRIMARY KEY,
+  user_id      INT NULL,
+  action_type  VARCHAR(100) NULL,
+  module       VARCHAR(100) NULL,
+  details      TEXT NULL,
+  `timestamp`  TIMESTAMP NULL,
+  session_id   VARCHAR(36) NULL,
+  prev_hash    CHAR(64) NULL,
+  row_hash     CHAR(64) NULL,
+  archived_at  TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_arch_ts (`timestamp`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS backup_logs (

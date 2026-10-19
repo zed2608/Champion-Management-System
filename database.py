@@ -53,38 +53,35 @@ def get_connection():
         print(f"Database Connection Error: {err}")
         return None
 
+# [PANEL-AWE] One login = one session id, written into every audit row of that login. This process serves one user at a time.
+_session = {"user_id": None, "sid": None}
+
+
+def start_session(user_id):
+    """Call right after a successful login (before the 'Login' entry is logged). Returns the new session id."""
+    import uuid
+    _session["user_id"], _session["sid"] = user_id, str(uuid.uuid4())
+    return _session["sid"]
+
+
+def end_session():
+    _session["user_id"] = _session["sid"] = None
+
+
+def current_session_id(user_id):
+    if user_id is None or _session["user_id"] != user_id:
+        return None                      # another actor (or nobody) never borrows this login's session
+    return _session["sid"]
+
+
 def log_action(user_id, action_type, module, details):
     """
-    Universal logger — logs ALL system activity.
-    Auto-prunes to keep only the latest 10,000 records (storage safety net for 1 GB DB).
+    Universal logger: records ALL system activity in the tamper-evident audit chain (services/audit_chain.py).
+    Nothing is ever deleted: old rows are moved to system_logs_archive.
     Call this from any module: log_action(user_id, "Viewed", "Inventory", "Opened inventory list")
     """
-    conn = get_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            # 1. Insert the new log
-            cursor.execute(
-                "INSERT INTO system_logs (user_id, action_type, module, details) VALUES (%s, %s, %s, %s)",
-                (user_id, action_type, module, details)
-            )
-            # 2. Storage Safety Net: Keep only the latest 10,000 records to prevent DB bloat
-            #    At ~500 bytes per log, 10,000 logs ≈ 5 MB — negligible on a 1 GB DB.
-            cursor.execute("""
-                DELETE FROM system_logs
-                WHERE log_id NOT IN (
-                    SELECT log_id FROM (
-                        SELECT log_id FROM system_logs ORDER BY timestamp DESC LIMIT 10000
-                    ) foo
-                )
-            """)
-            conn.commit()
-        except Exception as e:
-            print(f"Log Error: {e}")
-        finally:
-            if conn.is_connected():
-                cursor.close()
-                conn.close()
+    from services import audit_chain
+    audit_chain.record(user_id, action_type, module, details, current_session_id(user_id))
 
 
 def generate_id_badge(emp_id, emp_name, emp_role, company_name="CHAMPION", output_dir=None):

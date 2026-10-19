@@ -67,7 +67,7 @@ def test_staff_can_do_the_daily_work(accounts):
     allowed(s, "INSERT INTO tool_issues (tool_id, condition_flag) VALUES (1, 'Damaged')")
     allowed(s, "INSERT INTO help_tickets (user_id, subject, message) VALUES (1, 's', 'm')")
     allowed(s, "UPDATE `user` SET full_name = 'Stacy', failed_attempts = 1 WHERE employee_id = 'STF-2026-001'")   # profile + lockout bookkeeping
-    allowed(s, "INSERT INTO system_logs (user_id, action_type, module, details) VALUES (1, 'Viewed', 'X', 'y')")
+    allowed(s, "CALL sp_log_action(1, 'Viewed', 'X', 'y', NULL)")                          # the chained audit writer
 
 
 def test_staff_cannot_escalate_or_destroy(accounts):
@@ -90,7 +90,9 @@ def test_staff_cannot_escalate_or_destroy(accounts):
 def test_staff_can_only_append_to_the_audit_log(accounts):
     s = accounts(STAFF, STAFF_PW)
     denied(s, "SELECT * FROM system_logs")                                               # the feed view is NOT a way around this
-    allowed(s, "INSERT INTO system_logs (user_id, action_type, module, details) VALUES (1, 'A', 'B', 'C')")
+    allowed(s, "CALL sp_log_action(1, 'A', 'B', 'C', NULL)")                             # append only through the chained procedure
+    denied(s, "INSERT INTO system_logs (user_id, action_type, module, details) VALUES (1, 'A', 'B', 'C')")   # no unchained rows
+    denied(s, "SELECT * FROM audit_chain_head")
     denied(s, "SELECT * FROM system_logs")
     denied(s, "UPDATE system_logs SET details = 'tampered'")
     denied(s, "DELETE FROM system_logs")
