@@ -219,3 +219,8 @@ and by the Refresh button, not by the 15-second auto-refresh.
 Reports now has two more tabs, "Wear" and "Anomalies", each with Export PDF. The PDF is built from the same query functions as the screen
 (`wear_forecast.forecast` / `anomaly.analyse`); the anomaly PDF prints the recommendations, then the numbers behind each one, then the raw findings
 (damage outliers, Category A bottlenecks, overdue clusters). These two reports describe the CURRENT state, so the date filter does not apply to them.
+
+## P. Savings KPI (Phase 4 step 6, optional) [PANEL-AWE]
+A fifth Admin card compares the value of tools logged as Lost or Stolen each month (units on the maintenance ticket x `tool.price`, in the month the ticket
+was raised) with the P10,000 monthly baseline from the cost-benefit analysis: under it is a saving, over it is shown as an overrun in red. It is only as true
+as the logging: a loss nobody recorded is not counted. Baseline: `services/savings.py` (BASELINE_PER_MONTH).

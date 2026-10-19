@@ -84,7 +84,7 @@ def test_admin_insights_collects_all_four_parts(world):
     from services import audit_chain
     audit_chain.record(admin["user_id"], "Viewed", "Test", "one")
     out = ds.admin_insights(admin)
-    assert set(out) == {"backup", "audit", "wear", "recommendations"}
+    assert set(out) == {"backup", "audit", "wear", "recommendations", "savings"}
     assert all("data" in v for v in out.values()), out
     assert out["audit"]["data"]["verified"] and out["audit"]["data"]["intact"] and out["audit"]["data"]["checked"] >= 1
 
@@ -143,7 +143,7 @@ def test_admin_dashboard_shows_the_cards_and_never_waits_for_them(world, monkeyp
     monkeypatch.setattr(ds, "admin_insights", slow)
     root, app = build(d, session, monkeypatch)
     try:
-        assert set(app.ins_labels) == {"backup", "audit", "wear", "recommendations"}
+        assert set(app.ins_labels) == {"backup", "audit", "wear", "recommendations", "savings"}
         assert all(l.cget("text") == "Loading..." for l in app.ins_labels.values())       # the dashboard is up although the data is still being computed
         gate.set()
         assert pump(root, lambda: app.ins_labels["backup"].cget("text") != "Loading...")
@@ -170,3 +170,12 @@ def test_staff_dashboard_has_no_admin_cards_and_never_calls_the_service(world, m
     finally:
         app.destroy()
         root.destroy()
+
+
+def test_savings_card_is_green_under_the_baseline_and_red_over_it():
+    from datetime import date
+    from services import savings
+    ok = texts({"savings": {"data": savings.kpi({"2026-06": 4000}, date(2026, 6, 15), months=1)}})["savings"]
+    assert ok[1] == "#1E4528" and "a saving of P6,000.00" in ok[0]
+    over = texts({"savings": {"data": savings.kpi({"2026-06": 14000}, date(2026, 6, 15), months=1)}})["savings"]
+    assert over[1] == "#D8000C" and "P4,000.00 OVER" in over[0]

@@ -611,10 +611,12 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         grid.pack(fill="x", padx=10, pady=(4, 10))
         grid.grid_columnconfigure((0, 1), weight=1, uniform="ins")
         self.ins_labels = {}
-        for key, title, row, col, go in (("backup", "Last backup", 0, 0, "Maintenance"), ("audit", "Audit chain", 0, 1, "Tracking"),
-                                         ("wear", "Wear forecast - top 5", 1, 0, "Maintenance"), ("recommendations", "Recommendations - top 5", 1, 1, "Reports")):
+        for key, title, row, col, go, span in (("backup", "Last backup", 0, 0, "Maintenance", 1), ("audit", "Audit chain", 0, 1, "Tracking", 1),
+                                               ("wear", "Wear forecast - top 5", 1, 0, "Maintenance", 1),
+                                               ("recommendations", "Recommendations - top 5", 1, 1, "Reports", 1),
+                                               ("savings", "Lost-tool value vs the P10,000 monthly baseline", 2, 0, "Reports", 2)):
             card = ctk.CTkFrame(grid, fg_color="#F9FAFB", corner_radius=8)
-            card.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+            card.grid(row=row, column=col, columnspan=span, padx=5, pady=5, sticky="nsew")
             t = ctk.CTkFrame(card, fg_color="transparent")
             t.pack(fill="x", padx=12, pady=(8, 2))
             ctk.CTkLabel(t, text=title, font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(side="left")
@@ -634,7 +636,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                 result = dashboard_service.admin_insights(self.user_info)
             except Exception as e:
                 msg = friendly_message(e)
-                self.post_ui(lambda: self._apply_insights({k: {"error": msg} for k in ("backup", "audit", "wear", "recommendations")}))
+                self.post_ui(lambda: self._apply_insights({k: {"error": msg} for k in ("backup", "audit", "wear", "recommendations", "savings")}))
                 return
             self.post_ui(lambda: self._apply_insights(result))
         threading.Thread(target=work, daemon=True).start()
@@ -695,6 +697,15 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             out["recommendations"] = ("Nothing unusual right now.", grey)
         else:
             out["recommendations"] = ("\n".join(f"{i}. {r['text']}" for i, r in enumerate(part["data"], start=1)), dark)
+        part = result.get("savings", {})
+        if not part:
+            pass
+        elif "error" in part:
+            out["savings"] = (part["error"], red)
+        else:
+            from services import savings
+            k = part["data"]
+            out["savings"] = (savings.describe(k), green if k["this_month"]["saved"] >= 0 else red)
         return out
 
     def _apply_insights(self, result):

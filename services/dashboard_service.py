@@ -109,12 +109,13 @@ def live_metrics(actor):
 def admin_insights(actor):
     """[PANEL-AWE] The Admin-only dashboard cards. Each part is computed on its own, so one failing part (say, a missing table on a
     database that has not been upgraded yet) shows its own error and never hides the others. {"backup"|"audit"|"wear"|"recommendations": {"data"|"error"}}."""
-    from services import anomaly, audit_chain, backup_service, wear_forecast
+    from services import anomaly, audit_chain, backup_service, savings, wear_forecast
     from services.errors import friendly_message
     parts = (("backup", lambda: backup_service.last_backup_status(actor)),
              ("audit", lambda: audit_chain.quick_status(actor)),
              ("wear", lambda: wear_forecast.forecast(actor, limit=5)),
-             ("recommendations", lambda: anomaly.top_recommendations(actor, 5)))
+             ("recommendations", lambda: anomaly.top_recommendations(actor, 5)),
+             ("savings", lambda: savings.monthly_savings(actor)))
     out = {}
     for key, fn in parts:
         try:
