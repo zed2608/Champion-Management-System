@@ -126,6 +126,19 @@ def short_reason(exc) -> str:
 _CHAMPION = re.compile(r"CHAMPION:\s*(.+)$", re.S)
 
 
+def _file_problem(exc: OSError):
+    """Plain words for a file that could not be written (full disk, read-only or forbidden folder, folder gone), else None."""
+    import errno
+    code = getattr(exc, "errno", None)
+    if code == errno.ENOSPC or getattr(exc, "winerror", None) in (39, 112):
+        return "The disk is full, so the file could not be saved. Free some space and try again. Nothing was saved."
+    if isinstance(exc, PermissionError) or code in (errno.EACCES, errno.EROFS, errno.EPERM):
+        return "This folder does not allow saving files (it may be read-only or protected). Choose another folder and try again. Nothing was saved."
+    if isinstance(exc, FileNotFoundError) or code == errno.ENOENT:
+        return "The folder for this file could not be found. Choose another folder and try again. Nothing was saved."
+    return None
+
+
 def friendly_message(exc: BaseException) -> str:
     """User-safe text for any exception raised below the UI."""
     if isinstance(exc, (ServiceError, ValidationError)):
@@ -145,6 +158,11 @@ def friendly_message(exc: BaseException) -> str:
     if is_connection_error(exc) or is_retryable(exc):
         get_logger().warning("%s: %s", type(exc).__name__, short_reason(exc))
         return user_message(exc)
+    if isinstance(exc, OSError) and not isinstance(exc, (ConnectionError, TimeoutError)):
+        text = _file_problem(exc)
+        if text:
+            get_logger().warning("%s: %s", type(exc).__name__, short_reason(exc))
+            return text
     # Unexpected: log the full traceback under a code, show the code and one safe line.
     code = error_code(exc)
     get_logger().error("%s %s", code, short_reason(exc), exc_info=(type(exc), exc, exc.__traceback__))

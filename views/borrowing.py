@@ -1,3 +1,4 @@
+from services.validators import fmt_qty
 import customtkinter as ctk
 from views.ui_thread import UiMixin
 from tkinter import messagebox
@@ -868,8 +869,8 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             if remaining > 0: all_fulfilled = False
 
             txt_color = "#D8000C" if remaining > 0 else "#2ECC71"
-            status_txt = f"Needs {remaining:g}" if remaining > 0 else "✓ Fulfilled"
-            row_str = f"• {r['name']}  |  Approved: {needed:g}  |  {status_txt}"
+            status_txt = f"Needs {fmt_qty(remaining)}" if remaining > 0 else "✓ Fulfilled"
+            row_str = f"• {r['name']}  |  Approved: {fmt_qty(needed)}  |  {status_txt}"
             ctk.CTkLabel(self.proj_req_frame, text=row_str, font=("Inter", 11, "bold" if remaining > 0 else "normal"), text_color=txt_color).pack(anchor="w", padx=10, pady=2)
 
         state = "disabled" if all_fulfilled else "normal"
@@ -908,10 +909,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         available = float(tool.available)
 
         if (already_issued + in_cart + 1) > allowed_qty:
-            messagebox.showerror("Limit Reached", f"Cannot add '{tool.name}'.\nApproved Limit: {allowed_qty:g}\nAlready Issued: {already_issued:g}\nIn Cart: {in_cart:g}", parent=self.issuance_modal)
+            messagebox.showerror("Limit Reached", f"Cannot add '{tool.name}'.\nApproved Limit: {fmt_qty(allowed_qty)}\nAlready Issued: {fmt_qty(already_issued)}\nIn Cart: {fmt_qty(in_cart)}", parent=self.issuance_modal)
             return
         if (in_cart + 1) > available:
-            messagebox.showerror("Out of Stock", f"Cannot add '{tool.name}'.\nOnly {available:g} left in the warehouse.", parent=self.issuance_modal)
+            messagebox.showerror("Out of Stock", f"Cannot add '{tool.name}'.\nOnly {fmt_qty(available)} left in the warehouse.", parent=self.issuance_modal)
             return
 
         existing = next((item for item in self.borrow_cart if item['id'] == tool.tool_id), None)
@@ -936,7 +937,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         already_issued = float(req['issued_qty'])
         
         if (already_issued + new_qty) > allowed_qty:
-            messagebox.showwarning("Limit Reached", f"You cannot exceed the approved limit of {allowed_qty:g}.", parent=self.issuance_modal)
+            messagebox.showwarning("Limit Reached", f"You cannot exceed the approved limit of {fmt_qty(allowed_qty)}.", parent=self.issuance_modal)
         elif new_qty > item['max_qty']:
             messagebox.showwarning("Out of Stock", f"Only {item['max_qty']} available in warehouse.", parent=self.issuance_modal)
         elif new_qty <= 0:

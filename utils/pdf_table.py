@@ -3,6 +3,7 @@
 ``render_pdf`` draws the company header, any note lines, then one or more titled tables onto a single tall page image and saves it as a
 PDF with Pillow (no extra libraries). Pure drawing: it knows nothing about the database or Tk.
 """
+import os
 from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont
@@ -87,5 +88,16 @@ def render_pdf(title, criteria, sections, path, notes=(), generated=None):
         draw.text((30, y + 16), f"Records: {len(wrapped_rows)}", fill="gray", font=f_body)
         total += len(wrapped_rows)
         y += 50
-    canvas.save(path, "PDF", resolution=100.0)
+    # Write to a side file and rename it into place, so a full disk or a folder that refuses us never leaves a half-written PDF
+    # (or replaces a good older one) under the real name.
+    part = f"{path}.part"
+    try:
+        canvas.save(part, "PDF", resolution=100.0)
+        os.replace(part, path)
+    except BaseException:
+        try:
+            os.remove(part)
+        except OSError:
+            pass
+        raise
     return path

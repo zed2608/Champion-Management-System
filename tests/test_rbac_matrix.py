@@ -32,11 +32,61 @@ def service_functions():
                 yield info.name, name, fn
 
 
+def find_unguarded(seen):
+    return [f"{m}.{n}" for m, n, fn in seen if not hasattr(fn, "required_roles") and (m, n) not in UNGUARDED_OK]
+
+
 def test_every_public_service_function_is_role_guarded():
     seen = list(service_functions())
     assert len(seen) >= 20, "the sweep found too few service functions; is the package layout unchanged?"
-    unguarded = [f"{m}.{n}" for m, n, fn in seen if not hasattr(fn, "required_roles") and (m, n) not in UNGUARDED_OK]
+    unguarded = find_unguarded(seen)
     assert not unguarded, f"service functions without @require_role: {unguarded}"
+
+
+# [PANEL-AWE] The Phase 4 modules are not named *_service, so the sweep above never saw them. Everything public in them must be guarded,
+# except pure arithmetic/text helpers and the two internal writers called from inside other services (listed by name on purpose:
+# a NEW function has to be guarded or consciously added here).
+PHASE4_MODULES = ("audit_chain", "wear_forecast", "anomaly", "savings")
+PHASE4_NOT_GUARDED_OK = {
+    ("audit_chain", "record"), ("audit_chain", "archive_old"), ("audit_chain", "describe"),
+    ("anomaly", "log_attempt"), ("anomaly", "peso"), ("anomaly", "iqr_fence"), ("anomaly", "damage_outliers"),
+    ("anomaly", "blocked_demand"), ("anomaly", "overdue_clusters"), ("anomaly", "recommendations"), ("anomaly", "pdf_sections"),
+    ("wear_forecast", "compute_forecast"), ("wear_forecast", "summary_line"), ("wear_forecast", "pdf_table"),
+    ("savings", "month_key"), ("savings", "last_months"), ("savings", "kpi"), ("savings", "describe"),
+}
+
+
+def phase4_functions():
+    for name in PHASE4_MODULES:
+        mod = importlib.import_module(f"services.{name}")
+        for fn_name, fn in inspect.getmembers(mod, inspect.isfunction):
+            if fn.__module__ == mod.__name__ and not fn_name.startswith("_"):
+                yield name, fn_name, fn
+
+
+def test_phase4_modules_are_role_guarded_too():
+    seen = list(phase4_functions())
+    assert len(seen) >= 25, "the Phase 4 sweep found too few functions"
+    bad = [f"{m}.{n}" for m, n, fn in seen if not hasattr(fn, "required_roles") and (m, n) not in PHASE4_NOT_GUARDED_OK]
+    assert not bad, f"Phase 4 functions without @require_role: {bad}"
+    for m, n, fn in seen:
+        assert set(getattr(fn, "required_roles", ())) <= {"Admin"}, f"{m}.{n}: Phase 4 insight functions are Admin only"
+
+
+def test_the_sweep_really_catches_an_unguarded_function():
+    """The sweep above must not be able to pass vacuously: feed it a new, unguarded function and it has to be reported."""
+    from services.security import require_role
+
+    def forgotten_report(actor):
+        return "anyone could call this"
+
+    @require_role("Admin")
+    def guarded_report(actor):
+        return "only Admin"
+
+    seen = list(service_functions()) + [("anomaly_service", "forgotten_report", forgotten_report),
+                                        ("anomaly_service", "guarded_report", guarded_report)]
+    assert find_unguarded(seen) == ["anomaly_service.forgotten_report"]
 
 
 def test_no_service_ever_allows_the_worker_role():

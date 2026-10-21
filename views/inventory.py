@@ -11,6 +11,7 @@ import threading
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 from datetime import datetime
+from services.validators import fmt_qty
 from services.errors import friendly_message
 from services.paging import fetch_page
 from services.validators import like_pattern
@@ -483,8 +484,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         return row.get('min_stock', 0) > 0 and row['qty_avail'] < row['min_stock']
 
     def _inventory_cells(self, row):
-        avail = f"{row['qty_avail']:g}" if row['qty_avail'] else "0"
-        tot = f"{row['qty_tot']:g}" if row['qty_tot'] else "0"
+        avail = fmt_qty(row['qty_avail'])
+        tot = fmt_qty(row['qty_tot'])
         display_loc = row['base_location']
         if row.get('active_project') and float(row['qty_avail']) < float(row['qty_tot']):
             display_loc = f"Deployed: {row['active_project']}"
@@ -566,7 +567,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         uid = self.user_info.get("user_id")
         if uid:
             log_action(uid, "Added", "Inventory",
-                       f"Added new {itype}: '{name}' (PID: {res['tool_id']}), Qty: {res['quantity']:g} {uom}")
+                       f"Added new {itype}: '{name}' (PID: {res['tool_id']}), Qty: {fmt_qty(res['quantity'])} {uom}")
         messagebox.showinfo("Success", f"{itype} '{name}' added successfully.", parent=self.add_modal)
         self.add_modal.destroy()
         self.load_inventory_data()
@@ -653,9 +654,9 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         price_entry = create_modal_row(form_scroll, "Price", data['price'])
 
         qty_entry = create_modal_row(
-            form_scroll, "Total Qty", f"{data['qty_tot']:g}")
+            form_scroll, "Total Qty", f"{fmt_qty(data['qty_tot'])}")
         min_stock_entry = create_modal_row(
-            form_scroll, "Min Stock", f"{data.get('min_stock', 0):g}")
+            form_scroll, "Min Stock", f"{fmt_qty(data.get('min_stock', 0))}")
 
         uom_frame = ctk.CTkFrame(form_scroll, fg_color="transparent")
         uom_frame.pack(fill="x", pady=4)

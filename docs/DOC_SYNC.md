@@ -224,3 +224,34 @@ Reports now has two more tabs, "Wear" and "Anomalies", each with Export PDF. The
 A fifth Admin card compares the value of tools logged as Lost or Stolen each month (units on the maintenance ticket x `tool.price`, in the month the ticket
 was raised) with the P10,000 monthly baseline from the cost-benefit analysis: under it is a saving, over it is shown as an overrun in red. It is only as true
 as the logging: a loss nobody recorded is not counted. Baseline: `services/savings.py` (BASELINE_PER_MONTH).
+
+## Q. Overnight session: test gaps, display fix, cleanup (decisions taken without asking) [PANEL-AWE]
+Nothing here changes what the manuscript promises; it lists choices that were made while you slept so you can overrule them.
+1. **Part B was already done.** The brief said Phases 0-3 were finished, but Phase 4 steps 1-6 (audit chain, wear forecast, anomalies, dashboard cards, PDF sections,
+   savings card) were already committed (see sections K to P). They were audited against the brief, not rebuilt. Differences from the brief that were already
+   documented in K: the hash formula uses a separator, UTC and the session id; the live table keeps the newest 20,000 rows and moves older ones to the archive.
+   Added now: a test that the "every service function is guarded" sweep really catches a new unguarded function, and the sweep now also covers the Phase 4
+   modules (`audit_chain`, `wear_forecast`, `anomaly`, `savings`), which are not named `*_service` and had never been swept.
+2. **"Available shows 2 of 5."** The brief's numbers do not follow from "issue, then return 2 with 1 Damaged" on 5 units (that gives 4 of 5 with 1 in maintenance).
+   The automatic test therefore uses the scenario that does give 2 of 5: 5 units, a project approved for 4, issue 4, return 1 Good (2 on the shelf), refuse a Damaged
+   return with empty details, accept it with details (1 in maintenance, a ticket exists, 2 still out). If you meant a different scenario, tell me the numbers.
+3. **Real bug found by that test and fixed:** the Inventory table showed `2.00/5.00` instead of `2/5` (MySQL returns quantities as DECIMAL, and Python's `:g` keeps
+   the trailing zeros). The same pattern was in the Inventory edit window (Total Qty, Min Stock), the Projects catalog and requirement list, the Maintenance
+   archived-tools table and the issuance requirement list. All now use the shared formatter `fmt_qty` (2.00 -> 2, 2.50 -> 2.5).
+4. **PDF export** now builds the PDF in a side file (`name.pdf.part`) and renames it into place; if the disk is full or the folder refuses the file, the user sees
+   "The disk is full ..." / "This folder does not allow saving files ..." / "The folder ... could not be found ...", each ending "Nothing was saved", and no half-written file
+   is left. Before, the screen showed `Failed to generate PDF: [Errno 28] ...` and could leave a damaged file. Where the PDF goes did not change (the Windows temp folder, then opened);
+   there is still no "choose a folder" dialog. If the PDF was saved but no program can open it, the user is told the file path instead of an error.
+5. **Read-only folder / full disk are simulated, not real:** the tests make the file write raise `OSError` after bytes are on disk. Windows read-only flags do not stop creating new files in a
+   folder, so a true read-only folder cannot be reproduced the same way. Marked as automatic-only in the checklist.
+6. **Tag duplicates:** the code already refused them correctly (Update, Save Tag Link, case-insensitive, nothing changed). Only tests were added.
+7. **Screens under Staff and Admin:** an automatic test opens every screen and every tab for each role and fails on any error dialog, any logged error or any exception in a Tk callback.
+   It checks the screens were built, not how they look. Admin-only buttons checked absent for Staff: "+ Add New Item", "+ Add Project", "Verify Audit Chain", "Audit Report PDF",
+   the ADMIN INSIGHTS panel, and the Audit/Activity tabs.
+8. **Cleanup (Part C):** `.env`, `remember_config.json` and the two tracked `__pycache__` files are untracked (they stay on disk). `.env.example` had the old cloud server's
+   password in a comment: it now holds placeholders only. **That password is still in git history; rotate it** (you said you will scrub history yourself).
+   `spy.py`, `_test.py` and `scripts/fix_thread_dates.py` are deleted (nothing imported them). The other helper scripts in `scripts/` were left alone.
+9. **Test speed.** A full serial run is about 10 minutes (501 tests). The "two hours" seen overnight came from running tests in parallel (the migration takes a
+   server-wide lock, so parallel runs collide and stall) plus leftover pytest processes. Never run the suite in parallel. Slowest tests: the two screens-by-role tests
+   (they really open every screen and tab: 43 s Admin, 19 s Staff), three paging tests (7-16 s each, real screens), and about 1 s of database set-up per database test.
+   No test was removed or skipped to gain speed.

@@ -6,6 +6,7 @@ from datetime import datetime
 import os
 import subprocess
 import threading
+from services.validators import fmt_qty
 from services.errors import friendly_message
 from services import backup_service, wear_forecast
 from services.paging import PageInfo, clamp_page, fetch_page
@@ -523,7 +524,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             self._tools_table = PagedTable(
                 self._tools_scroll, [("Tool ID", 1, 70), ("Name", 3, 200), ("Category", 2, 150), ("Qty", 1, 60), ("Archived At", 2, 150), ("Action", 1, 100)],
                 fetch=self._fetch_archived_tools,
-                cells=lambda r: [str(r["tool_id"]), r["name"], r["category"], f"{r['qty_total']:g}",
+                cells=lambda r: [str(r["tool_id"]), r["name"], r["category"], f"{fmt_qty(r['qty_total'])}",
                                  r["archived_date"].strftime("%Y-%m-%d %H:%M") if r["archived_date"] else "—", ""],
                 actions={5: {"text": "Restore", "command": lambda r: self.restore_tool(r["tool_id"])}},
                 empty_text="No archived tools found.", font_size=12, cell_pady=12, uniform="tool_cols")

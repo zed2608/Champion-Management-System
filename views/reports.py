@@ -1308,7 +1308,15 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             if criteria_note:
                 criteria_parts.append(f"Notes: {criteria_note}")
             fpath = os.path.join(tempfile.gettempdir(), f"Report_{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
-            render_pdf(title, "  |  ".join(criteria_parts), sections, fpath, notes)
-            os.startfile(fpath)
+            try:
+                render_pdf(title, "  |  ".join(criteria_parts), sections, fpath, notes)
+            except Exception as e:
+                messagebox.showerror("Export Error", friendly_message(e), parent=self.winfo_toplevel())
+                return
+            try:
+                os.startfile(fpath)
+            except OSError:
+                messagebox.showinfo("Report saved", f"The report was saved but no program could open it.\nYou can find it here:\n{fpath}",
+                                    parent=self.winfo_toplevel())
         except Exception as e:
-            messagebox.showerror("Export Error", f"Failed to generate PDF:\n{e}", parent=self.winfo_toplevel())
+            messagebox.showerror("Export Error", friendly_message(e), parent=self.winfo_toplevel())

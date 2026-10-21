@@ -6,6 +6,7 @@ from datetime import datetime
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 import difflib
+from services.validators import fmt_qty
 from services.errors import friendly_message
 from services import project_service as ps
 
@@ -475,8 +476,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                     make_cell(2, row['name'], "black", bold=True, wrap=200)
                     make_cell(3, row['uom'], "gray")
 
-                    avail = f"{row['avail']:g}" if row['avail'] else "0"
-                    tot = f"{row['total']:g}" if row['total'] else "0"
+                    avail = f"{fmt_qty(row['avail'])}" if row['avail'] else "0"
+                    tot = f"{fmt_qty(row['total'])}" if row['total'] else "0"
                     stock_color = "#D8000C" if float(
                         row['avail']) <= 0 else "#2ECC71"
                     make_cell(4, f"{avail}/{tot}", stock_color, bold=True)
@@ -521,12 +522,12 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             return
 
         if req_qty > float(row_data['total']):
-            return messagebox.showerror("Denied", f"Cannot request {req_qty}. The company only owns {row_data['total']:g} {row_data['uom']} total.", parent=modal)
+            return messagebox.showerror("Denied", f"Cannot request {req_qty}. The company only owns {fmt_qty(row_data['total'])} {row_data['uom']} total.", parent=modal)
 
         needs_retrieval = False
         if req_qty > float(row_data['avail']):
             warn_msg = (
-                f"⚠️ TIMELINE CONFLICT RISK\n\nYou requested {req_qty}, but only {row_data['avail']:g} are in the warehouse.\n\nMissing items are deployed elsewhere. If not returned before your Start Date, the project may be delayed.\n\nAdd anyway?")
+                f"⚠️ TIMELINE CONFLICT RISK\n\nYou requested {req_qty}, but only {fmt_qty(row_data['avail'])} are in the warehouse.\n\nMissing items are deployed elsewhere. If not returned before your Start Date, the project may be delayed.\n\nAdd anyway?")
             if not messagebox.askyesno("Stock Conflict", warn_msg, parent=modal):
                 return
             needs_retrieval = True
@@ -538,7 +539,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                 self.refresh_req_cart()
                 qty_entry.delete(0, 'end')
                 messagebox.showinfo(
-                    "Updated", f"Updated {row_data['name']} quantity to {item['qty']:g} {row_data['uom']}.", parent=modal)
+                    "Updated", f"Updated {row_data['name']} quantity to {fmt_qty(item['qty'])} {row_data['uom']}.", parent=modal)
                 return
 
         self.req_cart.append({
@@ -548,7 +549,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.refresh_req_cart()
         qty_entry.delete(0, 'end')
         messagebox.showinfo(
-            "Added", f"Successfully added {req_qty:g} {row_data['uom']} of {row_data['name']} to project requirements.", parent=modal)
+            "Added", f"Successfully added {fmt_qty(req_qty)} {row_data['uom']} of {row_data['name']} to project requirements.", parent=modal)
 
     def refresh_req_cart(self):
         for w in self.cart_scroll.winfo_children():
@@ -562,7 +563,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             row.pack(fill="x", pady=2)
             warning_icon = "⚠️ " if item.get('needs_retrieval') else "✓ "
             text_col = "#D35400" if item.get('needs_retrieval') else "black"
-            info = f"{warning_icon}{item['name']} ({item['qty']:g} {item['uom']})"
+            info = f"{warning_icon}{item['name']} ({fmt_qty(item['qty'])} {item['uom']})"
             ctk.CTkLabel(row, text=info, font=("Inter", 11, "bold"), text_color=text_col).pack(side="left", padx=5)
             if not getattr(self, '_is_cart_locked', False):
                 ctk.CTkButton(row, text="✕", width=20, height=20, fg_color="#FFEAEA", text_color="#D8000C", hover_color="#FFC0C0", command=lambda idx=i: [self.req_cart.pop(idx), self.refresh_req_cart()]).pack(side="right")
@@ -911,7 +912,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             for req in reqs:
                 warning_icon = "⚠️ " if req['status'] == 'Warning' else "✓ "
                 text_col = "#D35400" if req['status'] == 'Warning' else "#1A1A1A"
-                row_str = f"{warning_icon}{req['name']}  |  {req['quantity']:g} {req['unit_of_measure']} ({req['item_type']})"
+                row_str = f"{warning_icon}{req['name']}  |  {fmt_qty(req['quantity'])} {req['unit_of_measure']} ({req['item_type']})"
                 req_row = ctk.CTkFrame(
                     tools_scroll, fg_color="transparent", height=30)
                 req_row.pack(fill="x", pady=1)
