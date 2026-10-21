@@ -12,6 +12,7 @@ import re
 import difflib
 from services.errors import friendly_message
 from services import user_service
+from ui import theme as T
 
 
 class RoleManagementView(UiMixin, ctk.CTkFrame):
@@ -40,7 +41,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         self.reg_modal = ctk.CTkToplevel(self)
         self.reg_modal.title("Register New User")
         self.reg_modal.geometry("450x650")
-        self.reg_modal.configure(fg_color="white")
+        self.reg_modal.configure(fg_color=T.SURFACE)
         self.reg_modal.attributes("-topmost", True)
         self.reg_modal.grab_set()
         
@@ -50,21 +51,21 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         self.reg_modal.geometry(f"450x650+{x}+{y}")
 
         self._form_card = ctk.CTkScrollableFrame(
-            self.reg_modal, fg_color="white", corner_radius=0)
+            self.reg_modal, fg_color=T.SURFACE, corner_radius=0)
         self._form_card.pack(fill="both", expand=True)
         form_card = self._form_card
 
         ctk.CTkLabel(form_card, text="Register New User",
-                     font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(
+                     font=T.font(16, "bold"), text_color=T.TEXT).pack(
             anchor="w", padx=20, pady=(20, 5))
         ctk.CTkLabel(form_card,
                      text="Fill in all required fields to create a new account.",
-                     font=("Inter", 11), text_color="gray", wraplength=240,
+                     font=T.font(12), text_color=T.TEXT_MUTED, wraplength=240,
                      justify="left").pack(anchor="w", padx=20, pady=(0, 15))
 
         def field(parent, label, ph, show=None):
-            ctk.CTkLabel(parent, text=label, font=("Inter", 12, "bold"),
-                         text_color="#1A1A1A").pack(anchor="w", padx=20)
+            ctk.CTkLabel(parent, text=label, font=T.font(12, "bold"),
+                         text_color=T.TEXT).pack(anchor="w", padx=20)
             kw = dict(placeholder_text=ph)
             if show:
                 kw["show"] = show
@@ -77,10 +78,10 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         self.reg_email  = field(form_card, "Email Address *", "employee@champion.com")
 
         ctk.CTkLabel(form_card, text="Role *",
-                     font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+                     font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         self.reg_role = ctk.CTkOptionMenu(
             form_card, values=["Staff", "Admin", "Worker"],
-            fg_color="#F9FAFB", text_color="black",
+            fg_color=T.SURFACE_ALT, text_color=T.TEXT,
             command=self._on_reg_role_change)
         self.reg_role.pack(fill="x", padx=20, pady=(5, 10))
 
@@ -96,22 +97,22 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         if role == "Worker":
             ctk.CTkLabel(self._reg_bottom,
                          text="Workers cannot log into the system.\nNo password is required.",
-                         font=("Inter", 11), text_color="#D35400",
+                         font=T.font(12), text_color=T.WARNING_TEXT,
                          wraplength=240, justify="left").pack(anchor="w", padx=20, pady=(0, 12))
             self.reg_pass    = None
             self.reg_confirm = None
         else:
             ctk.CTkLabel(self._reg_bottom, text="Password *",
-                         font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+                         font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
             pass_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
             pass_row.pack(fill="x", padx=20, pady=(5, 4))
             self.reg_pass = ctk.CTkEntry(pass_row, placeholder_text="Min. 8 characters", show="•")
             self.reg_pass.pack(side="left", fill="x", expand=True, padx=(0, 5))
             self._show_pass = False
             eye_pass = ctk.CTkButton(pass_row, text="👁", width=38, height=38,
-                                     fg_color="#F3F4F6", text_color="#4B5563",
-                                     hover_color="#E5E7EB", corner_radius=6,
-                                     font=("Inter", 14))
+                                     fg_color=T.SURFACE_MUTED, text_color=T.TEXT_SECONDARY,
+                                     hover_color=T.BORDER, corner_radius=6,
+                                     font=T.font(14))
             eye_pass.pack(side="left")
 
             def _toggle_pass():
@@ -123,11 +124,11 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
             # ── Password strength criteria ──────────────────────
             strength_frame = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
             strength_frame.pack(anchor="w", padx=20, pady=(0, 8))
-            GRAY = "#AAAAAA"; GREEN = "#2ECC71"
-            crit_8     = ctk.CTkLabel(strength_frame, text="✗  At least 8 characters",     font=("Inter", 10), text_color=GRAY)
-            crit_num   = ctk.CTkLabel(strength_frame, text="✗  Contains a number",         font=("Inter", 10), text_color=GRAY)
-            crit_upper = ctk.CTkLabel(strength_frame, text="✗  Contains an uppercase letter", font=("Inter", 10), text_color=GRAY)
-            crit_spec  = ctk.CTkLabel(strength_frame, text="✗  Contains a special character", font=("Inter", 10), text_color=GRAY)
+            GRAY=T.TEXT_MUTED; GREEN=T.SUCCESS_TEXT
+            crit_8     = ctk.CTkLabel(strength_frame, text="✗  At least 8 characters",     font=T.font(12), text_color=GRAY)
+            crit_num   = ctk.CTkLabel(strength_frame, text="✗  Contains a number",         font=T.font(12), text_color=GRAY)
+            crit_upper = ctk.CTkLabel(strength_frame, text="✗  Contains an uppercase letter", font=T.font(12), text_color=GRAY)
+            crit_spec  = ctk.CTkLabel(strength_frame, text="✗  Contains a special character", font=T.font(12), text_color=GRAY)
             for lbl in (crit_8, crit_num, crit_upper, crit_spec):
                 lbl.pack(anchor="w")
 
@@ -146,16 +147,16 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
             # ────────────────────────────────────────────────────
 
             ctk.CTkLabel(self._reg_bottom, text="Confirm Password *",
-                         font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+                         font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
             confirm_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
             confirm_row.pack(fill="x", padx=20, pady=(5, 10))
             self.reg_confirm = ctk.CTkEntry(confirm_row, placeholder_text="Re-enter password", show="•")
             self.reg_confirm.pack(side="left", fill="x", expand=True, padx=(0, 5))
             self._show_confirm = False
             eye_confirm = ctk.CTkButton(confirm_row, text="👁", width=38, height=38,
-                                        fg_color="#F3F4F6", text_color="#4B5563",
-                                        hover_color="#E5E7EB", corner_radius=6,
-                                        font=("Inter", 14))
+                                        fg_color=T.SURFACE_MUTED, text_color=T.TEXT_SECONDARY,
+                                        hover_color=T.BORDER, corner_radius=6,
+                                        font=T.font(14))
             eye_confirm.pack(side="left")
 
             def _toggle_confirm():
@@ -168,12 +169,12 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         btn_row.pack(fill="x", padx=20, pady=(15, 20))
         btn_row.grid_columnconfigure((0, 1), weight=1)
         ctk.CTkButton(btn_row, text="Register", height=40,
-                      fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 13, "bold"),
+                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(14, "bold"),
                       command=self.execute_register).grid(row=0, column=0, padx=(0, 5), sticky="ew")
         ctk.CTkButton(btn_row, text="Cancel", height=40,
-                      fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
-                      font=("Inter", 13, "bold"),
+                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
+                      font=T.font(14, "bold"),
                       command=self.reg_modal.destroy).grid(row=0, column=1, padx=(5, 0), sticky="ew")
 
     def _on_reg_role_change(self, role):
@@ -229,7 +230,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
     # ==========================================
     def build_table_panel(self):
         table_card = ctk.CTkFrame(
-            self.inner, fg_color="white", corner_radius=10)
+            self.inner, fg_color=T.SURFACE, corner_radius=10)
         table_card.grid(row=0, column=0, sticky="nsew", padx=0)
         table_card.grid_columnconfigure(0, weight=1)
         table_card.grid_rowconfigure(1, weight=1)
@@ -237,7 +238,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         top = ctk.CTkFrame(table_card, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Registered Users",
-                     font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
+                     font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         self.user_search_var = ctk.StringVar()
         self.user_search = ctk.CTkEntry(
@@ -250,7 +251,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
             self._user_search_timer = self.after(300, self.load_user_table)
         self.user_search_var.trace_add("write", on_user_search)
                                        
-        ctk.CTkButton(top, text="+ Register New User", width=150, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_register_modal).pack(side="right", padx=(10, 5))
+        ctk.CTkButton(top, text="+ Register New User", width=150, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=self.open_register_modal).pack(side="right", padx=(10, 5))
 
         self.user_scroll = ctk.CTkScrollableFrame(
             table_card, fg_color="transparent")
@@ -275,9 +276,9 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
 
         # Header Row
         for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(table_inner, fg_color="#1E4528", corner_radius=0)
+            cell = ctk.CTkFrame(table_inner, fg_color=T.PRIMARY, corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
+            lbl = ctk.CTkLabel(cell, text=text, font=T.font(12, "bold"), text_color=T.WHITE, anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         q = self.user_search.get().strip() if hasattr(self, "user_search") else ""
@@ -302,12 +303,12 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
 
             if not rows:
                 ctk.CTkLabel(table_inner, text="No users found.",
-                             text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+                             text_color=T.TEXT_MUTED).grid(row=1, column=0, columnspan=len(headers), pady=20)
                 return
 
             for i, row in enumerate(rows):
                 r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+                bg=T.SURFACE_ALT if i % 2 == 0 else "white"
 
                 is_locked = row["status"] == "Locked" or row["reset_requested"] == 1
                 display_name = f"🔒 {row['full_name']}" if is_locked else row["full_name"]
@@ -325,14 +326,14 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                     cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
-                    color = "#1A1A1A"
+                    color=T.TEXT
                     if is_locked and col in (0, 1, 2):
-                        color = "#D8000C"
+                        color=T.DANGER
                     elif col == 3:
-                        if val == "Admin": color = "#2ECC71"
-                        elif val == "Worker": color = "#D35400"
+                        if val == "Admin": color=T.SUCCESS_TEXT
+                        elif val == "Worker": color=T.WARNING_STRONG
 
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11), text_color=color, justify="center", anchor="center")
+                    lbl = ctk.CTkLabel(cell, text=val, font=T.font(12), text_color=color, justify="center", anchor="center")
                     
                     lbl.configure(wraplength=min_sizes[col] - 10)
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
@@ -345,23 +346,23 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 action_frame.pack(expand=True, pady=6)
                 
                 ctk.CTkButton(action_frame, text="Edit", width=56, height=28,
-                              fg_color="#F1C40F", text_color="black",
-                              hover_color="#D4AC0D", font=("Inter", 10, "bold"),
+                              fg_color=T.ACCENT, text_color=T.TEXT,
+                              hover_color=T.ACCENT_HOVER, font=T.font(12, "bold"),
                               command=lambda r=row: self.open_edit_modal(r)).pack(side="left", padx=(0, 4))
                               
                 ctk.CTkButton(action_frame, text="🔖 Badge", width=80, height=28,
-                              fg_color="#3498DB", text_color="white",
-                              hover_color="#2980B9", font=("Inter", 10, "bold"),
+                              fg_color=T.INFO, text_color=T.WHITE,
+                              hover_color=T.INFO_HOVER, font=T.font(12, "bold"),
                               command=lambda r=row: self.print_user_badge(r)).pack(side="left", padx=(0, 4))
                               
                 ctk.CTkButton(action_frame, text="Archive", width=56, height=28,
-                              fg_color="#FFEAEA", text_color="#D8000C",
-                              hover_color="#FFC0C0", font=("Inter", 10, "bold"),
+                              fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT,
+                              hover_color=T.DANGER_BORDER, font=T.font(12, "bold"),
                               command=lambda r=row: self.delete_user(r)).pack(side="left")
 
         except Exception as e:
             ctk.CTkLabel(self.user_scroll,
-                         text=friendly_message(e), text_color="red").pack(pady=10)
+                         text=friendly_message(e), text_color=T.DANGER_TEXT).pack(pady=10)
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -388,7 +389,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         modal = ctk.CTkToplevel(self)
         modal.title(f"Edit User — {row['full_name']}")
         modal.geometry("500x700")
-        modal.configure(fg_color="white")
+        modal.configure(fg_color=T.SURFACE)
         modal.resizable(False, False)
         modal.attributes("-topmost", True)
         modal.grab_set()
@@ -398,20 +399,20 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         modal.geometry(f"500x700+{x}+{y}")
 
         ctk.CTkLabel(modal, text=f"Edit: {row['full_name']}",
-                     font=("Inter", 15, "bold"), text_color="black").pack(pady=(20, 3))
+                     font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 3))
         ctk.CTkLabel(modal, text=f"Employee ID: {row['employee_id']}",
-                     font=("Inter", 11), text_color="gray").pack(pady=(0, 15))
+                     font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=(0, 15))
 
         if row.get("status") == "Locked" or row.get("reset_requested") == 1:
             ctk.CTkLabel(modal, text="⚠ This account is locked or requested a password reset.",
-                         font=("Inter", 12, "bold"), text_color="#D8000C").pack(pady=(0, 10))
+                         font=T.font(12, "bold"), text_color=T.DANGER_TEXT).pack(pady=(0, 10))
 
         form = ctk.CTkFrame(modal, fg_color="transparent")
         form.pack(fill="x", padx=30)
 
         def make_field(lbl, val):
-            ctk.CTkLabel(form, text=lbl, font=("Inter", 11, "bold"),
-                         text_color="#1A1A1A").pack(anchor="w")
+            ctk.CTkLabel(form, text=lbl, font=T.font(12, "bold"),
+                         text_color=T.TEXT).pack(anchor="w")
             e = ctk.CTkEntry(form, height=35)
             e.insert(0, val)
             e.pack(fill="x", pady=(4, 10))
@@ -420,10 +421,10 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         name_e  = make_field("Full Name *",  row["full_name"])
         email_e = make_field("Email *",      row["email"] if row["email"] != "—" else "")
 
-        ctk.CTkLabel(form, text="Role", font=("Inter", 11, "bold"),
-                     text_color="#1A1A1A").pack(anchor="w")
+        ctk.CTkLabel(form, text="Role", font=T.font(12, "bold"),
+                     text_color=T.TEXT).pack(anchor="w")
         role_menu = ctk.CTkOptionMenu(form, values=["Staff", "Admin", "Worker"],
-                                      fg_color="#F9FAFB", text_color="black", height=35)
+                                      fg_color=T.SURFACE_ALT, text_color=T.TEXT, height=35)
         role_menu.set(row["role"])
         role_menu.pack(fill="x", pady=(4, 10))
 
@@ -437,14 +438,14 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
             if target_role == "Worker":
                 ctk.CTkLabel(pass_section,
                              text="Workers cannot log into the system. Password is not used.",
-                             font=("Inter", 11), text_color="#D35400",
+                             font=T.font(12), text_color=T.WARNING_TEXT,
                              wraplength=400, justify="left").pack(anchor="w", pady=(0, 8))
                 pass_e_holder[0] = None
                 pass_e_holder[1] = None
             else:
                 ctk.CTkLabel(pass_section,
                              text="New Password (leave blank to keep current)",
-                             font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
+                             font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
                 pass_row = ctk.CTkFrame(pass_section, fg_color="transparent")
                 pass_row.pack(fill="x", pady=(4, 5))
                 
@@ -454,9 +455,9 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 
                 show_pwd_state = [False]
                 eye_btn = ctk.CTkButton(pass_row, text="👁", width=38, height=35,
-                                        fg_color="#F3F4F6", text_color="#4B5563",
-                                        hover_color="#E5E7EB", corner_radius=6,
-                                        font=("Inter", 14))
+                                        fg_color=T.SURFACE_MUTED, text_color=T.TEXT_SECONDARY,
+                                        hover_color=T.BORDER, corner_radius=6,
+                                        font=T.font(14))
                 eye_btn.pack(side="left")
                 
                 def _toggle_edit_pass():
@@ -468,11 +469,11 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 # Password strength criteria
                 strength_frame = ctk.CTkFrame(pass_section, fg_color="transparent")
                 strength_frame.pack(anchor="w", pady=(0, 8))
-                GRAY = "#AAAAAA"; GREEN = "#2ECC71"
-                crit_8     = ctk.CTkLabel(strength_frame, text="✗  At least 8 characters",     font=("Inter", 10), text_color=GRAY)
-                crit_num   = ctk.CTkLabel(strength_frame, text="✗  Contains a number",         font=("Inter", 10), text_color=GRAY)
-                crit_upper = ctk.CTkLabel(strength_frame, text="✗  Contains an uppercase letter", font=("Inter", 10), text_color=GRAY)
-                crit_spec  = ctk.CTkLabel(strength_frame, text="✗  Contains a special character", font=("Inter", 10), text_color=GRAY)
+                GRAY=T.TEXT_MUTED; GREEN=T.SUCCESS_TEXT
+                crit_8     = ctk.CTkLabel(strength_frame, text="✗  At least 8 characters",     font=T.font(12), text_color=GRAY)
+                crit_num   = ctk.CTkLabel(strength_frame, text="✗  Contains a number",         font=T.font(12), text_color=GRAY)
+                crit_upper = ctk.CTkLabel(strength_frame, text="✗  Contains an uppercase letter", font=T.font(12), text_color=GRAY)
+                crit_spec  = ctk.CTkLabel(strength_frame, text="✗  Contains a special character", font=T.font(12), text_color=GRAY)
                 for lbl in (crit_8, crit_num, crit_upper, crit_spec):
                     lbl.pack(anchor="w")
 
@@ -493,7 +494,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
 
                 e.bind("<KeyRelease>", _check_edit_strength)
 
-                ctk.CTkLabel(pass_section, text="Confirm New Password", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
+                ctk.CTkLabel(pass_section, text="Confirm New Password", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
                 conf_row = ctk.CTkFrame(pass_section, fg_color="transparent")
                 conf_row.pack(fill="x", pady=(4, 15))
                 conf_e = ctk.CTkEntry(conf_row, placeholder_text="Re-enter new password", show="•", height=35)
@@ -501,9 +502,9 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 
                 show_conf_state = [False]
                 eye_conf_btn = ctk.CTkButton(conf_row, text="👁", width=38, height=35,
-                                        fg_color="#F3F4F6", text_color="#4B5563",
-                                        hover_color="#E5E7EB", corner_radius=6,
-                                        font=("Inter", 14))
+                                        fg_color=T.SURFACE_MUTED, text_color=T.TEXT_SECONDARY,
+                                        hover_color=T.BORDER, corner_radius=6,
+                                        font=T.font(14))
                 eye_conf_btn.pack(side="left")
                 
                 def _toggle_conf_pass():
@@ -563,10 +564,10 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=30, pady=(5, 20))
         ctk.CTkButton(btn_row, text="Save Changes", height=38,
-                      fg_color="#1E4528", hover_color="#14301C",
+                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
                       command=save_edit).pack(side="left", padx=(0, 10), fill="x", expand=True)
         ctk.CTkButton(btn_row, text="Cancel", height=38,
-                      fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
+                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
                       command=modal.destroy).pack(side="right", padx=(10, 0), fill="x", expand=True)
 
     def print_user_badge(self, row):

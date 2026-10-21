@@ -11,6 +11,7 @@ import re
 import bcrypt
 import qrcode
 from services.errors import friendly_message
+from ui import theme as T
 
 class ProfileView(UiMixin, ctk.CTkFrame):
     def __init__(self, parent, user_info, dashboard_app):
@@ -25,7 +26,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         self.grid_columnconfigure(1, weight=2)
         self.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(self, text="PROFILE", font=("Inter", 24, "bold"), text_color="#1A1A1A").grid(
+        ctk.CTkLabel(self, text="PROFILE", font=T.font(20, "bold"), text_color=T.TEXT).grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
 
         self.build_left_card()
@@ -35,26 +36,22 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         if hasattr(self, 'left_card'):
             self.left_card.destroy()
 
-        self.left_card = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        self.left_card = ctk.CTkFrame(self, fg_color=T.SURFACE, corner_radius=10)
         self.left_card.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
 
         self.pic_label = ctk.CTkLabel(self.left_card, text="", cursor="hand2")
         self.pic_label.pack(pady=(40, 5))
         self.pic_label.bind("<Button-1>", lambda e: self.upload_picture())
 
-        ctk.CTkLabel(self.left_card, text="Click to upload profile picture", font=(
-            "Inter", 10), text_color="gray").pack()
+        ctk.CTkLabel(self.left_card, text="Click to upload profile picture", font=T.font(12), text_color=T.TEXT_MUTED).pack()
         self.load_profile_picture()
 
-        ctk.CTkLabel(self.left_card, text=self.user_info['full_name'], font=(
-            "Inter", 18, "bold"), text_color="#1A1A1A").pack(pady=(20, 0))
-        ctk.CTkLabel(self.left_card, text=self.user_info['role'], font=(
-            "Inter", 12), text_color="green").pack()
+        ctk.CTkLabel(self.left_card, text=self.user_info['full_name'], font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 0))
+        ctk.CTkLabel(self.left_card, text=self.user_info['role'], font=T.font(12), text_color=T.SUCCESS_TEXT).pack()
 
-        ctk.CTkButton(self.left_card, text="⎙ Print My ID QR Badge", fg_color="#3498DB", hover_color="#2980B9", font=(
-            "Inter", 11, "bold"), command=self.print_id_badge).pack(pady=(15, 0))
+        ctk.CTkButton(self.left_card, text="⎙ Print My ID QR Badge", fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=self.print_id_badge).pack(pady=(15, 0))
 
-        ctk.CTkFrame(self.left_card, height=1, fg_color="#E0E0E0").pack(
+        ctk.CTkFrame(self.left_card, height=1, fg_color=T.BORDER).pack(
             fill="x", padx=30, pady=20)
 
         details = [
@@ -66,10 +63,10 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         for label, val in details:
             row = ctk.CTkFrame(self.left_card, fg_color="transparent")
             row.pack(fill="x", padx=30, pady=5)
-            ctk.CTkLabel(row, text=label, font=("Inter", 12),
-                         text_color="gray").pack(side="left")
-            ctk.CTkLabel(row, text=val, font=("Inter", 12, "bold"),
-                         text_color="#1A1A1A").pack(side="right")
+            ctk.CTkLabel(row, text=label, font=T.font(12),
+                         text_color=T.TEXT_MUTED).pack(side="left")
+            ctk.CTkLabel(row, text=val, font=T.font(12, "bold"),
+                         text_color=T.TEXT).pack(side="right")
 
     def print_id_badge(self):
         try:
@@ -93,11 +90,10 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         right_container.grid_rowconfigure(1, weight=1)
 
         edit_card = ctk.CTkFrame(
-            right_container, fg_color="white", corner_radius=10)
+            right_container, fg_color=T.SURFACE, corner_radius=10)
         edit_card.grid(row=0, column=0, sticky="nsew", pady=(0, 10))
 
-        ctk.CTkLabel(edit_card, text="Edit Profile", font=(
-            "Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=30, pady=(20, 10))
+        ctk.CTkLabel(edit_card, text="Edit Profile", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=30, pady=(20, 10))
 
         form_frame = ctk.CTkFrame(edit_card, fg_color="transparent")
         form_frame.pack(fill="both", expand=True, padx=30)
@@ -108,7 +104,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
             form_frame, "Full Name *", self.user_info['full_name'], 0, 0)
         user_entry = self.create_form_field(
             form_frame, "Username (Disabled)", self.user_info['employee_id'], 0, 1)
-        user_entry.configure(state="disabled", fg_color="#F0F0F0")
+        user_entry.configure(state="disabled", fg_color=T.SURFACE_MUTED)
 
         self.entry_email = self.create_form_field(
             form_frame, "Email *", self.user_info.get('email', ''), 1, 0)
@@ -118,17 +114,16 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         btn_frame = ctk.CTkFrame(edit_card, fg_color="transparent")
         btn_frame.pack(fill="x", padx=30, pady=20)
 
-        ctk.CTkButton(btn_frame, text="Save Profile", fg_color="#1E4528", hover_color="#14301C", font=(
-            "Inter", 12, "bold"), command=self.confirm_save).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="Change Password", fg_color="#F1C40F", hover_color="#D4AC0D",
-                      text_color="black", font=("Inter", 12, "bold"), command=self.open_password_modal).pack(side="left")
+        ctk.CTkButton(btn_frame, text="Save Profile", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=self.confirm_save).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(btn_frame, text="Change Password", fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER,
+                      text_color=T.TEXT, font=T.font(12, "bold"), command=self.open_password_modal).pack(side="left")
 
         history_card = ctk.CTkFrame(
-            right_container, fg_color="white", corner_radius=10)
+            right_container, fg_color=T.SURFACE, corner_radius=10)
         history_card.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
 
         ctk.CTkLabel(history_card, text="My Borrowing History",
-                     font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(
+                     font=T.font(14, "bold"), text_color=T.TEXT).pack(
             anchor="w", padx=30, pady=(20, 5))
 
         # --- THE FIX: Unified Grid Table Strategy ---
@@ -157,9 +152,9 @@ class ProfileView(UiMixin, ctk.CTkFrame):
 
         # Header Row
         for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(table_inner, fg_color="#1E4528", corner_radius=0)
+            cell = ctk.CTkFrame(table_inner, fg_color=T.PRIMARY, corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 11, "bold"), text_color="white", anchor="center")
+            lbl = ctk.CTkLabel(cell, text=text, font=T.font(12, "bold"), text_color=T.WHITE, anchor="center")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
         user_id = self.user_info.get("user_id")
@@ -188,7 +183,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
             rows = cursor.fetchall()
 
             if not rows:
-                ctk.CTkLabel(table_inner, text="No borrowing history found.", text_color="gray").grid(row=1, column=0, columnspan=len(headers), pady=20)
+                ctk.CTkLabel(table_inner, text="No borrowing history found.", text_color=T.TEXT_MUTED).grid(row=1, column=0, columnspan=len(headers), pady=20)
                 return
 
             for i, row in enumerate(rows):
@@ -200,19 +195,19 @@ class ProfileView(UiMixin, ctk.CTkFrame):
                     row["status"],
                 ]
                 r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+                bg=T.SURFACE_ALT if i % 2 == 0 else "white"
 
                 for col, val in enumerate(vals):
                     cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
-                    color = "#1A1A1A"
+                    color=T.TEXT
                     if col == 4:
-                        color = "#D8000C" if val == "Active" else "#2ECC71"
+                        color=T.DANGER if val == "Active" else T.SUCCESS_TEXT
                         
                     font_w = "bold" if col == 4 else "normal"
 
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=color, justify="center", anchor="center")
+                    lbl = ctk.CTkLabel(cell, text=val, font=T.font(12, font_w), text_color=color, justify="center", anchor="center")
                     
                     # Responsive text wrapping to ensure everything remains visible when minimizing
                     def set_wrap(e, l=lbl, m=min_sizes[col]):
@@ -225,7 +220,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
         except Exception as e:
-            ctk.CTkLabel(table_inner, text=friendly_message(e), text_color="red").grid(row=1, column=0, columnspan=len(headers), pady=10)
+            ctk.CTkLabel(table_inner, text=friendly_message(e), text_color=T.DANGER_TEXT).grid(row=1, column=0, columnspan=len(headers), pady=10)
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -234,8 +229,8 @@ class ProfileView(UiMixin, ctk.CTkFrame):
     def create_form_field(self, parent, label_text, default_val, row, col):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=row, column=col, sticky="ew", padx=10, pady=10)
-        ctk.CTkLabel(frame, text=label_text, font=("Inter", 12),
-                     text_color="gray").pack(anchor="w")
+        ctk.CTkLabel(frame, text=label_text, font=T.font(12),
+                     text_color=T.TEXT_MUTED).pack(anchor="w")
         entry = ctk.CTkEntry(frame, height=35)
         # [UNHAPPY-PATH] DB columns can be NULL (e.g. seeded admin has no email); Tk rejects None.
         entry.insert(0, default_val or "")
@@ -310,12 +305,11 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         x = int((dialog.winfo_screenwidth() / 2) - (400 / 2))
         y = int((dialog.winfo_screenheight() / 2) - (480 / 2))
         dialog.geometry(f"400x480+{x}+{y}")
-        dialog.configure(fg_color="white")
+        dialog.configure(fg_color=T.SURFACE)
         dialog.attributes("-topmost", True)
         dialog.grab_set()
 
-        ctk.CTkLabel(dialog, text="CHANGE PASSWORD", font=(
-            "Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=30, pady=(20, 10))
+        ctk.CTkLabel(dialog, text="CHANGE PASSWORD", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=30, pady=(20, 10))
 
         curr_entry = ctk.CTkEntry(
             dialog, placeholder_text="Current Password", width=340, height=35, show="*")
@@ -326,11 +320,11 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         
         strength_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         strength_frame.pack(anchor="w", padx=30, pady=(0, 10))
-        GRAY = "#AAAAAA"; GREEN = "#2ECC71"
-        crit_8     = ctk.CTkLabel(strength_frame, text="✗  At least 8 chars", font=("Inter", 10), text_color=GRAY)
-        crit_num   = ctk.CTkLabel(strength_frame, text="✗  Contains a number", font=("Inter", 10), text_color=GRAY)
-        crit_upper = ctk.CTkLabel(strength_frame, text="✗  Contains an uppercase letter", font=("Inter", 10), text_color=GRAY)
-        crit_spec  = ctk.CTkLabel(strength_frame, text="✗  Contains a special char", font=("Inter", 10), text_color=GRAY)
+        GRAY=T.TEXT_MUTED; GREEN=T.SUCCESS_TEXT
+        crit_8     = ctk.CTkLabel(strength_frame, text="✗  At least 8 chars", font=T.font(12), text_color=GRAY)
+        crit_num   = ctk.CTkLabel(strength_frame, text="✗  Contains a number", font=T.font(12), text_color=GRAY)
+        crit_upper = ctk.CTkLabel(strength_frame, text="✗  Contains an uppercase letter", font=T.font(12), text_color=GRAY)
+        crit_spec  = ctk.CTkLabel(strength_frame, text="✗  Contains a special char", font=T.font(12), text_color=GRAY)
         for lbl in (crit_8, crit_num, crit_upper, crit_spec):
             lbl.pack(anchor="w")
             
@@ -381,7 +375,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
                 messagebox.showinfo("Success", "Password updated successfully!", parent=dialog)
                 dialog.destroy()
 
-        ctk.CTkButton(btn_frame, text="Change Password", fg_color="#1E4528", hover_color="#14301C",
+        ctk.CTkButton(btn_frame, text="Change Password", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
                       command=process_pwd_change).pack(side="left", expand=True, fill="x", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="Cancel", width=80, fg_color="#E0E0E0", text_color="black",
-                      hover_color="#CCCCCC", command=dialog.destroy).pack(side="right")
+        ctk.CTkButton(btn_frame, text="Cancel", width=80, fg_color=T.BORDER, text_color=T.TEXT,
+                      hover_color=T.BORDER_STRONG, command=dialog.destroy).pack(side="right")

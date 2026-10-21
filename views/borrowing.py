@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta, date as _date
 import calendar as _cal
 import threading
+from ui import theme as T
 
 def _fmt_qty(x) -> str:
     """Exact quantity for display: 3.00 -> '3', 2.50 -> '2.5'."""
@@ -52,14 +53,14 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Issuance & Retrieval", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkLabel(top_bar, text="Issuance & Retrieval", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
 
         tabs = ["📋 Deployment History", "📅 Deployment Schedule"]
         self.tab_var = ctk.StringVar(value="📋 Deployment History")
 
         self.seg_btn = ctk.CTkSegmentedButton(
             top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
-            fg_color="#F0F0F0", selected_color="#1E4528", selected_hover_color="#14301C"
+            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
         )
         self.seg_btn.pack(side="right")
 
@@ -94,11 +95,11 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         outer.grid_rowconfigure(0, weight=1)
 
         # Left: scrollable calendar card
-        self._cal_card = ctk.CTkScrollableFrame(outer, fg_color="white", corner_radius=10)
+        self._cal_card = ctk.CTkScrollableFrame(outer, fg_color=T.SURFACE, corner_radius=10)
         self._cal_card.grid(row=0, column=0, sticky="nsew", padx=(10, 5))
 
         # Right: day-detail card
-        self._cal_detail = ctk.CTkFrame(outer, fg_color="white", corner_radius=10)
+        self._cal_detail = ctk.CTkFrame(outer, fg_color=T.SURFACE, corner_radius=10)
         self._cal_detail.grid(row=0, column=1, sticky="nsew", padx=(5, 10))
 
         self._render_calendar()
@@ -152,40 +153,40 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         nav.pack(fill="x", padx=20, pady=(20, 8))
 
         ctk.CTkButton(nav, text="◀", width=34, height=34,
-                      fg_color="#E0E0E0", text_color="#1A1A1A", hover_color="#CCCCCC",
-                      font=("Inter", 13, "bold"),
+                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
+                      font=T.font(14, "bold"),
                       command=self._cal_prev).pack(side="left")
 
         month_label = datetime(self._cal_year, self._cal_month, 1).strftime("%B  %Y")
         ctk.CTkLabel(nav, text=month_label,
-                     font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left", padx=14)
+                     font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left", padx=14)
 
         ctk.CTkButton(nav, text="▶", width=34, height=34,
-                      fg_color="#E0E0E0", text_color="#1A1A1A", hover_color="#CCCCCC",
-                      font=("Inter", 13, "bold"),
+                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
+                      font=T.font(14, "bold"),
                       command=self._cal_next).pack(side="left")
 
         ctk.CTkButton(nav, text="Today", width=74, height=34,
-                      fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"),
+                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"),
                       command=self._cal_goto_today).pack(side="right")
 
         # ── Legend ──────────────────────────────────────────────
-        legend = ctk.CTkFrame(card, fg_color="#F9FAFB", corner_radius=8)
+        legend = ctk.CTkFrame(card, fg_color=T.SURFACE_ALT, corner_radius=8)
         legend.pack(fill="x", padx=20, pady=(0, 12))
         STATUS_COLORS = {
-            "Pending":  "#F39C12",
-            "Approved": "#3498DB",
-            "Ongoing":  "#2ECC71",
-            "Overdue":  "#E74C3C",
+            "Pending":  T.WARNING_ALT,
+            "Approved": T.INFO,
+            "Ongoing":  T.SUCCESS_TEXT,
+            "Overdue":  T.DANGER_SOFT,
         }
         for status, color in STATUS_COLORS.items():
             chip = ctk.CTkFrame(legend, fg_color="transparent")
             chip.pack(side="left", padx=14, pady=7)
             ctk.CTkFrame(chip, fg_color=color, width=12, height=12,
                          corner_radius=6).pack(side="left", padx=(0, 5))
-            ctk.CTkLabel(chip, text=status, font=("Inter", 10),
-                         text_color="#555555").pack(side="left")
+            ctk.CTkLabel(chip, text=status, font=T.font(12),
+                         text_color=T.TEXT_SECONDARY).pack(side="left")
 
         # ── Day-of-week header ───────────────────────────────────
         dow = ctk.CTkFrame(card, fg_color="transparent")
@@ -193,8 +194,8 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         for i, d in enumerate(DOW):
             dow.grid_columnconfigure(i, weight=1)
-            ctk.CTkLabel(dow, text=d, font=("Inter", 11, "bold"),
-                         text_color="#888888").grid(row=0, column=i, pady=6, sticky="ew")
+            ctk.CTkLabel(dow, text=d, font=T.font(12, "bold"),
+                         text_color=T.TEXT_MUTED).grid(row=0, column=i, pady=6, sticky="ew")
 
         # ── Month grid ──────────────────────────────────────────
         grid_f = ctk.CTkFrame(card, fg_color="transparent")
@@ -205,7 +206,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         today         = _date.today()
         first_weekday = _date(self._cal_year, self._cal_month, 1).weekday()
         total_days    = _cal_mod.monthrange(self._cal_year, self._cal_month)[1]
-        STATUS_COLORS_EXT = {**STATUS_COLORS, "Completed": "#95A5A6"}
+        STATUS_COLORS_EXT = {**STATUS_COLORS, "Completed": T.TEXT_MUTED}
 
         # Pre-enforce uniform row heights for all rows in this month's grid
         for r in range(6):
@@ -226,13 +227,13 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             is_sel   = (self._cal_selected == day)
 
             if is_today:
-                bg = "#1E4528";  num_col = "white"
+                bg=T.PRIMARY;  num_col = "white"
             elif is_sel:
-                bg = "#E8F5E9";  num_col = "#1E4528"
+                bg=T.SUCCESS_BG;  num_col=T.PRIMARY
             elif projs:
-                bg = "#F0F8FF";  num_col = "#1A1A1A"
+                bg = T.INFO_BG;  num_col=T.TEXT
             else:
-                bg = "#F9FAFB";  num_col = "#7F8C8D"
+                bg=T.SURFACE_ALT;  num_col=T.TEXT_MUTED
 
             cell = ctk.CTkFrame(grid_f, fg_color=bg, corner_radius=8, height=74)
             cell.grid(row=row_idx, column=col, padx=2, pady=2, sticky="nsew")
@@ -241,7 +242,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             cell.bind("<Button-1>", lambda e, d=day: self._cal_click(d))
 
             num = ctk.CTkLabel(cell, text=str(day),
-                               font=("Inter", 12, "bold"), text_color=num_col)
+                               font=T.font(12, "bold"), text_color=num_col)
             num.pack(anchor="nw", padx=7, pady=(5, 0))
             num.configure(cursor="hand2")
             num.bind("<Button-1>", lambda e, d=day: self._cal_click(d))
@@ -251,12 +252,12 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
                 dots.pack(anchor="sw", padx=5, pady=(0, 5))
                 for p in projs[:4]:
                     raw = p["status"].replace(" (OVERDUE)", "")
-                    clr = "#E74C3C" if "OVERDUE" in p["status"] else STATUS_COLORS_EXT.get(raw, "#95A5A6")
+                    clr=T.DANGER_SOFT if "OVERDUE" in p["status"] else STATUS_COLORS_EXT.get(raw, T.TEXT_MUTED)
                     ctk.CTkFrame(dots, fg_color=clr, width=8, height=8,
                                  corner_radius=4).pack(side="left", padx=1)
                 if len(projs) > 4:
                     ctk.CTkLabel(dots, text=f"+{len(projs)-4}",
-                                 font=("Inter", 8), text_color="#888888").pack(side="left")
+                                 font=T.font(12), text_color=T.TEXT_MUTED).pack(side="left")
 
             col += 1
             if col == 7:
@@ -280,50 +281,50 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             w.destroy()
 
         if day is None:
-            ctk.CTkLabel(card, text="📅", font=("Inter", 42), text_color="#CCCCCC").pack(pady=(50, 8))
+            ctk.CTkLabel(card, text="📅", font=T.font(40), text_color=T.BORDER_STRONG).pack(pady=(50, 8))
             ctk.CTkLabel(card, text="Select a day\nto view projects",
-                         font=("Inter", 12), text_color="#AAAAAA", justify="center").pack()
+                         font=T.font(12), text_color=T.TEXT_MUTED, justify="center").pack()
             return
 
         date_str = datetime(self._cal_year, self._cal_month, day).strftime("%B %d, %Y")
         ctk.CTkLabel(card, text=date_str,
-                     font=("Inter", 13, "bold"), text_color="#1A1A1A").pack(pady=(20, 4), padx=15)
+                     font=T.font(14, "bold"), text_color=T.TEXT).pack(pady=(20, 4), padx=15)
 
         projs = self._cal_projects_by_day.get(day, [])
-        STATUS_COLORS = {"Pending": "#F39C12", "Approved": "#3498DB",
-                         "Ongoing": "#2ECC71", "Completed": "#95A5A6"}
+        STATUS_COLORS = {"Pending": T.WARNING_ALT, "Approved": T.INFO,
+                         "Ongoing": T.SUCCESS_TEXT, "Completed": T.TEXT_MUTED}
 
         if not projs:
             ctk.CTkLabel(card, text="No projects active\non this day.",
-                         font=("Inter", 11), text_color="gray", justify="center").pack(pady=20)
+                         font=T.font(12), text_color=T.TEXT_MUTED, justify="center").pack(pady=20)
             return
 
         ctk.CTkLabel(card, text=f"{len(projs)} project(s) active",
-                     font=("Inter", 10), text_color="gray").pack(padx=15, pady=(0, 8))
+                     font=T.font(12), text_color=T.TEXT_MUTED).pack(padx=15, pady=(0, 8))
 
         scroll = ctk.CTkScrollableFrame(card, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=(0, 10))
 
         for p in projs:
             raw    = p["status"].replace(" (OVERDUE)", "")
-            color  = "#E74C3C" if "OVERDUE" in p["status"] else STATUS_COLORS.get(raw, "#95A5A6")
-            pcard  = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8)
+            color=T.DANGER_SOFT if "OVERDUE" in p["status"] else STATUS_COLORS.get(raw, T.TEXT_MUTED)
+            pcard  = ctk.CTkFrame(scroll, fg_color=T.SURFACE_ALT, corner_radius=8)
             pcard.pack(fill="x", pady=4)
             ctk.CTkLabel(pcard, text=p["name"],
-                         font=("Inter", 11, "bold"), text_color="#1A1A1A",
+                         font=T.font(12, "bold"), text_color=T.TEXT,
                          wraplength=165, justify="left").pack(anchor="w", padx=10, pady=(8, 2))
             ctk.CTkLabel(pcard, text=p["client"],
-                         font=("Inter", 10), text_color="#888888",
+                         font=T.font(12), text_color=T.TEXT_MUTED,
                          wraplength=165, justify="left").pack(anchor="w", padx=10)
             dates_txt = f"{p['start_date']}  →  {p['end_date']}"
             ctk.CTkLabel(pcard, text=dates_txt,
-                         font=("Inter", 9), text_color="#AAAAAA").pack(anchor="w", padx=10)
+                         font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=10)
             ctk.CTkLabel(pcard, text=p["status"],
-                         font=("Inter", 10, "bold"), text_color=color).pack(anchor="w", padx=10, pady=(2, 4))
+                         font=T.font(12, "bold"), text_color=color).pack(anchor="w", padx=10, pady=(2, 4))
             if self.navigate_to:
                 ctk.CTkButton(pcard, text="→ View Project", width=120, height=26,
-                              fg_color="#1E4528", hover_color="#14301C",
-                              font=("Inter", 10, "bold"),
+                              fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                              font=T.font(12, "bold"),
                               command=lambda pid=p["project_id"]: self.navigate_to(pid)
                               ).pack(anchor="w", padx=10, pady=(0, 8))
 
@@ -364,7 +365,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.issuance_modal = ctk.CTkToplevel(self)
         self.issuance_modal.title("Issue Tools")
         self.issuance_modal.geometry("500x700")
-        self.issuance_modal.configure(fg_color="white")
+        self.issuance_modal.configure(fg_color=T.SURFACE)
         self.issuance_modal.attributes("-topmost", True)
         self.issuance_modal.grab_set()
         
@@ -373,48 +374,48 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         y = (self.issuance_modal.winfo_screenheight() // 2) - (700 // 2)
         self.issuance_modal.geometry(f"+{x}+{y}")
         
-        form_card = ctk.CTkScrollableFrame(self.issuance_modal, fg_color="white", corner_radius=0)
+        form_card = ctk.CTkScrollableFrame(self.issuance_modal, fg_color=T.SURFACE, corner_radius=0)
         form_card.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(form_card, text="Project Tool Deployment", font=("Inter", 16, "bold"), text_color="#1E4528").pack(anchor="w", padx=20, pady=(20, 5))
-        ctk.CTkLabel(form_card, text="1. Scan ID  ➔  2. Select Project  ➔  3. Scan Required Tools", font=("Inter", 11), text_color="gray").pack(anchor="w", padx=20, pady=(0, 15))
+        ctk.CTkLabel(form_card, text="Project Tool Deployment", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(anchor="w", padx=20, pady=(20, 5))
+        ctk.CTkLabel(form_card, text="1. Scan ID  ➔  2. Select Project  ➔  3. Scan Required Tools", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20, pady=(0, 15))
 
-        ctk.CTkLabel(form_card, text="1. Assignee ID (Employee ID)", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+        ctk.CTkLabel(form_card, text="1. Assignee ID (Employee ID)", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         b_emp_row = ctk.CTkFrame(form_card, fg_color="transparent")
         b_emp_row.pack(fill="x", padx=20, pady=(5, 5))
         self.b_emp_id = ctk.CTkEntry(b_emp_row, placeholder_text="Scan ID & Press Enter...")
         self.b_emp_id.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.b_emp_id.bind("<Return>", lambda e: self.verify_borrower())
-        ctk.CTkButton(b_emp_row, text="📷 Scan", width=65, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=lambda: self.open_scanner(self.b_emp_id, self.verify_borrower)).pack(side="left")
+        ctk.CTkButton(b_emp_row, text="📷 Scan", width=65, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: self.open_scanner(self.b_emp_id, self.verify_borrower)).pack(side="left")
         
-        self.b_user_name = ctk.CTkLabel(form_card, text="Name: Pending Scan...", font=("Inter", 11), text_color="gray")
+        self.b_user_name = ctk.CTkLabel(form_card, text="Name: Pending Scan...", font=T.font(12), text_color=T.TEXT_MUTED)
         self.b_user_name.pack(anchor="w", padx=20, pady=(0, 15))
 
-        ctk.CTkLabel(form_card, text="2. Select Target Project", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
-        self.b_project_menu = ctk.CTkOptionMenu(form_card, values=["Scan Employee ID first..."], fg_color="#F9FAFB", text_color="black", state="disabled", command=self.on_project_selected)
+        ctk.CTkLabel(form_card, text="2. Select Target Project", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
+        self.b_project_menu = ctk.CTkOptionMenu(form_card, values=["Scan Employee ID first..."], fg_color=T.SURFACE_ALT, text_color=T.TEXT, state="disabled", command=self.on_project_selected)
         self.b_project_menu.pack(fill="x", padx=20, pady=(5, 5))
 
-        self.proj_req_frame = ctk.CTkFrame(form_card, fg_color="#FFF8F0", corner_radius=5, border_width=1, border_color="#E0E0E0")
+        self.proj_req_frame = ctk.CTkFrame(form_card, fg_color=T.WARNING_BG, corner_radius=5, border_width=1, border_color=T.BORDER)
         self.proj_req_frame.pack(fill="x", padx=20, pady=(5, 15))
-        ctk.CTkLabel(self.proj_req_frame, text="Project Requirements will appear here...", font=("Inter", 11, "italic"), text_color="gray").pack(pady=10)
+        ctk.CTkLabel(self.proj_req_frame, text="Project Requirements will appear here...", font=T.font(12, "italic"), text_color=T.TEXT_MUTED).pack(pady=10)
 
-        ctk.CTkLabel(form_card, text="3. Scan Required Tools", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+        ctk.CTkLabel(form_card, text="3. Scan Required Tools", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         b_tag_row = ctk.CTkFrame(form_card, fg_color="transparent")
         b_tag_row.pack(fill="x", padx=20, pady=(5, 5))
         self.b_tag_id = ctk.CTkEntry(b_tag_row, placeholder_text="Scan Tool Tag & Press Enter...", state="disabled") 
         self.b_tag_id.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.b_tag_id.bind("<Return>", lambda e: self.add_tool_to_cart())
-        self.b_scan_btn = ctk.CTkButton(b_tag_row, text="📷 Scan", width=65, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=lambda: self.open_scanner(self.b_tag_id, self.add_tool_to_cart), state="disabled")
+        self.b_scan_btn = ctk.CTkButton(b_tag_row, text="📷 Scan", width=65, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: self.open_scanner(self.b_tag_id, self.add_tool_to_cart), state="disabled")
         self.b_scan_btn.pack(side="left")
 
-        self.cart_frame = ctk.CTkScrollableFrame(form_card, fg_color="#F9FAFB", height=120, corner_radius=5)
+        self.cart_frame = ctk.CTkScrollableFrame(form_card, fg_color=T.SURFACE_ALT, height=120, corner_radius=5)
         self.cart_frame.pack(fill="x", padx=20, pady=(10, 20))
         self.refresh_cart_ui() 
 
-        ctk.CTkButton(form_card, text="Issue Tools & Print Receipt", height=40, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 13, "bold"), command=self.execute_borrow).pack(fill="x", padx=20, pady=(0, 20))
+        ctk.CTkButton(form_card, text="Issue Tools & Print Receipt", height=40, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(14, "bold"), command=self.execute_borrow).pack(fill="x", padx=20, pady=(0, 20))
         btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(0, 20))
-        ctk.CTkButton(btn_row, text="Cancel", height=40, width=80, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=self.issuance_modal.destroy).pack(side="right")
+        ctk.CTkButton(btn_row, text="Cancel", height=40, width=80, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=self.issuance_modal.destroy).pack(side="right")
         
         self.active_borrow_user_id = None
         self.active_borrow_user_name = None
@@ -428,7 +429,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.retrieval_modal = ctk.CTkToplevel(self)
         self.retrieval_modal.title("Retrieve Tools")
         self.retrieval_modal.geometry("500x650")
-        self.retrieval_modal.configure(fg_color="white")
+        self.retrieval_modal.configure(fg_color=T.SURFACE)
         self.retrieval_modal.attributes("-topmost", True)
         self.retrieval_modal.grab_set()
         
@@ -437,32 +438,32 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         y = (self.retrieval_modal.winfo_screenheight() // 2) - (650 // 2)
         self.retrieval_modal.geometry(f"+{x}+{y}")
         
-        form_card = ctk.CTkScrollableFrame(self.retrieval_modal, fg_color="white", corner_radius=0)
+        form_card = ctk.CTkScrollableFrame(self.retrieval_modal, fg_color=T.SURFACE, corner_radius=0)
         form_card.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(form_card, text="Secure Tool Retrieval", font=("Inter", 16, "bold"), text_color="#F1C40F").pack(anchor="w", padx=20, pady=(20, 5))
-        ctk.CTkLabel(form_card, text="Scan Employee ID and Tool Tag (or enter TRN) to restock.", font=("Inter", 11), text_color="gray").pack(anchor="w", padx=20, pady=(0, 15))
+        ctk.CTkLabel(form_card, text="Secure Tool Retrieval", font=T.font(16, "bold"), text_color=T.ACCENT).pack(anchor="w", padx=20, pady=(20, 5))
+        ctk.CTkLabel(form_card, text="Scan Employee ID and Tool Tag (or enter TRN) to restock.", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20, pady=(0, 15))
 
-        ctk.CTkLabel(form_card, text="1. Surrendering Employee ID", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+        ctk.CTkLabel(form_card, text="1. Surrendering Employee ID", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         r_emp_row = ctk.CTkFrame(form_card, fg_color="transparent")
         r_emp_row.pack(fill="x", padx=20, pady=(5, 5))
         self.r_emp_id = ctk.CTkEntry(r_emp_row, placeholder_text="Scan ID & Press Enter...")
         self.r_emp_id.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.r_emp_id.bind("<Return>", lambda e: self.verify_return_employee())
-        ctk.CTkButton(r_emp_row, text="📷 Scan", width=65, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=lambda: self.open_scanner(self.r_emp_id, self.verify_return_employee)).pack(side="left")
+        ctk.CTkButton(r_emp_row, text="📷 Scan", width=65, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: self.open_scanner(self.r_emp_id, self.verify_return_employee)).pack(side="left")
 
-        self.r_user_name = ctk.CTkLabel(form_card, text="Name: Pending Scan...", font=("Inter", 11), text_color="gray")
+        self.r_user_name = ctk.CTkLabel(form_card, text="Name: Pending Scan...", font=T.font(12), text_color=T.TEXT_MUTED)
         self.r_user_name.pack(anchor="w", padx=20, pady=(0, 15))
 
-        ctk.CTkLabel(form_card, text="2. Tag ID or Receipt TRN (e.g., TRN-42)", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+        ctk.CTkLabel(form_card, text="2. Tag ID or Receipt TRN (e.g., TRN-42)", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         r_tag_row = ctk.CTkFrame(form_card, fg_color="transparent")
         r_tag_row.pack(fill="x", padx=20, pady=(5, 5))
         self.r_tag_id = ctk.CTkEntry(r_tag_row, placeholder_text="Scan Tag or enter TRN...")
         self.r_tag_id.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.r_tag_id.bind("<Return>", lambda e: self.verify_tool_for_return())
-        ctk.CTkButton(r_tag_row, text="📷 Scan", width=65, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=lambda: self.open_scanner(self.r_tag_id, self.verify_tool_for_return)).pack(side="left")
+        ctk.CTkButton(r_tag_row, text="📷 Scan", width=65, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: self.open_scanner(self.r_tag_id, self.verify_tool_for_return)).pack(side="left")
 
-        self.r_record_info = ctk.CTkLabel(form_card, text="Record: Pending Scan...", font=("Inter", 11), text_color="gray", justify="left")
+        self.r_record_info = ctk.CTkLabel(form_card, text="Record: Pending Scan...", font=T.font(12), text_color=T.TEXT_MUTED, justify="left")
         self.r_record_info.pack(anchor="w", padx=20, pady=(0, 15))
 
         cond_qty_row = ctk.CTkFrame(form_card, fg_color="transparent")
@@ -472,24 +473,24 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
 
         c_frame = ctk.CTkFrame(cond_qty_row, fg_color="transparent")
         c_frame.grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ctk.CTkLabel(c_frame, text="3. Return Condition", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
-        self.r_condition = ctk.CTkOptionMenu(c_frame, values=["Good", "Needs Repair", "Damaged", "Lost"], fg_color="#F9FAFB", text_color="black")
+        ctk.CTkLabel(c_frame, text="3. Return Condition", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
+        self.r_condition = ctk.CTkOptionMenu(c_frame, values=["Good", "Needs Repair", "Damaged", "Lost"], fg_color=T.SURFACE_ALT, text_color=T.TEXT)
         self.r_condition.pack(fill="x", pady=(5, 0))
-        ctk.CTkLabel(c_frame, text="Condition Details", font=("Inter", 10), text_color="gray").pack(anchor="w", pady=(10, 0))
-        self.r_condition_desc = ctk.CTkTextbox(c_frame, height=80, fg_color="#F9FAFB", border_width=1, border_color="#E0E0E0")
+        ctk.CTkLabel(c_frame, text="Condition Details", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", pady=(10, 0))
+        self.r_condition_desc = ctk.CTkTextbox(c_frame, height=80, fg_color=T.SURFACE_ALT, border_width=1, border_color=T.BORDER)
         self.r_condition_desc.pack(fill="x", pady=(5, 0))
 
         q_frame = ctk.CTkFrame(cond_qty_row, fg_color="transparent")
         q_frame.grid(row=0, column=1, sticky="ew", padx=(5, 0))
-        ctk.CTkLabel(q_frame, text="Qty", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
+        ctk.CTkLabel(q_frame, text="Qty", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
         self.r_qty = ctk.CTkEntry(q_frame, placeholder_text="1")
         self.r_qty.pack(fill="x", pady=(5, 0))
         self.r_qty.insert(0, "1")
 
-        ctk.CTkButton(form_card, text="Confirm Retrieval & Restock", height=40, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 13, "bold"), command=self.execute_return).pack(fill="x", padx=20, pady=(0, 20))
+        ctk.CTkButton(form_card, text="Confirm Retrieval & Restock", height=40, fg_color=T.ACCENT, text_color=T.TEXT, hover_color=T.ACCENT_HOVER, font=T.font(14, "bold"), command=self.execute_return).pack(fill="x", padx=20, pady=(0, 20))
         btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(10, 20))
-        ctk.CTkButton(btn_row, text="Cancel", height=40, width=80, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 12, "bold"), command=self.retrieval_modal.destroy).pack(side="right")
+        ctk.CTkButton(btn_row, text="Cancel", height=40, width=80, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=self.retrieval_modal.destroy).pack(side="right")
         
         self.active_return_user_id = None
         self.active_return_tool_id = None
@@ -499,7 +500,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.r_emp_id.focus_set()
 
     def build_history_table(self, parent):
-        table_card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10)
+        table_card = ctk.CTkFrame(parent, fg_color=T.SURFACE, corner_radius=10)
         table_card.grid(row=0, column=0, sticky="nsew", padx=0)
         table_card.grid_columnconfigure(0, weight=1)
         table_card.grid_rowconfigure(1, weight=1)
@@ -509,9 +510,9 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         
         title_col = ctk.CTkFrame(top_bar, fg_color="transparent")
         title_col.pack(side="left")
-        ctk.CTkLabel(title_col, text="Deployment History", font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(anchor="w")
+        ctk.CTkLabel(title_col, text="Deployment History", font=T.font(16, "bold"), text_color=T.TEXT).pack(anchor="w")
         ctk.CTkLabel(title_col, text="Click any row to view details or reprint receipt.",
-                     font=("Inter", 10), text_color="gray").pack(anchor="w")
+                     font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w")
 
         self.search_var = ctk.StringVar()
         self.search_entry = ctk.CTkEntry(top_bar, placeholder_text="Search Name or Tag...", width=200, textvariable=self.search_var)
@@ -524,11 +525,11 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             self._search_timer = self.after(300, self.load_transaction_history)
         self.search_var.trace_add("write", on_search_change)
                       
-        self.history_filter = ctk.CTkOptionMenu(top_bar, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Retrieved", "Overdue", "A-Z (Item)"], width=160, fg_color="#F9FAFB", text_color="black", command=lambda e: self.load_transaction_history())
+        self.history_filter = ctk.CTkOptionMenu(top_bar, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Retrieved", "Overdue", "A-Z (Item)"], width=160, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.load_transaction_history())
         self.history_filter.pack(side="right", padx=(10, 5))
 
-        ctk.CTkButton(top_bar, text="📥 Retrieve Tools", width=120, fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.open_retrieval_modal).pack(side="right", padx=(5, 10))
-        ctk.CTkButton(top_bar, text="📤 Issue Tools", width=110, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 12, "bold"), command=self.open_issuance_modal).pack(side="right", padx=(10, 0))
+        ctk.CTkButton(top_bar, text="📥 Retrieve Tools", width=120, fg_color=T.ACCENT, text_color=T.TEXT, hover_color=T.ACCENT_HOVER, font=T.font(12, "bold"), command=self.open_retrieval_modal).pack(side="right", padx=(5, 10))
+        ctk.CTkButton(top_bar, text="📤 Issue Tools", width=110, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=self.open_issuance_modal).pack(side="right", padx=(10, 0))
 
         self.data_scroll = ctk.CTkScrollableFrame(table_card, fg_color="transparent")
         self.data_scroll.pack(fill="both", expand=True, padx=20, pady=(10, 20))
@@ -610,11 +611,11 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         if row['status'] == 'Active':
             due = row['due_date']
             if not due:
-                return "No Due Date", "#1A1A1A", False
+                return "No Due Date", T.TEXT, False
             if due < (row.get('server_today') or _date.today()):
-                return f"Overdue: {due.strftime('%b %d, %Y')}", "#D8000C", True
-            return f"Due: {due.strftime('%b %d, %Y')}", "#1A1A1A", False
-        return (f"Ret: {row['return_date_short']}" if row['return_date_short'] else "Returned"), "#2ECC71", False
+                return f"Overdue: {due.strftime('%b %d, %Y')}", T.DANGER, True
+            return f"Due: {due.strftime('%b %d, %Y')}", T.TEXT, False
+        return (f"Ret: {row['return_date_short']}" if row['return_date_short'] else "Returned"), T.SUCCESS_TEXT, False
 
     def _history_cells(self, row):
         return [row['type'], row['tool_name'], row['tag_id'] if row['tag_id'] else "Unassigned", str(row['grouped_qty']), row['full_name'],
@@ -622,13 +623,13 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
 
     def _history_style(self, row, col, val):
         if col == 7:
-            return ("#D8000C" if val == "Active" else "#2ECC71"), True
+            return (T.DANGER if val == "Active" else T.SUCCESS_TEXT), True
         if col == 6:
             _t, color, bold = self._history_due(row)
             return color, bold
         if col == 2 and val == "Unassigned":
-            return "#D8000C", True
-        return "#1A1A1A", False
+            return T.DANGER, True
+        return T.TEXT, False
 
     def open_transaction_modal(self, row):
         trn_label = (f"TRN-{row['first_trn']}–{row['last_trn']}"
@@ -639,7 +640,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         modal.title(f"Transaction Overview — {trn_label}")
         modal.geometry("520x550")
         modal.minsize(400, 450)
-        modal.configure(fg_color="white")
+        modal.configure(fg_color=T.SURFACE)
         modal.attributes("-topmost", True)
         modal.grab_set()
         modal.update_idletasks()
@@ -648,25 +649,25 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         modal.geometry(f"+{x}+{y}")
 
         # Header
-        type_color = "#1E4528" if row['type'] == "Issue" else "#D35400"
+        type_color=T.PRIMARY if row['type'] == "Issue" else T.WARNING_STRONG
         ctk.CTkLabel(modal, text="Transaction Overview",
-                     font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(pady=(20, 2))
+                     font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 2))
         ctk.CTkLabel(modal, text=trn_label,
-                     font=("Inter", 12, "bold"), text_color=type_color).pack(pady=(0, 12))
+                     font=T.font(12, "bold"), text_color=type_color).pack(pady=(0, 12))
 
         # Details card
-        card = ctk.CTkFrame(modal, fg_color="#F9FAFB", corner_radius=10)
+        card = ctk.CTkFrame(modal, fg_color=T.SURFACE_ALT, corner_radius=10)
         card.pack(fill="x", padx=24, pady=(0, 10))
 
-        def detail_row(label, value, val_color="#1A1A1A"):
+        def detail_row(label, value, val_color=T.TEXT):
             r = ctk.CTkFrame(card, fg_color="transparent")
             r.pack(fill="x", padx=16, pady=(6, 0))
-            ctk.CTkLabel(r, text=label, font=("Inter", 11, "bold"),
-                         text_color="#1E4528", width=110, anchor="w").pack(side="left")
-            ctk.CTkLabel(r, text=value, font=("Inter", 11),
+            ctk.CTkLabel(r, text=label, font=T.font(12, "bold"),
+                         text_color=T.PRIMARY, width=110, anchor="w").pack(side="left")
+            ctk.CTkLabel(r, text=value, font=T.font(12),
                          text_color=val_color, wraplength=330, justify="left").pack(side="left")
 
-        status_color = "#D8000C" if row['status'] == "Active" else "#2ECC71"
+        status_color=T.DANGER if row['status'] == "Active" else T.SUCCESS_TEXT
         detail_row("Type:",       row['type'])
         detail_row("Date/Time:",  row['b_date'])
         detail_row("Issued On:",  row['borrow_date_full'])
@@ -684,21 +685,21 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         btn_frame.pack(side="bottom", fill="x", padx=24, pady=(0, 20))
 
         ctk.CTkButton(btn_frame, text="🖨  Reprint Receipt", height=38,
-                      fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 12, "bold"),
+                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"),
                       command=lambda: self._reprint_from_history(row, modal)).pack(
             side="left", fill="x", expand=True, padx=(0, 8))
         ctk.CTkButton(btn_frame, text="Close", height=38, width=80,
-                      fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
-                      font=("Inter", 12, "bold"),
+                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
+                      font=T.font(12, "bold"),
                       command=modal.destroy).pack(side="right")
 
         # Items section
         ctk.CTkLabel(modal, text="Items in this Transaction",
-                     font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=24, pady=(6, 2))
+                     font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=24, pady=(6, 2))
         
         # CTkScrollableFrame configured to expand and absorb overflow
-        items_frame = ctk.CTkScrollableFrame(modal, fg_color="#F9FAFB", corner_radius=8)
+        items_frame = ctk.CTkScrollableFrame(modal, fg_color=T.SURFACE_ALT, corner_radius=8)
         items_frame.pack(fill="both", expand=True, padx=24, pady=(0, 12))
 
         # Query all tools in the same project+user batch
@@ -708,7 +709,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         conn = get_connection()
         if not conn:
             ctk.CTkLabel(frame, text=f"{row['tool_name']}  (Qty: {row['grouped_qty']})",
-                         font=("Inter", 11), text_color="#1A1A1A").pack(anchor="w", padx=10, pady=6)
+                         font=T.font(12), text_color=T.TEXT).pack(anchor="w", padx=10, pady=6)
             return
         try:
             cursor = conn.cursor(dictionary=True)
@@ -731,11 +732,11 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             for item in items:
                 ctk.CTkLabel(frame,
                              text=f"• {item['name']}  (Qty: {item['qty']})",
-                             font=("Inter", 11), text_color="#1A1A1A").pack(
+                             font=T.font(12), text_color=T.TEXT).pack(
                     anchor="w", padx=10, pady=(4, 0))
         except Exception:
             ctk.CTkLabel(frame, text=f"• {row['tool_name']}  (Qty: {row['grouped_qty']})",
-                         font=("Inter", 11), text_color="#1A1A1A").pack(anchor="w", padx=10, pady=6)
+                         font=T.font(12), text_color=T.TEXT).pack(anchor="w", padx=10, pady=6)
         finally:
             if conn.is_connected(): cursor.close(); conn.close()
 
@@ -789,7 +790,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             trigger_method()
         self._scan_win = open_scan_dialog(target_entry.winfo_toplevel(), got, "Scan QR Code")
 
-    def _reset_borrower_ui(self, message, color="#D8000C"):
+    def _reset_borrower_ui(self, message, color=T.DANGER):
         self.active_borrow_user_id = None
         self.active_borrow_user_name = None
         self.b_user_name.configure(text=message, text_color=color)
@@ -811,7 +812,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             return
         self.active_borrow_user_id = b['user_id']
         self.active_borrow_user_name = b['full_name']
-        self.b_user_name.configure(text=f"✓ Verified: {b['full_name']} ({b['role']})", text_color="#2ECC71")
+        self.b_user_name.configure(text=f"✓ Verified: {b['full_name']} ({b['role']})", text_color=T.SUCCESS_TEXT)
         self.active_projects_map.clear()
         if b['projects']:
             dropdown_vals = ["Select a project..."]
@@ -827,12 +828,12 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             # say WHY: an ended / unapproved / fully issued project used to just vanish from the list
             nl = chr(10)
             self.b_user_name.configure(text=f"✓ Verified: {b['full_name']} ({b['role']})" + nl + "ℹ " + (nl + "ℹ ").join(b['notices']),
-                                       text_color="#D35400", justify="left")
+                                       text_color=T.WARNING_TEXT, justify="left")
         self._clear_proj_req_display()
 
     def _clear_proj_req_display(self):
         for w in self.proj_req_frame.winfo_children(): w.destroy()
-        ctk.CTkLabel(self.proj_req_frame, text="Select a project to see requirements...", font=("Inter", 11, "italic"), text_color="gray").pack(pady=10)
+        ctk.CTkLabel(self.proj_req_frame, text="Select a project to see requirements...", font=T.font(12, "italic"), text_color=T.TEXT_MUTED).pack(pady=10)
         self.b_tag_id.configure(state="disabled")
         self.b_scan_btn.configure(state="disabled")
         self.current_project_reqs.clear()
@@ -858,8 +859,8 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
 
         if reqs:
             header_text = f"📍 Project: {proj['name']}\n🏢 Client: {proj['client']}  |  Site: {proj['location']}"
-            ctk.CTkLabel(self.proj_req_frame, text=header_text, font=("Inter", 11, "bold"), text_color="#1E4528", justify="left").pack(anchor="w", padx=10, pady=(10, 5))
-            ctk.CTkFrame(self.proj_req_frame, height=1, fg_color="#E0E0E0").pack(fill="x", padx=10, pady=(0, 5))
+            ctk.CTkLabel(self.proj_req_frame, text=header_text, font=T.font(12, "bold"), text_color=T.PRIMARY, justify="left").pack(anchor="w", padx=10, pady=(10, 5))
+            ctk.CTkFrame(self.proj_req_frame, height=1, fg_color=T.BORDER).pack(fill="x", padx=10, pady=(0, 5))
 
         all_fulfilled = True
         for r in reqs:
@@ -868,10 +869,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             remaining = needed - issued
             if remaining > 0: all_fulfilled = False
 
-            txt_color = "#D8000C" if remaining > 0 else "#2ECC71"
+            txt_color=T.DANGER if remaining > 0 else T.SUCCESS_TEXT
             status_txt = f"Needs {fmt_qty(remaining)}" if remaining > 0 else "✓ Fulfilled"
             row_str = f"• {r['name']}  |  Approved: {fmt_qty(needed)}  |  {status_txt}"
-            ctk.CTkLabel(self.proj_req_frame, text=row_str, font=("Inter", 11, "bold" if remaining > 0 else "normal"), text_color=txt_color).pack(anchor="w", padx=10, pady=2)
+            ctk.CTkLabel(self.proj_req_frame, text=row_str, font=T.font(12, "bold" if remaining > 0 else "normal"), text_color=txt_color).pack(anchor="w", padx=10, pady=2)
 
         state = "disabled" if all_fulfilled else "normal"
         if hasattr(self, 'b_tag_id') and self.b_tag_id.winfo_exists():
@@ -953,18 +954,18 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
     def refresh_cart_ui(self):
         for widget in self.cart_frame.winfo_children(): widget.destroy()
         if len(self.borrow_cart) == 0:
-            ctk.CTkLabel(self.cart_frame, text="Cart is empty. Scan required tools to add.", text_color="gray").pack(pady=10)
+            ctk.CTkLabel(self.cart_frame, text="Cart is empty. Scan required tools to add.", text_color=T.TEXT_MUTED).pack(pady=10)
             return
 
         for i, item in enumerate(self.borrow_cart):
-            row = ctk.CTkFrame(self.cart_frame, fg_color="white", corner_radius=5, height=35)
+            row = ctk.CTkFrame(self.cart_frame, fg_color=T.SURFACE, corner_radius=5, height=35)
             row.pack(fill="x", pady=2, padx=5)
             row.pack_propagate(False)
-            ctk.CTkLabel(row, text=f"✓ {item['name']}  |  Tag: {item['tag']}", font=("Inter", 11, "bold"), text_color="#1E4528").pack(side="left", padx=10, pady=5)
-            ctk.CTkButton(row, text="✕", width=25, height=25, fg_color="#FFEAEA", text_color="#D8000C", hover_color="#FFC0C0", command=lambda idx=i: self.remove_from_cart(idx)).pack(side="right", padx=(5, 10))
-            ctk.CTkButton(row, text="+", width=25, height=25, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda idx=i: self.update_cart_qty(idx, 1)).pack(side="right", padx=2)
-            ctk.CTkLabel(row, text=f"Qty: {item['qty_borrowed']}", font=("Inter", 11, "bold"), text_color="black").pack(side="right", padx=8)
-            ctk.CTkButton(row, text="-", width=25, height=25, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda idx=i: self.update_cart_qty(idx, -1)).pack(side="right", padx=2)
+            ctk.CTkLabel(row, text=f"✓ {item['name']}  |  Tag: {item['tag']}", font=T.font(12, "bold"), text_color=T.PRIMARY).pack(side="left", padx=10, pady=5)
+            ctk.CTkButton(row, text="✕", width=25, height=25, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda idx=i: self.remove_from_cart(idx)).pack(side="right", padx=(5, 10))
+            ctk.CTkButton(row, text="+", width=25, height=25, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=lambda idx=i: self.update_cart_qty(idx, 1)).pack(side="right", padx=2)
+            ctk.CTkLabel(row, text=f"Qty: {item['qty_borrowed']}", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="right", padx=8)
+            ctk.CTkButton(row, text="-", width=25, height=25, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=lambda idx=i: self.update_cart_qty(idx, -1)).pack(side="right", padx=2)
 
     def execute_borrow(self):
         if not self.active_borrow_user_id:
@@ -1018,11 +1019,11 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         W = 800
         LINE = 40
         H = 280 + max(60, len(tool_names) * LINE) + 120
-        img = Image.new("RGB", (W, H), "#FAFAFA")
+        img = Image.new("RGB", (W, H), T.SURFACE_ALT)
         draw = ImageDraw.Draw(img)
 
         # Header band
-        draw.rectangle([(0, 0), (W, 90)], fill="#1E4528")
+        draw.rectangle([(0, 0), (W, 90)], fill=T.PRIMARY)
         f_hdr   = self._load_receipt_font("arialbd.ttf", 22)
         f_sub   = self._load_receipt_font("arial.ttf",   14)
         f_label = self._load_receipt_font("arial.ttf",   13)
@@ -1032,7 +1033,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         f_sig   = self._load_receipt_font("arial.ttf",   12)
 
         draw.text((30, 18), "CHAMPION FINE TOOLING CORP.", fill="white", font=f_hdr)
-        draw.text((30, 56), "MASTER DEPLOYMENT RECEIPT", fill="#A8D5BA", font=f_sub)
+        draw.text((30, 56), "MASTER DEPLOYMENT RECEIPT", fill=T.GREEN_TINT, font=f_sub)
 
         # Transaction metadata
         # [4-DATE] the receipt shows when the tools were ISSUED (server clock, from the transaction), never the clock of
@@ -1049,25 +1050,25 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             ("Project:",      str(purpose)[:70]),
         ]
         for label, value in meta:
-            draw.text((30,  y), label, fill="#888888", font=f_label)
-            draw.text((180, y), value, fill="#1A1A1A", font=f_value)
+            draw.text((30,  y), label, fill=T.TEXT_MUTED, font=f_label)
+            draw.text((180, y), value, fill=T.TEXT, font=f_value)
             y += 38
 
-        draw.line([(30, y + 8), (W - 30, y + 8)], fill="#DDDDDD", width=1)
+        draw.line([(30, y + 8), (W - 30, y + 8)], fill=T.BORDER_STRONG, width=1)
         y += 24
 
         # Items
-        draw.text((30, y), "Items Issued:", fill="#1A1A1A", font=f_items)
+        draw.text((30, y), "Items Issued:", fill=T.TEXT, font=f_items)
         y += 32
         for name in tool_names:
-            draw.ellipse([(30, y + 6), (40, y + 16)], fill="#1E4528")
-            draw.text((52, y), name, fill="#1A1A1A", font=f_item)
+            draw.ellipse([(30, y + 6), (40, y + 16)], fill=T.PRIMARY)
+            draw.text((52, y), name, fill=T.TEXT, font=f_item)
             y += LINE
 
-        draw.line([(30, y + 18), (W - 30, y + 18)], fill="#DDDDDD", width=1)
+        draw.line([(30, y + 18), (W - 30, y + 18)], fill=T.BORDER_STRONG, width=1)
         y += 36
-        draw.text((30,      y), "Authorized Admin Signature: ___________________________", fill="#888888", font=f_sig)
-        draw.text((W - 280, y), "Received By: ___________________", fill="#888888", font=f_sig)
+        draw.text((30,      y), "Authorized Admin Signature: ___________________________", fill=T.TEXT_MUTED, font=f_sig)
+        draw.text((W - 280, y), "Received By: ___________________", fill=T.TEXT_MUTED, font=f_sig)
 
         return img
 
@@ -1078,7 +1079,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             # ── Instant in-app preview ────────────────────────────
             preview = ctk.CTkToplevel(self)
             preview.title(f"Receipt — TRN-{trans_id_range}")
-            preview.configure(fg_color="white")
+            preview.configure(fg_color=T.SURFACE)
             preview.attributes("-topmost", True)
             preview.grab_set()
             preview.update_idletasks()
@@ -1087,7 +1088,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             preview.geometry(f"{pw}x{ph}+{(sw-pw)//2}+{(sh-ph)//2}")
 
             # Scrollable image area
-            scroll_area = ctk.CTkScrollableFrame(preview, fg_color="#F0F0F0")
+            scroll_area = ctk.CTkScrollableFrame(preview, fg_color=T.SURFACE_MUTED)
             scroll_area.pack(fill="both", expand=True, padx=0, pady=0)
 
             display_w = img.width // 2
@@ -1097,7 +1098,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             img_lbl.pack(padx=20, pady=20)
 
             # Button bar
-            btn_bar = ctk.CTkFrame(preview, fg_color="white", height=60)
+            btn_bar = ctk.CTkFrame(preview, fg_color=T.SURFACE, height=60)
             btn_bar.pack(fill="x", side="bottom")
             btn_bar.pack_propagate(False)
 
@@ -1108,12 +1109,12 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
                 os.startfile(path)
 
             ctk.CTkButton(btn_bar, text="🖨  Export & Open JPG", height=38,
-                          fg_color="#1E4528", hover_color="#14301C",
-                          font=("Inter", 12, "bold"),
+                          fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                          font=T.font(12, "bold"),
                           command=export_jpg).pack(side="left", padx=20, pady=11)
             ctk.CTkButton(btn_bar, text="Close", height=38, width=90,
-                          fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
-                          font=("Inter", 12, "bold"),
+                          fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
+                          font=T.font(12, "bold"),
                           command=preview.destroy).pack(side="right", padx=20, pady=11)
 
         except Exception as e:
@@ -1133,12 +1134,12 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             rec = iss.find_deployed(self.user_info, self.active_return_user_id, raw)
         except Exception as e:
             self.active_return_tool_id = None; self.active_return_item_type = None; self.max_returnable = 0
-            self.r_record_info.configure(text=f"❌ {friendly_message(e)}", text_color="#D8000C")
+            self.r_record_info.configure(text=f"❌ {friendly_message(e)}", text_color=T.DANGER_TEXT)
             return
         self.active_return_tool_id = rec['tool_id']
         self.active_return_item_type = rec['item_type']
         self.max_returnable = float(rec['deployed'])
-        self.r_record_info.configure(text=f"✓ Tool Identified: {rec['name']}\nCurrently Deployed Out: {_fmt_qty(rec['deployed'])}", text_color="#2ECC71")
+        self.r_record_info.configure(text=f"✓ Tool Identified: {rec['name']}\nCurrently Deployed Out: {_fmt_qty(rec['deployed'])}", text_color=T.SUCCESS_TEXT)
         self.r_qty.delete(0, 'end'); self.r_qty.insert(0, "1")
 
     def verify_return_employee(self):
@@ -1150,11 +1151,11 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             user = iss.verify_returner(self.user_info, emp_id)
         except Exception as e:
             self.active_return_user_id = None
-            self.r_user_name.configure(text=f"❌ {friendly_message(e)}", text_color="#D8000C")
+            self.r_user_name.configure(text=f"❌ {friendly_message(e)}", text_color=T.DANGER_TEXT)
             return
         self.active_return_user_id = user['user_id']
         note = "" if user['status'] == 'Active' else f" - account {user['status']}"
-        self.r_user_name.configure(text=f"✓ Verified: {user['full_name']} ({user['role']}){note}", text_color="#2ECC71")
+        self.r_user_name.configure(text=f"✓ Verified: {user['full_name']} ({user['role']}){note}", text_color=T.SUCCESS_TEXT)
 
     def execute_return(self):
         if not self.active_return_tool_id or not self.active_return_user_id:

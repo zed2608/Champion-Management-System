@@ -9,6 +9,7 @@ import difflib
 from services.validators import fmt_qty
 from services.errors import friendly_message
 from services import project_service as ps
+from ui import theme as T
 
 
 class ProjectsView(UiMixin, ctk.CTkFrame):
@@ -36,8 +37,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Project Management", font=(
-            "Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkLabel(top_bar, text="Project Management", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
 
         self.inner = ctk.CTkFrame(self, fg_color="transparent")
         self.inner.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 20))
@@ -52,7 +52,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.draft_modal.title(
             "Edit Project" if edit_row else "Draft Project Plan")
         self.draft_modal.geometry("500x750")
-        self.draft_modal.configure(fg_color="white")
+        self.draft_modal.configure(fg_color=T.SURFACE)
         self.draft_modal.attributes("-topmost", True)
         self.draft_modal.grab_set()
 
@@ -62,25 +62,22 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.draft_modal.geometry(f"500x750+{x}+{y}")
 
         form_card = ctk.CTkScrollableFrame(
-            self.draft_modal, fg_color="white", corner_radius=0)
+            self.draft_modal, fg_color=T.SURFACE, corner_radius=0)
         form_card.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(form_card, text="Edit Project Plan" if edit_row else "Draft Project Plan", font=(
-            "Inter", 16, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 10))
+        ctk.CTkLabel(form_card, text="Edit Project Plan" if edit_row else "Draft Project Plan", font=T.font(16, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 10))
 
         def field(label, ph):
-            ctk.CTkLabel(form_card, text=label, font=(
-                "Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+            ctk.CTkLabel(form_card, text=label, font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
             e = ctk.CTkEntry(form_card, placeholder_text=ph, takefocus=True)
             e.pack(fill="x", padx=20, pady=(5, 10))
             return e
 
         self.p_name = field("Project Name *", "e.g., Ayala Alabang Phase 2")
 
-        ctk.CTkLabel(form_card, text="Project Description", font=(
-            "Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+        ctk.CTkLabel(form_card, text="Project Description", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         self.p_desc = ctk.CTkTextbox(
-            form_card, height=80, fg_color="#F9FAFB", border_width=1, border_color="#E0E0E0")
+            form_card, height=80, fg_color=T.SURFACE_ALT, border_width=1, border_color=T.BORDER)
         self.p_desc.pack(fill="x", padx=20, pady=(5, 10))
 
         self.p_head = field("Project Head / Manager *",
@@ -88,8 +85,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.p_client = field("Client / Company *", "e.g., Makati Dev Corp")
         self.p_location = field("Site Location", "e.g., Block 4, Alabang")
 
-        ctk.CTkLabel(form_card, text="Assigned Workers", font=(
-            "Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
+        ctk.CTkLabel(form_card, text="Assigned Workers", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
 
         worker_input_row = ctk.CTkFrame(form_card, fg_color="transparent")
         worker_input_row.pack(fill="x", padx=20, pady=(5, 5))
@@ -97,25 +93,25 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.worker_single_entry = ctk.CTkEntry(worker_input_row, placeholder_text="Employee ID or name...", takefocus=True)
         self.worker_single_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
-        self.btn_add_worker = ctk.CTkButton(worker_input_row, text="+ Add", width=55, height=32, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 11, "bold"), command=self._add_worker_from_entry)
+        self.btn_add_worker = ctk.CTkButton(worker_input_row, text="+ Add", width=55, height=32, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=self._add_worker_from_entry)
         self.btn_add_worker.pack(side="left", padx=(0, 5))
-        self.btn_scan_worker = ctk.CTkButton(worker_input_row, text="📷 Scan", width=65, height=32, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=self.scan_worker)
+        self.btn_scan_worker = ctk.CTkButton(worker_input_row, text="📷 Scan", width=65, height=32, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=self.scan_worker)
         self.btn_scan_worker.pack(side="left")
 
         self.worker_tags_frame = ctk.CTkScrollableFrame(
-            form_card, fg_color="#F9FAFB", corner_radius=6, height=80)
+            form_card, fg_color=T.SURFACE_ALT, corner_radius=6, height=80)
         self.worker_tags_frame.pack(fill="x", padx=20, pady=(0, 12))
         self.workers_list = []
         self._refresh_worker_tags()
 
-        ctk.CTkLabel(form_card, text="Tools & Equipment Needed *", font=("Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20)
-        self.browse_btn = ctk.CTkButton(form_card, text="🔍 Browse Inventory Catalog", fg_color="#F1C40F", text_color="black", hover_color="#D4AC0D", font=("Inter", 12, "bold"), command=self.open_tool_picker)
+        ctk.CTkLabel(form_card, text="Tools & Equipment Needed *", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
+        self.browse_btn = ctk.CTkButton(form_card, text="🔍 Browse Inventory Catalog", fg_color=T.ACCENT, text_color=T.TEXT, hover_color=T.ACCENT_HOVER, font=T.font(12, "bold"), command=self.open_tool_picker)
         self.browse_btn.pack(fill="x", padx=20, pady=(5, 10))
 
-        cart_bg = ctk.CTkFrame(form_card, fg_color="#F9FAFB", corner_radius=8)
+        cart_bg = ctk.CTkFrame(form_card, fg_color=T.SURFACE_ALT, corner_radius=8)
         cart_bg.pack(fill="x", padx=20, pady=(0, 15))
         self.cart_scroll = ctk.CTkScrollableFrame(
-            cart_bg, fg_color="white", height=120)
+            cart_bg, fg_color=T.SURFACE, height=120)
         self.cart_scroll.pack(fill="x", padx=10, pady=10)
         self.refresh_req_cart()
 
@@ -126,8 +122,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
         start_f = ctk.CTkFrame(row_dates, fg_color="transparent")
         start_f.grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ctk.CTkLabel(start_f, text="Start Date", font=(
-            "Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
+        ctk.CTkLabel(start_f, text="Start Date", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
         start_input_row = ctk.CTkFrame(start_f, fg_color="transparent")
         start_input_row.pack(fill="x", pady=(5, 0))
         self.p_start = ctk.CTkEntry(
@@ -135,13 +130,12 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.p_start.pack(side="left", fill="x", expand=True)
         self.p_start.bind(
             "<KeyRelease>", lambda e: self._format_date_mask(e, self.p_start))
-        ctk.CTkButton(start_input_row, text="📅", width=35, fg_color="#E0E0E0", text_color="black",
-                      hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.p_start)).pack(side="left", padx=(5, 0))
+        ctk.CTkButton(start_input_row, text="📅", width=35, fg_color=T.BORDER, text_color=T.TEXT,
+                      hover_color=T.BORDER_STRONG, command=lambda: self.open_date_picker(self.p_start)).pack(side="left", padx=(5, 0))
 
         end_f = ctk.CTkFrame(row_dates, fg_color="transparent")
         end_f.grid(row=0, column=1, sticky="ew", padx=(5, 0))
-        ctk.CTkLabel(end_f, text="End Date", font=(
-            "Inter", 11, "bold"), text_color="#1A1A1A").pack(anchor="w")
+        ctk.CTkLabel(end_f, text="End Date", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
         end_input_row = ctk.CTkFrame(end_f, fg_color="transparent")
         end_input_row.pack(fill="x", pady=(5, 0))
         self.p_end = ctk.CTkEntry(
@@ -149,8 +143,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.p_end.pack(side="left", fill="x", expand=True)
         self.p_end.bind(
             "<KeyRelease>", lambda e: self._format_date_mask(e, self.p_end))
-        ctk.CTkButton(end_input_row, text="📅", width=35, fg_color="#E0E0E0", text_color="black",
-                      hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.p_end)).pack(side="left", padx=(5, 0))
+        ctk.CTkButton(end_input_row, text="📅", width=35, fg_color=T.BORDER, text_color=T.TEXT,
+                      hover_color=T.BORDER_STRONG, command=lambda: self.open_date_picker(self.p_end)).pack(side="left", padx=(5, 0))
 
         self.p_name.bind("<Return>", lambda e: self.p_head.focus_set())
         self.p_head.bind("<Return>", lambda e: self.p_client.focus_set())
@@ -165,9 +159,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(20, 20))
         btn_text = "Update Project" if edit_row else ("Save & Approve (Ready for Deployment)" if self.is_admin else "Save as Draft")
-        self.btn_save = ctk.CTkButton(btn_row, text=btn_text, height=40, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 13, "bold"), command=self.save_project)
+        self.btn_save = ctk.CTkButton(btn_row, text=btn_text, height=40, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(14, "bold"), command=self.save_project)
         self.btn_save.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        ctk.CTkButton(btn_row, text="Cancel", height=40, width=90, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 13, "bold"), command=self.draft_modal.destroy).pack(side="right")
+        ctk.CTkButton(btn_row, text="Cancel", height=40, width=90, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(14, "bold"), command=self.draft_modal.destroy).pack(side="right")
 
         if edit_row:
             self.editing_project_id = edit_row['project_id']
@@ -191,13 +185,13 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             
             raw_status = edit_row['status'].replace(' (OVERDUE)', '')
             if raw_status in ['Ongoing', 'Completed', 'Cancelled', 'Declined']:
-                self.p_name.configure(state="disabled", fg_color="#F9FAFB")
-                self.p_client.configure(state="disabled", fg_color="#F9FAFB")
-                self.p_head.configure(state="disabled", fg_color="#F9FAFB")
-                self.p_location.configure(state="disabled", fg_color="#F9FAFB")
-                self.p_start.configure(state="disabled", fg_color="#F9FAFB")
-                self.p_end.configure(state="disabled", fg_color="#F9FAFB")
-                self.worker_single_entry.configure(state="disabled", fg_color="#F9FAFB")
+                self.p_name.configure(state="disabled", fg_color=T.SURFACE_ALT)
+                self.p_client.configure(state="disabled", fg_color=T.SURFACE_ALT)
+                self.p_head.configure(state="disabled", fg_color=T.SURFACE_ALT)
+                self.p_location.configure(state="disabled", fg_color=T.SURFACE_ALT)
+                self.p_start.configure(state="disabled", fg_color=T.SURFACE_ALT)
+                self.p_end.configure(state="disabled", fg_color=T.SURFACE_ALT)
+                self.worker_single_entry.configure(state="disabled", fg_color=T.SURFACE_ALT)
                 self.btn_add_worker.configure(state="disabled")
                 self.btn_scan_worker.configure(state="disabled")
                 self.browse_btn.configure(state="disabled")
@@ -212,11 +206,11 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                                or '').replace(' (OVERDUE)', '')
             is_locked = raw_edit_status in ('Approved', 'Ongoing')
             if is_locked:
-                lock_color = "#F0F0F0"
+                lock_color=T.SURFACE_MUTED
                 for widget in (self.p_client, self.p_head, self.p_location):
                     widget.configure(state="disabled", fg_color=lock_color)
                 ctk.CTkLabel(form_card, text="Client, Head & Location are locked for confirmed projects.\nDates, Workers and Tools can still be updated.",
-                             font=("Inter", 10), text_color="#E74C3C", wraplength=440).pack(anchor="w", padx=20, pady=(0, 5))
+                             font=T.font(12), text_color=T.DANGER_TEXT, wraplength=440).pack(anchor="w", padx=20, pady=(0, 5))
             # ----------------------------------------------------------------------
         else:
             self.editing_project_id = None
@@ -278,8 +272,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         cal_kwargs = {
             'selectmode': 'day', 'date_pattern': 'y-mm-dd',
             'year': sel_date.year, 'month': sel_date.month, 'day': sel_date.day,
-            'background': '#1E4528', 'foreground': 'white', 'borderwidth': 0,
-            'headersbackground': '#F9FAFB', 'headersforeground': 'black',
+            'background': T.PRIMARY, 'foreground': 'white', 'borderwidth': 0,
+            'headersbackground': T.SURFACE_ALT, 'headersforeground': 'black',
             'normalbackground': 'white', 'normalforeground': 'black',
             'weekendbackground': 'white', 'weekendforeground': 'black',
             'othermonthforeground': 'gray', 'othermonthweforeground': 'gray'
@@ -316,8 +310,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             entry_widget.insert(0, cal.get_date())
             top.destroy()
 
-        ctk.CTkButton(top, text="Confirm", fg_color="#1E4528", hover_color="#14301C", font=(
-            "Inter", 12, "bold"), command=set_date).pack(pady=(0, 10), padx=10, fill="x")
+        ctk.CTkButton(top, text="Confirm", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=set_date).pack(pady=(0, 10), padx=10, fill="x")
 
     def _add_worker_from_entry(self):
         val = self.worker_single_entry.get().strip()
@@ -331,16 +324,16 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             w.destroy()
         if not self.workers_list:
             ctk.CTkLabel(self.worker_tags_frame, text="No workers added yet.",
-                         text_color="gray", font=("Inter", 11)).pack(pady=8)
+                         text_color=T.TEXT_MUTED, font=T.font(12)).pack(pady=8)
             return
         for idx, worker in enumerate(self.workers_list):
             tag_row = ctk.CTkFrame(
-                self.worker_tags_frame, fg_color="white", corner_radius=5, height=28)
+                self.worker_tags_frame, fg_color=T.SURFACE, corner_radius=5, height=28)
             tag_row.pack(fill="x", pady=2, padx=5)
             tag_row.pack_propagate(False)
-            ctk.CTkLabel(tag_row, text=f"👷 {worker}", font=("Inter", 11), text_color="#1E4528").pack(side="left", padx=8)
+            ctk.CTkLabel(tag_row, text=f"👷 {worker}", font=T.font(12), text_color=T.PRIMARY).pack(side="left", padx=8)
             if not getattr(self, '_is_cart_locked', False):
-                ctk.CTkButton(tag_row, text="✕", width=22, height=22, fg_color="#FFEAEA", text_color="#D8000C", hover_color="#FFC0C0", command=lambda i=idx: self._remove_worker(i)).pack(side="right", padx=5)
+                ctk.CTkButton(tag_row, text="✕", width=22, height=22, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda i=idx: self._remove_worker(i)).pack(side="right", padx=5)
 
     def _remove_worker(self, idx):
         if 0 <= idx < len(self.workers_list):
@@ -351,7 +344,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         modal = ctk.CTkToplevel(self)
         modal.title("Inventory Requisition Catalog")
         modal.geometry("900x600")
-        modal.configure(fg_color="white")
+        modal.configure(fg_color=T.SURFACE)
         modal.attributes("-topmost", True)
         # Must be false or it will hide message boxes
         modal.attributes("-topmost", False)
@@ -363,22 +356,19 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         y = (modal.winfo_screenheight() // 2) - (600 // 2)
         modal.geometry(f"900x600+{x}+{y}")
 
-        ctk.CTkLabel(modal, text="Select Items for Project Requisition", font=(
-            "Inter", 16, "bold"), text_color="black").pack(pady=(20, 5))
+        ctk.CTkLabel(modal, text="Select Items for Project Requisition", font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 5))
         ctk.CTkLabel(modal, text="Search by Name or PID, then set quantity and click + Add.",
-                     font=("Inter", 11), text_color="gray").pack(pady=(0, 10))
+                     font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=(0, 10))
 
         search_frame = ctk.CTkFrame(modal, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=(0, 5))
 
-        ctk.CTkLabel(search_frame, text="Name:", font=(
-            "Inter", 11, "bold"), text_color="gray").pack(side="left")
+        ctk.CTkLabel(search_frame, text="Name:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
         search_name = ctk.CTkEntry(
             search_frame, placeholder_text="Item name...", width=180, takefocus=True)
         search_name.pack(side="left", padx=(5, 10))
 
-        ctk.CTkLabel(search_frame, text="PID:", font=(
-            "Inter", 11, "bold"), text_color="gray").pack(side="left")
+        ctk.CTkLabel(search_frame, text="PID:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
         search_pid = ctk.CTkEntry(
             search_frame, placeholder_text="Product ID...", width=100, takefocus=True)
         search_pid.pack(side="left", padx=(5, 10))
@@ -389,10 +379,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         def do_reset(): search_name.delete(
             0, 'end'); search_pid.delete(0, 'end'); load_catalog()
 
-        ctk.CTkButton(search_frame, text="Search", width=80, fg_color="#1E4528", hover_color="#14301C", font=(
-            "Inter", 11, "bold"), command=do_search).pack(side="left", padx=5)
-        ctk.CTkButton(search_frame, text="↻ Reset", width=80, fg_color="#E0E0E0", text_color="black",
-                      hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=do_reset).pack(side="left", padx=5)
+        ctk.CTkButton(search_frame, text="Search", width=80, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=do_search).pack(side="left", padx=5)
+        ctk.CTkButton(search_frame, text="↻ Reset", width=80, fg_color=T.BORDER, text_color=T.TEXT,
+                      hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=do_reset).pack(side="left", padx=5)
 
         search_name.bind("<Return>", lambda e: do_search())
         search_pid.bind("<Return>", lambda e: do_search())
@@ -419,9 +408,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             # Render Headers
             for col, text in enumerate(cols):
                 cell = ctk.CTkFrame(
-                    cat_inner, fg_color="#1E4528", corner_radius=0)
+                    cat_inner, fg_color=T.PRIMARY, corner_radius=0)
                 cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-                ctk.CTkLabel(cell, text=text, font=("Inter", 12, "bold"), text_color="white", anchor="center").pack(fill="both", expand=True, padx=5, pady=8)
+                ctk.CTkLabel(cell, text=text, font=T.font(12, "bold"), text_color=T.WHITE, anchor="center").pack(fill="both", expand=True, padx=5, pady=8)
 
             conn = get_connection()
             if not conn:
@@ -451,35 +440,35 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                 results = cursor.fetchall()
 
                 if not results:
-                    ctk.CTkLabel(cat_inner, text="No items found. Try a different search.", text_color="gray").grid(
+                    ctk.CTkLabel(cat_inner, text="No items found. Try a different search.", text_color=T.TEXT_MUTED).grid(
                         row=1, column=0, columnspan=len(cols), pady=20)
                     return
 
                 for i, row in enumerate(results):
                     r_idx = i + 1
-                    bg = "#F9FAFB" if i % 2 == 0 else "white"
+                    bg=T.SURFACE_ALT if i % 2 == 0 else "white"
 
                     def make_cell(col_idx, text, color, bold=False, wrap=0):
                         cell = ctk.CTkFrame(
                             cat_inner, fg_color=bg, corner_radius=0)
                         cell.grid(row=r_idx, column=col_idx, sticky="nsew")
                         
-                        l = ctk.CTkLabel(cell, text=str(text), font=("Inter", 12, "bold" if bold else "normal"), text_color=color, justify="center")
+                        l = ctk.CTkLabel(cell, text=str(text), font=T.font(12, "bold" if bold else "normal"), text_color=color, justify="center")
                         if wrap > 0:
                             l.configure(wraplength=wrap)
                         l.pack(fill="both", expand=True, padx=5, pady=10)
 
                     make_cell(0, row['tool_id'], "gray")
-                    make_cell(1, row['type'], "#D35400" if row['type']
-                              == "Consumable" else "#1A1A1A", bold=True)
+                    make_cell(1, row['type'], T.WARNING_STRONG if row['type']
+                              == "Consumable" else T.TEXT, bold=True)
                     # Safe fixed wraplength ensures it wraps gracefully without lagging the UI
                     make_cell(2, row['name'], "black", bold=True, wrap=200)
                     make_cell(3, row['uom'], "gray")
 
                     avail = f"{fmt_qty(row['avail'])}" if row['avail'] else "0"
                     tot = f"{fmt_qty(row['total'])}" if row['total'] else "0"
-                    stock_color = "#D8000C" if float(
-                        row['avail']) <= 0 else "#2ECC71"
+                    stock_color=T.DANGER if float(
+                        row['avail']) <= 0 else T.SUCCESS_TEXT
                     make_cell(4, f"{avail}/{tot}", stock_color, bold=True)
 
                     inp_cell = ctk.CTkFrame(
@@ -495,13 +484,12 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                     btn_cell = ctk.CTkFrame(
                         cat_inner, fg_color=bg, corner_radius=0)
                     btn_cell.grid(row=r_idx, column=6, sticky="nsew")
-                    btn = ctk.CTkButton(btn_cell, text="+ Add", width=55, height=26, fg_color="#3498DB", hover_color="#2980B9", font=(
-                        "Inter", 10, "bold"), command=lambda r=row, q_e=qty_entry: self.add_from_catalog(r, q_e, modal))
+                    btn = ctk.CTkButton(btn_cell, text="+ Add", width=55, height=26, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda r=row, q_e=qty_entry: self.add_from_catalog(r, q_e, modal))
                     # Perfectly centered inside cell
                     btn.pack(expand=True, pady=10)
 
             except Exception as e:
-                ctk.CTkLabel(cat_inner, text=friendly_message(e), text_color="red").grid(
+                ctk.CTkLabel(cat_inner, text=friendly_message(e), text_color=T.DANGER_TEXT).grid(
                     row=1, column=0, columnspan=len(cols), pady=10)
             finally:
                 if conn.is_connected():
@@ -509,8 +497,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                     conn.close()
 
         load_catalog()
-        ctk.CTkButton(modal, text="Done / Close Catalog", height=35, fg_color="#E0E0E0", text_color="black",
-                      hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=modal.destroy).pack(pady=(5, 15))
+        ctk.CTkButton(modal, text="Done / Close Catalog", height=35, fg_color=T.BORDER, text_color=T.TEXT,
+                      hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=modal.destroy).pack(pady=(5, 15))
 
     def add_from_catalog(self, row_data, qty_entry, modal):
         try:
@@ -556,17 +544,17 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             w.destroy()
         if not self.req_cart:
             ctk.CTkLabel(self.cart_scroll, text="No items selected.",
-                         text_color="gray", font=("Inter", 11)).pack(pady=20)
+                         text_color=T.TEXT_MUTED, font=T.font(12)).pack(pady=20)
             return
         for i, item in enumerate(self.req_cart):
             row = ctk.CTkFrame(self.cart_scroll, fg_color="transparent")
             row.pack(fill="x", pady=2)
             warning_icon = "⚠️ " if item.get('needs_retrieval') else "✓ "
-            text_col = "#D35400" if item.get('needs_retrieval') else "black"
+            text_col=T.WARNING_STRONG if item.get('needs_retrieval') else "black"
             info = f"{warning_icon}{item['name']} ({fmt_qty(item['qty'])} {item['uom']})"
-            ctk.CTkLabel(row, text=info, font=("Inter", 11, "bold"), text_color=text_col).pack(side="left", padx=5)
+            ctk.CTkLabel(row, text=info, font=T.font(12, "bold"), text_color=text_col).pack(side="left", padx=5)
             if not getattr(self, '_is_cart_locked', False):
-                ctk.CTkButton(row, text="✕", width=20, height=20, fg_color="#FFEAEA", text_color="#D8000C", hover_color="#FFC0C0", command=lambda idx=i: [self.req_cart.pop(idx), self.refresh_req_cart()]).pack(side="right")
+                ctk.CTkButton(row, text="✕", width=20, height=20, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda idx=i: [self.req_cart.pop(idx), self.refresh_req_cart()]).pack(side="right")
 
     def scan_worker(self):
         try:
@@ -704,15 +692,14 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
     def build_table_panel(self):
         table_card = ctk.CTkFrame(
-            self.inner, fg_color="white", corner_radius=10)
+            self.inner, fg_color=T.SURFACE, corner_radius=10)
         table_card.grid(row=0, column=0, sticky="nsew", padx=0)
         table_card.grid_columnconfigure(0, weight=1)
         table_card.grid_rowconfigure(1, weight=1)
 
         top = ctk.CTkFrame(table_card, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 10))
-        ctk.CTkLabel(top, text="Project Deployment Plans", font=(
-            "Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
+        ctk.CTkLabel(top, text="Project Deployment Plans", font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         self.proj_search_var = ctk.StringVar()
         self.proj_search = ctk.CTkEntry(top, placeholder_text="Search project or client...", width=250, takefocus=True, textvariable=self.proj_search_var)
@@ -725,10 +712,10 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.proj_search_var.trace_add("write", on_proj_search)
         
         if self.is_admin:
-            ctk.CTkButton(top, text="+ Add Project", width=140, fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=self.open_draft_project_modal).pack(side="right", padx=(10, 5))
+            ctk.CTkButton(top, text="+ Add Project", width=140, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=self.open_draft_project_modal).pack(side="right", padx=(10, 5))
         else:
-            ctk.CTkLabel(top, text="View only: ask an administrator to create or change projects.", font=("Inter", 11, "italic"),
-                         text_color="gray").pack(side="right", padx=(10, 10))
+            ctk.CTkLabel(top, text="View only: ask an administrator to create or change projects.", font=T.font(12, "italic"),
+                         text_color=T.TEXT_MUTED).pack(side="right", padx=(10, 10))
 
         # Removed the crashing "both" orientation - back to safe standard vertical scrolling
         self.project_scroll = ctk.CTkScrollableFrame(
@@ -759,9 +746,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         # Header Row
         for col, text in enumerate(headers):
             cell = ctk.CTkFrame(
-                table_inner, fg_color="#1E4528", corner_radius=0)
+                table_inner, fg_color=T.PRIMARY, corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=("Inter", 12, "bold"), text_color="white", anchor="center")
+            lbl = ctk.CTkLabel(cell, text=text, font=T.font(12, "bold"), text_color=T.WHITE, anchor="center")
             lbl.pack(fill="both", expand=True, padx=5, pady=10)
 
         conn = get_connection()
@@ -789,14 +776,14 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             results = cursor.fetchall()
 
             if not results:
-                ctk.CTkLabel(table_inner, text="No projects found.", text_color="gray").grid(
+                ctk.CTkLabel(table_inner, text="No projects found.", text_color=T.TEXT_MUTED).grid(
                     row=1, column=0, columnspan=len(headers), pady=20)
                 return
 
             for i, row in enumerate(results):
                 row["status"] = row["display_status"]
                 r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+                bg=T.SURFACE_ALT if i % 2 == 0 else "white"
 
                 # Define data
                 vals = [
@@ -813,11 +800,11 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                         table_inner, fg_color=bg, corner_radius=0)
                     cell.grid(row=r_idx, column=col, sticky="nsew")
 
-                    txt_color = "#7F8C8D" if col == 4 and "Draft" in val else (
-                        "#D35400" if col == 4 and "Pending" in val else ("#2ECC71" if col == 4 and "Approved" in val else "#1A1A1A"))
+                    txt_color=T.TEXT_MUTED if col == 4 and "Draft" in val else (
+                        T.WARNING_STRONG if col == 4 and "Pending" in val else (T.SUCCESS_TEXT if col == 4 and "Approved" in val else T.TEXT))
                     font_w = "bold" if col == 4 else "normal"
 
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 12, font_w), text_color=txt_color, justify="center", anchor="center")
+                    lbl = ctk.CTkLabel(cell, text=val, font=T.font(12, font_w), text_color=txt_color, justify="center", anchor="center")
                     # Set wrap to ensure long text stacks downward instead of pushing grid wide
                     lbl.configure(wraplength=min_sizes[col] - 10)
 
@@ -828,15 +815,15 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                     table_inner, fg_color=bg, corner_radius=0)
                 btn_cell.grid(row=r_idx, column=5, sticky="nsew")
                 
-                btn_color = "#3498DB" if row['status'] == 'Pending' else "#BDC3C7"
+                btn_color=T.INFO if row['status'] == 'Pending' else T.BORDER_STRONG
                 btn_text = "Review" if row['status'] == 'Pending' else "View"
                 
-                btn = ctk.CTkButton(btn_cell, text=btn_text, width=65, height=28, fg_color=btn_color, hover_color="#2980B9", font=("Inter", 12, "bold"), command=lambda r=row: self.open_project_modal(r))
+                btn = ctk.CTkButton(btn_cell, text=btn_text, width=65, height=28, fg_color=btn_color, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda r=row: self.open_project_modal(r))
                 # expand=True forces the button perfectly into the horizontal and vertical center
                 btn.pack(expand=True, pady=10)
 
         except Exception as e:
-            ctk.CTkLabel(table_inner, text=friendly_message(e), text_color="red").grid(
+            ctk.CTkLabel(table_inner, text=friendly_message(e), text_color=T.DANGER_TEXT).grid(
                 row=1, column=0, columnspan=len(headers), pady=20)
         finally:
             if conn.is_connected():
@@ -848,7 +835,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         modal.title(f"Project Overview: {row['name']}")
         # Added extra space so description doesn't clip
         modal.geometry("650x750")
-        modal.configure(fg_color="white")
+        modal.configure(fg_color=T.SURFACE)
         modal.attributes("-topmost", True)
         modal.grab_set()
         modal.update_idletasks()
@@ -856,25 +843,23 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         y = (modal.winfo_screenheight() // 2) - (750 // 2)
         modal.geometry(f"650x750+{x}+{y}")
 
-        ctk.CTkLabel(modal, text=row['name'], font=(
-            "Inter", 18, "bold"), text_color="black").pack(pady=(20, 3))
-        status_color = "#D35400" if row['status'] == "Pending" else "#2ECC71"
-        ctk.CTkLabel(modal, text=f"Status: {row['status']}", font=(
-            "Inter", 12, "bold"), text_color=status_color).pack(pady=(0, 5))
+        ctk.CTkLabel(modal, text=row['name'], font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 3))
+        status_color=T.WARNING_STRONG if row['status'] == "Pending" else T.SUCCESS_TEXT
+        ctk.CTkLabel(modal, text=f"Status: {row['status']}", font=T.font(12, "bold"), text_color=status_color).pack(pady=(0, 5))
 
         scroll = ctk.CTkScrollableFrame(modal, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
         details_frame = ctk.CTkFrame(
-            scroll, fg_color="#F9FAFB", corner_radius=8)
+            scroll, fg_color=T.SURFACE_ALT, corner_radius=8)
         details_frame.pack(fill="x", pady=(0, 10))
 
         def add_detail(lbl, val):
             row_f = ctk.CTkFrame(details_frame, fg_color="transparent")
             row_f.pack(fill="x", padx=15, pady=(5, 0))
-            ctk.CTkLabel(row_f, text=lbl, font=("Inter", 11, "bold"),
-                         text_color="#1E4528", width=140, anchor="w").pack(side="left")
-            ctk.CTkLabel(row_f, text=val or "None specified", font=("Inter", 11), text_color="black",
+            ctk.CTkLabel(row_f, text=lbl, font=T.font(12, "bold"),
+                         text_color=T.PRIMARY, width=140, anchor="w").pack(side="left")
+            ctk.CTkLabel(row_f, text=val or "None specified", font=T.font(12), text_color=T.TEXT,
                          wraplength=400, justify="left").pack(side="left", fill="x", expand=True)
 
         add_detail("Client:", row['client'])
@@ -888,10 +873,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
         ctk.CTkFrame(details_frame, height=8, fg_color="transparent").pack()
 
-        ctk.CTkLabel(scroll, text="Tools & Equipment Requisition", font=(
-            "Inter", 12, "bold"), text_color="#1E4528").pack(anchor="w", pady=(8, 3))
+        ctk.CTkLabel(scroll, text="Tools & Equipment Requisition", font=T.font(12, "bold"), text_color=T.PRIMARY).pack(anchor="w", pady=(8, 3))
         tools_scroll = ctk.CTkScrollableFrame(
-            scroll, fg_color="white", corner_radius=8, height=160)
+            scroll, fg_color=T.SURFACE, corner_radius=8, height=160)
         tools_scroll.pack(fill="x", pady=(0, 10))
 
         reqs = []
@@ -911,20 +895,18 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         if reqs:
             for req in reqs:
                 warning_icon = "⚠️ " if req['status'] == 'Warning' else "✓ "
-                text_col = "#D35400" if req['status'] == 'Warning' else "#1A1A1A"
+                text_col=T.WARNING_STRONG if req['status'] == 'Warning' else T.TEXT
                 row_str = f"{warning_icon}{req['name']}  |  {fmt_qty(req['quantity'])} {req['unit_of_measure']} ({req['item_type']})"
                 req_row = ctk.CTkFrame(
                     tools_scroll, fg_color="transparent", height=30)
                 req_row.pack(fill="x", pady=1)
-                ctk.CTkLabel(req_row, text=row_str, font=(
-                    "Inter", 11, "bold" if req['status'] == 'Warning' else "normal"), text_color=text_col).pack(anchor="w", padx=8)
+                ctk.CTkLabel(req_row, text=row_str, font=T.font(12, "bold" if req['status'] == 'Warning' else "normal"), text_color=text_col).pack(anchor="w", padx=8)
         else:
             ctk.CTkLabel(tools_scroll, text="No tools listed.",
-                         text_color="gray").pack(pady=10)
+                         text_color=T.TEXT_MUTED).pack(pady=10)
 
         if 'Approved' in row['status'] and row.get('admin_approver'):
-            ctk.CTkLabel(scroll, text=f"✅ Approved by: {row['admin_approver']}", font=(
-                "Inter", 11, "bold"), text_color="#2ECC71").pack(anchor="w", pady=(0, 5))
+            ctk.CTkLabel(scroll, text=f"✅ Approved by: {row['admin_approver']}", font=T.font(12, "bold"), text_color=T.SUCCESS_TEXT).pack(anchor="w", pady=(0, 5))
 
         btn_frame = ctk.CTkFrame(modal, fg_color="transparent")
         btn_frame.pack(side="bottom", fill="x", padx=20, pady=15)
@@ -953,26 +935,26 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
         raw_status = row['status'].replace(' (OVERDUE)', '')
         if raw_status in ['Pending', 'Approved'] and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Edit Project", width=90, fg_color="#F1C40F", hover_color="#D4AC0D", text_color="black", font=("Inter", 11, "bold"), command=trigger_edit_mode).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text="Edit Project", width=90, fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER, text_color=T.TEXT, font=T.font(12, "bold"), command=trigger_edit_mode).pack(side="left", padx=5)
             
         if raw_status == 'Pending' and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Ready for Deployment", fg_color="#2ECC71", hover_color="#27AE60", text_color="black", font=("Inter", 12, "bold"), command=lambda: update_proj_status('Approved')).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text="Ready for Deployment", fg_color=T.SUCCESS, hover_color=T.SUCCESS_DARK, text_color=T.TEXT, font=T.font(12, "bold"), command=lambda: update_proj_status('Approved')).pack(side="left", padx=5)
             
         if raw_status == 'Approved' and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Deploy / Mark Ongoing", fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 12, "bold"), command=lambda: update_proj_status('Ongoing')).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text="Deploy / Mark Ongoing", fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: update_proj_status('Ongoing')).pack(side="left", padx=5)
             
         if raw_status == 'Ongoing' and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Complete Project", fg_color="#27AE60", hover_color="#1E8449", font=("Inter", 11, "bold"), command=lambda: update_proj_status('Completed')).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text="Complete Project", fg_color=T.SUCCESS_DARK, hover_color=T.SUCCESS_DARK, font=T.font(12, "bold"), command=lambda: update_proj_status('Completed')).pack(side="left", padx=5)
             
         if raw_status in ['Pending', 'Approved', 'Ongoing'] and self.is_admin:
             btn_text = "Decline Project" if raw_status == 'Pending' else "Cancel Project"
             cmd_status = "Declined" if raw_status == 'Pending' else "Cancelled"
-            ctk.CTkButton(btn_frame, text=btn_text, fg_color="#E74C3C", hover_color="#C0392B", font=("Inter", 11, "bold"), command=lambda s=cmd_status: update_proj_status(s)).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text=btn_text, fg_color=T.DANGER_SOFT, hover_color=T.DANGER_HOVER, font=T.font(12, "bold"), command=lambda s=cmd_status: update_proj_status(s)).pack(side="left", padx=5)
             
         if raw_status in ['Completed', 'Declined', 'Cancelled'] and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Archive", fg_color="#95A5A6", hover_color="#7F8C8D", font=("Inter", 11, "bold"), command=lambda: self.archive_project(row['project_id'], row['name'], modal, raw_status)).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text="Archive", fg_color=T.TEXT_MUTED, hover_color=T.TEXT_MUTED, font=T.font(12, "bold"), command=lambda: self.archive_project(row['project_id'], row['name'], modal, raw_status)).pack(side="left", padx=5)
             
-        ctk.CTkButton(btn_frame, text="Close", width=70, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=modal.destroy).pack(side="right", padx=5)
+        ctk.CTkButton(btn_frame, text="Close", width=70, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=modal.destroy).pack(side="right", padx=5)
 
     def archive_project(self, project_id, project_name, modal, current_status=None):
         if not messagebox.askyesno("Confirm Archive", f"Archive project '{project_name}' to the archive vault?\n\nIt will be moved to Maintenance > Archived Projects.", parent=modal):

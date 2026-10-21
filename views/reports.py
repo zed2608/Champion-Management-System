@@ -8,6 +8,7 @@ import tempfile
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
 import matplotlib
+from ui import theme as T
 matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -44,24 +45,24 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         # Row 0: Title
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 5))
-        ctk.CTkLabel(top_bar, text="Reports", font=("Inter", 16, "bold"),
-                     text_color="#1E4528").pack(side="left")
+        ctk.CTkLabel(top_bar, text="Reports", font=T.font(16, "bold"),
+                     text_color=T.PRIMARY).pack(side="left")
 
         # Date Filters
         filter_f = ctk.CTkFrame(top_bar, fg_color="transparent")
         filter_f.pack(side="right", padx=15)
-        ctk.CTkLabel(filter_f, text="From:", font=("Inter", 11, "bold"), text_color="gray").pack(side="left", padx=(0, 5))
+        ctk.CTkLabel(filter_f, text="From:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 5))
         self.start_date = ctk.CTkEntry(filter_f, placeholder_text="YYYY-MM-DD", width=100, height=32)
         self.start_date.pack(side="left", padx=(0, 2))
         self.start_date.configure(state="readonly")
-        ctk.CTkButton(filter_f, text="📅", width=32, height=32, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.start_date)).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(filter_f, text="To:", font=("Inter", 11, "bold"), text_color="gray").pack(side="left", padx=(0, 5))
+        ctk.CTkButton(filter_f, text="📅", width=32, height=32, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=lambda: self.open_date_picker(self.start_date)).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(filter_f, text="To:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 5))
         self.end_date = ctk.CTkEntry(filter_f, placeholder_text="YYYY-MM-DD", width=100, height=32)
         self.end_date.pack(side="left", padx=(0, 2))
         self.end_date.configure(state="readonly")
-        ctk.CTkButton(filter_f, text="📅", width=32, height=32, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=lambda: self.open_date_picker(self.end_date)).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(filter_f, text="Apply", width=60, height=32, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 11, "bold"), command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(0, 5))
-        ctk.CTkButton(filter_f, text="Clear", width=60, height=32, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=self.clear_date_filter).pack(side="left")
+        ctk.CTkButton(filter_f, text="📅", width=32, height=32, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=lambda: self.open_date_picker(self.end_date)).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(filter_f, text="Apply", width=60, height=32, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(0, 5))
+        ctk.CTkButton(filter_f, text="Clear", width=60, height=32, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=self.clear_date_filter).pack(side="left")
 
         # Row 1: Tab buttons (own row so they never overflow the title row)
         tab_bar = ctk.CTkFrame(self, fg_color="transparent")
@@ -72,9 +73,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             values=["▤ Inventory ABC Analysis", "⛭ Tool Usage Report", "🖹 Employee Activity",
                     "📋 Project Allocation", "⚠ Damage & Loss", "⭣ Low Stock", "⧖ Overdue Transactions", "🔧 Wear", "🔎 Anomalies"],
             variable=self.tab_var,
-            fg_color="#F0F0F0",
-            selected_color="#1E4528",
-            selected_hover_color="#14301C",
+            fg_color=T.SURFACE_MUTED,
+            selected_color=T.PRIMARY,
+            selected_hover_color=T.PRIMARY_HOVER,
             command=self.switch_tab
         )
         self.seg_btn.pack(side="right")
@@ -125,8 +126,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 
         cal = Calendar(top, selectmode='day', date_pattern='y-mm-dd',
                        year=sel_date.year, month=sel_date.month, day=sel_date.day,
-                       background='#1E4528', foreground='white', borderwidth=0,
-                       headersbackground='#F9FAFB', headersforeground='black',
+                       background=T.PRIMARY, foreground='white', borderwidth=0,
+                       headersbackground=T.SURFACE_ALT, headersforeground='black',
                        normalbackground='white', normalforeground='black',
                        weekendbackground='white', weekendforeground='black',
                        othermonthforeground='gray', othermonthweforeground='gray')
@@ -139,7 +140,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             entry_widget.configure(state="readonly")
             top.destroy()
             
-        ctk.CTkButton(top, text="Confirm", fg_color="#1E4528", hover_color="#14301C", font=("Inter", 12, "bold"), command=set_date).pack(pady=(0, 10), padx=10, fill="x")
+        ctk.CTkButton(top, text="Confirm", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=set_date).pack(pady=(0, 10), padx=10, fill="x")
 
     def get_and_validate_dates(self):
         sd = self.start_date.get().strip()
@@ -215,7 +216,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     # TAB 1: ABC Analysis 
     # ==========================================
     def render_abc_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(0, weight=0)
@@ -225,12 +226,12 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
         ctk.CTkLabel(top, text="Inventory Analytics (ABC Analysis)",
-                     font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("abc")).pack(side="right")
+                     font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=lambda: self.open_export_dialog("abc")).pack(side="right")
 
         self._abc_desc_lbl = ctk.CTkLabel(frame, text="Ranks tools by quantity issued: A = top 20%, B = next 30%, C = last 50%.",
-                                          font=("Inter", 11), text_color="gray", wraplength=900, justify="left")
+                                          font=T.font(12), text_color=T.TEXT_MUTED, wraplength=900, justify="left")
         self._abc_desc_lbl.grid(row=1, column=0, sticky="w", padx=30, pady=(0, 8))
 
         self._abc_scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
@@ -246,7 +247,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         for w in scroll.winfo_children():
             w.destroy()
 
-        loading = ctk.CTkLabel(scroll, text="Loading ABC Analysis...", text_color="gray", font=("Inter", 12))
+        loading = ctk.CTkLabel(scroll, text="Loading ABC Analysis...", text_color=T.TEXT_MUTED, font=T.font(12))
         loading.pack(pady=40)
 
         self.abc_table_inner = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -257,7 +258,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             try:
                 result = rs.abc_analysis(self.user_info, sd, ed)
             except Exception as e:
-                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
             self.post_ui(lambda: _render_abc(result))
 
@@ -266,7 +267,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 return
             loading.destroy()
 
-            palette = {"A": ("A (High Priority)", "#2ECC71"), "B": ("B (Medium Priority)", "#F1C40F"), "C": ("C (Low Priority)", "#E74C3C")}
+            palette = {"A": ("A (High Priority)", T.SUCCESS_BRIGHT), "B": ("B (Medium Priority)", T.ACCENT), "C": ("C (Low Priority)", T.DANGER_SOFT)}
             self._abc_raw_data = []
             for d in result["rows"]:
                 category, color = palette[d["category"]]
@@ -321,11 +322,11 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 self.abc_table_inner.grid_columnconfigure(col, weight=w, minsize=min_w, uniform="abc_cols")
 
             for col, (text, sort_key) in enumerate(headers):
-                cell = ctk.CTkFrame(self.abc_table_inner, fg_color="#1E4528", corner_radius=0, cursor="hand2")
+                cell = ctk.CTkFrame(self.abc_table_inner, fg_color=T.PRIMARY, corner_radius=0, cursor="hand2")
                 cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
                 arrow = " ▼" if self.abc_sort_desc else " ▲"
                 disp_text = text + arrow if self.abc_sort_col == sort_key else text
-                lbl = ctk.CTkLabel(cell, text=disp_text, font=("Inter", 11, "bold"), text_color="white", anchor="center", cursor="hand2")
+                lbl = ctk.CTkLabel(cell, text=disp_text, font=T.font(12, "bold"), text_color=T.WHITE, anchor="center", cursor="hand2")
                 lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
                 def make_sort_cmd(k=sort_key):
@@ -340,13 +341,13 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             for i, d in enumerate(page_data):
                 display_data = [f"#{d['rank_raw']}", str(d['tool_id']), str(d['name'] or 'Unknown'), str(d['usage']), f"{d['cum_pct_raw']:.1f}%", str(d['category'] or 'Unknown')]
                 r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+                bg=T.SURFACE_ALT if i % 2 == 0 else "white"
                 for col, val in enumerate(display_data):
                     cell = ctk.CTkFrame(self.abc_table_inner, fg_color=bg, corner_radius=0)
                     cell.grid(row=r_idx, column=col, sticky="nsew")
-                    txt_col = d['color'] if col == 5 else "#1A1A1A"
+                    txt_col = d['color'] if col == 5 else T.TEXT
                     font_w = "bold" if col == 5 else "normal"
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center")
+                    lbl = ctk.CTkLabel(cell, text=val, font=T.font(12, font_w), text_color=txt_col, justify="center", anchor="center")
                     lbl.configure(wraplength=min_sizes[col] - 10)
                     lbl.pack(fill="both", expand=True, padx=4, pady=8)   # reduced pady
 
@@ -359,12 +360,12 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
             p_frame = ctk.CTkFrame(self.abc_pag_frame, fg_color="transparent")
             p_frame.pack(pady=8)
-            prev_btn = ctk.CTkButton(p_frame, text="< Prev", width=60, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=_prev)
-            if self.abc_current_page == 1: prev_btn.configure(state="disabled", fg_color="#F0F0F0", text_color="gray")
+            prev_btn = ctk.CTkButton(p_frame, text="< Prev", width=60, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=_prev)
+            if self.abc_current_page == 1: prev_btn.configure(state="disabled", fg_color=T.SURFACE_MUTED, text_color=T.TEXT_MUTED)
             prev_btn.pack(side="left", padx=10)
-            ctk.CTkLabel(p_frame, text=f"Page {self.abc_current_page} of {total_pages}   (Total: {total_items})", font=("Inter", 11)).pack(side="left", padx=20)
-            next_btn = ctk.CTkButton(p_frame, text="Next >", width=60, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=_next)
-            if self.abc_current_page == total_pages or total_pages == 0: next_btn.configure(state="disabled", fg_color="#F0F0F0", text_color="gray")
+            ctk.CTkLabel(p_frame, text=f"Page {self.abc_current_page} of {total_pages}   (Total: {total_items})", font=T.font(12)).pack(side="left", padx=20)
+            next_btn = ctk.CTkButton(p_frame, text="Next >", width=60, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=_next)
+            if self.abc_current_page == total_pages or total_pages == 0: next_btn.configure(state="disabled", fg_color=T.SURFACE_MUTED, text_color=T.TEXT_MUTED)
             next_btn.pack(side="left", padx=10)
 
         import threading
@@ -374,7 +375,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     # TAB 2: Tool Usage Report
     # ==========================================
     def render_usage_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(0, weight=0)
@@ -385,12 +386,12 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
         ctk.CTkLabel(top, text="Tool Usage Report",
-                     font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("usage")).pack(side="right")
+                     font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=lambda: self.open_export_dialog("usage")).pack(side="right")
 
         ctk.CTkLabel(frame, text="Summary of all tool transactions, availability, and condition status.",
-                     font=("Inter", 11), text_color="gray").grid(row=1, column=0, sticky="w", padx=30, pady=(0, 8))
+                     font=T.font(12), text_color=T.TEXT_MUTED).grid(row=1, column=0, sticky="w", padx=30, pady=(0, 8))
 
         search_frame = ctk.CTkFrame(frame, fg_color="transparent")
         search_frame.grid(row=2, column=0, sticky="ew", padx=30, pady=(0, 10))
@@ -424,7 +425,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         for w in scroll.winfo_children():
             w.destroy()
 
-        loading = ctk.CTkLabel(scroll, text="Loading Tool Usage Report...", text_color="gray", font=("Inter", 12))
+        loading = ctk.CTkLabel(scroll, text="Loading Tool Usage Report...", text_color=T.TEXT_MUTED, font=T.font(12))
         loading.pack(pady=40)
 
         self.usage_table_inner = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -466,7 +467,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     def _show_error(self, parent, message):
         for w in parent.winfo_children():
             w.destroy()
-        ctk.CTkLabel(parent, text=message, text_color="red").pack(pady=20)
+        ctk.CTkLabel(parent, text=message, text_color=T.DANGER_TEXT).pack(pady=20)
 
     def _update_usage_table(self):
         """Sortable and paginated table for Tool Usage Report"""
@@ -504,16 +505,16 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         if not page_data:
             ctk.CTkLabel(self.usage_table_inner, text="No tool usage data found for the selected period.",
-                         text_color="gray", font=("Inter", 12)).grid(row=0, column=0, columnspan=len(headers), pady=30)
+                         text_color=T.TEXT_MUTED, font=T.font(12)).grid(row=0, column=0, columnspan=len(headers), pady=30)
             return
 
         # Header row
         for col, (text, sort_key) in enumerate(headers):
-            cell = ctk.CTkFrame(self.usage_table_inner, fg_color="#1E4528", corner_radius=0, cursor="hand2")
+            cell = ctk.CTkFrame(self.usage_table_inner, fg_color=T.PRIMARY, corner_radius=0, cursor="hand2")
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
             arrow = " ▼" if self.usage_state["sort_desc"] else " ▲"
             disp_text = text + arrow if self.usage_state["sort_col"] == sort_key else text
-            lbl = ctk.CTkLabel(cell, text=disp_text, font=("Inter", 11, "bold"), text_color="white", anchor="center", cursor="hand2")
+            lbl = ctk.CTkLabel(cell, text=disp_text, font=T.font(12, "bold"), text_color=T.WHITE, anchor="center", cursor="hand2")
             lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
             def make_sort_cmd(k=sort_key):
@@ -534,17 +535,17 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                     str(d['total_borrowed']), str(d['currently_out']), f"{d['qty_avail']:g}", 
                     str(d['condition'] or 'Good')]
             r_idx = i + 1
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
+            bg=T.SURFACE_ALT if i % 2 == 0 else "white"
             for col, val in enumerate(vals):
                 cell = ctk.CTkFrame(self.usage_table_inner, fg_color=bg, corner_radius=0)
                 cell.grid(row=r_idx, column=col, sticky="nsew")
-                txt_col = "#1A1A1A"
+                txt_col=T.TEXT
                 if col == 6:
-                    txt_col = "#2ECC71" if val == "Good" else "#D8000C"
+                    txt_col=T.SUCCESS_TEXT if val == "Good" else T.DANGER
                 elif col == 2 and val == "Unassigned":
-                    txt_col = "#D8000C"
+                    txt_col=T.DANGER
                 font_w = "bold" if (col == 6 or (col == 2 and val == "Unassigned")) else "normal"
-                lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center")
+                lbl = ctk.CTkLabel(cell, text=val, font=T.font(12, font_w), text_color=txt_col, justify="center", anchor="center")
                 lbl.configure(wraplength=min_sizes[col] - 10)
                 lbl.pack(fill="both", expand=True, padx=4, pady=8)
 
@@ -564,23 +565,23 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         p_frame = ctk.CTkFrame(self.usage_pag_frame, fg_color="transparent")
         p_frame.pack(pady=8)
-        prev_btn = ctk.CTkButton(p_frame, text="< Prev", width=60, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=_prev)
+        prev_btn = ctk.CTkButton(p_frame, text="< Prev", width=60, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=_prev)
         if self.usage_state["current_page"] == 1:
-            prev_btn.configure(state="disabled", fg_color="#F0F0F0", text_color="gray")
+            prev_btn.configure(state="disabled", fg_color=T.SURFACE_MUTED, text_color=T.TEXT_MUTED)
         prev_btn.pack(side="left", padx=10)
 
-        ctk.CTkLabel(p_frame, text=f"Page {self.usage_state['current_page']} of {total_pages}   (Total: {total_items})", font=("Inter", 11)).pack(side="left", padx=20)
+        ctk.CTkLabel(p_frame, text=f"Page {self.usage_state['current_page']} of {total_pages}   (Total: {total_items})", font=T.font(12)).pack(side="left", padx=20)
 
-        next_btn = ctk.CTkButton(p_frame, text="Next >", width=60, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=_next)
+        next_btn = ctk.CTkButton(p_frame, text="Next >", width=60, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=_next)
         if self.usage_state["current_page"] == total_pages or total_pages == 0:
-            next_btn.configure(state="disabled", fg_color="#F0F0F0", text_color="gray")
+            next_btn.configure(state="disabled", fg_color=T.SURFACE_MUTED, text_color=T.TEXT_MUTED)
         next_btn.pack(side="left", padx=10)
 
     # ==========================================
     # TAB 3: Employee Activity Report
     # ==========================================
     def render_activity_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
@@ -588,12 +589,12 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
         ctk.CTkLabel(top, text="Employee Activity Report",
-                     font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("activity")).pack(side="right")
+                     font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=lambda: self.open_export_dialog("activity")).pack(side="right")
 
         ctk.CTkLabel(frame, text="Aggregated deployment activity per employee for accountability monitoring.",
-                     font=("Inter", 11), text_color="gray").grid(row=1, column=0, sticky="w", padx=30, pady=(0, 4))
+                     font=T.font(12), text_color=T.TEXT_MUTED).grid(row=1, column=0, sticky="w", padx=30, pady=(0, 4))
 
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
@@ -614,7 +615,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             try:
                 rows = rs.activity_report(self.user_info, sd, ed)
             except Exception as e:
-                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
             self.post_ui(lambda: _render_activity(rows))
 
@@ -634,11 +635,11 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             top_users = rows[:5]
             if self.activity_chart_frame.winfo_exists() and sum(r['total_borrows'] for r in top_users) > 0:
                 fig = self._new_fig(figsize=(7, 2.5), dpi=90)
-                fig.patch.set_facecolor('#FFFFFF')
+                fig.patch.set_facecolor(T.WHITE)
                 ax = fig.add_subplot(111)
                 names = [str(r['full_name'] or 'Unknown').split()[0] for r in top_users]
                 counts = [r['total_borrows'] for r in top_users]
-                ax.bar(names, counts, color="#9B59B6", width=0.4)
+                ax.bar(names, counts, color=T.PURPLE_ALT, width=0.4)
                 ax.spines["top"].set_visible(False)
                 ax.spines["right"].set_visible(False)
                 fig.tight_layout()
@@ -679,11 +680,11 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 self.activity_table_inner.grid_columnconfigure(col, weight=w, minsize=min_w, uniform="activity_cols")
 
             for col, (text, sort_key) in enumerate(headers):
-                cell = ctk.CTkFrame(self.activity_table_inner, fg_color="#1E4528", corner_radius=0, cursor="hand2")
+                cell = ctk.CTkFrame(self.activity_table_inner, fg_color=T.PRIMARY, corner_radius=0, cursor="hand2")
                 cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
                 arrow = " ▼" if self.activity_sort_desc else " ▲"
                 disp_text = text + arrow if self.activity_sort_col == sort_key else text
-                lbl = ctk.CTkLabel(cell, text=disp_text, font=("Inter", 11, "bold"), text_color="white", anchor="center", cursor="hand2")
+                lbl = ctk.CTkLabel(cell, text=disp_text, font=T.font(12, "bold"), text_color=T.WHITE, anchor="center", cursor="hand2")
                 lbl.pack(fill="both", expand=True, padx=2, pady=10)
 
                 def make_sort_cmd(k=sort_key):
@@ -698,14 +699,14 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             for i, d in enumerate(page_data):
                 vals = [str(d['employee_id'] or 'Unknown'), str(d['full_name'] or 'Unknown'), str(d['role'] or 'Unknown'), str(d['total_borrows']), str(d['active_borrows']), str(d['total_returned'])]
                 r_idx = i + 1
-                bg = "#F9FAFB" if i % 2 == 0 else "white"
+                bg=T.SURFACE_ALT if i % 2 == 0 else "white"
                 for col, val in enumerate(vals):
                     cell = ctk.CTkFrame(self.activity_table_inner, fg_color=bg, corner_radius=0)
                     cell.grid(row=r_idx, column=col, sticky="nsew")
-                    txt_col = "#1A1A1A"
-                    if col == 4 and int(val) > 0: txt_col = "#D8000C"
+                    txt_col=T.TEXT
+                    if col == 4 and int(val) > 0: txt_col=T.DANGER
                     font_w = "bold" if col == 4 and int(val) > 0 else "normal"
-                    lbl = ctk.CTkLabel(cell, text=val, font=("Inter", 11, font_w), text_color=txt_col, justify="center", anchor="center")
+                    lbl = ctk.CTkLabel(cell, text=val, font=T.font(12, font_w), text_color=txt_col, justify="center", anchor="center")
                     lbl.configure(wraplength=min_sizes[col] - 10)
                     lbl.pack(fill="both", expand=True, padx=4, pady=12)
 
@@ -717,12 +718,12 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
             p_frame = ctk.CTkFrame(self.activity_pag_frame, fg_color="transparent")
             p_frame.pack(pady=10)
-            prev_btn = ctk.CTkButton(p_frame, text="< Prev", width=60, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=_prev)
-            if self.activity_current_page == 1: prev_btn.configure(state="disabled", fg_color="#F0F0F0", text_color="gray")
+            prev_btn = ctk.CTkButton(p_frame, text="< Prev", width=60, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=_prev)
+            if self.activity_current_page == 1: prev_btn.configure(state="disabled", fg_color=T.SURFACE_MUTED, text_color=T.TEXT_MUTED)
             prev_btn.pack(side="left", padx=10)
-            ctk.CTkLabel(p_frame, text=f"Page {self.activity_current_page} of {total_pages}   (Total: {total_items})", font=("Inter", 11)).pack(side="left", padx=20)
-            next_btn = ctk.CTkButton(p_frame, text="Next >", width=60, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=_next)
-            if self.activity_current_page == total_pages or total_pages == 0: next_btn.configure(state="disabled", fg_color="#F0F0F0", text_color="gray")
+            ctk.CTkLabel(p_frame, text=f"Page {self.activity_current_page} of {total_pages}   (Total: {total_items})", font=T.font(12)).pack(side="left", padx=20)
+            next_btn = ctk.CTkButton(p_frame, text="Next >", width=60, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=_next)
+            if self.activity_current_page == total_pages or total_pages == 0: next_btn.configure(state="disabled", fg_color=T.SURFACE_MUTED, text_color=T.TEXT_MUTED)
             next_btn.pack(side="left", padx=10)
 
         import threading
@@ -732,19 +733,19 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     # TAB 4: Project Allocation Report
     # ==========================================
     def render_project_allocation_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
-        ctk.CTkLabel(top, text="Project Allocation Report", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("allocation")).pack(side="right")
+        ctk.CTkLabel(top, text="Project Allocation Report", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=lambda: self.open_export_dialog("allocation")).pack(side="right")
 
         ctk.CTkLabel(frame, text="Shows which projects are holding tools, requested vs. deployed quantities.",
-                     font=("Inter", 11), text_color="gray").grid(row=1, column=0, sticky="w", padx=30, pady=(0, 4))
+                     font=T.font(12), text_color=T.TEXT_MUTED).grid(row=1, column=0, sticky="w", padx=30, pady=(0, 4))
 
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
@@ -762,7 +763,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             try:
                 rows = rs.allocation_report(self.user_info, sd, ed)
             except Exception as e:
-                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
             self.post_ui(lambda: _render(rows))
 
@@ -790,13 +791,13 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                     iss = [p[1]["issued"] for p in top_projs]
                     ret = [p[1]["retrieved"] for p in top_projs]
                     fig = self._new_fig(figsize=(8, 2.8), dpi=90)
-                    fig.patch.set_facecolor('#FFFFFF')
+                    fig.patch.set_facecolor(T.WHITE)
                     ax = fig.add_subplot(111)
                     x = range(len(labels))
                     w = 0.25
-                    ax.bar([i - w for i in x], req, width=w, label="Requested", color="#3498DB")
-                    ax.bar(list(x), iss, width=w, label="Issued", color="#2ECC71")
-                    ax.bar([i + w for i in x], ret, width=w, label="Retrieved", color="#95A5A6")
+                    ax.bar([i - w for i in x], req, width=w, label="Requested", color=T.INFO)
+                    ax.bar(list(x), iss, width=w, label="Issued", color=T.SUCCESS_BRIGHT)
+                    ax.bar([i + w for i in x], ret, width=w, label="Retrieved", color=T.TEXT_MUTED)
                     ax.set_xticks(list(x))
                     ax.set_xticklabels(labels, fontsize=8, rotation=15, ha="right")
                     ax.legend(fontsize=8)
@@ -808,7 +809,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                     chart_canvas.get_tk_widget().pack(pady=10)
             # ────────────────────────────────────────────────────
 
-            STATUS_COLORS = {"Ongoing": "#2ECC71", "Approved": "#3498DB", "Pending": "#F39C12", "Completed": "#95A5A6"}
+            STATUS_COLORS = {"Ongoing": T.SUCCESS_BRIGHT, "Approved": T.INFO, "Pending": T.WARNING_ALT, "Completed": T.TEXT_MUTED}
 
             def alloc_cells(row):
                 still_out = row['issued'] - row['retrieved']
@@ -817,8 +818,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                         str(row['tool_name'] or 'Unknown'), _fmt(row['requested']), _fmt(row['issued']), _fmt(row['retrieved']), str(flag)]
             list_table(self._alloc_table, [("Project", 4, 140), ("Client", 3, 110), ("Location", 3, 110), ("Status", 2, 90), ("Tool", 4, 140),
                                            ("Requested", 2, 80), ("Issued", 2, 70), ("Retrieved", 2, 80), ("Flag", 2, 80)], rows, alloc_cells,
-                       cell_style=lambda r, c, v: (STATUS_COLORS.get(v, "#1A1A1A"), True) if c == 3 else (("#D8000C" if "⚠" in v else "#1A1A1A"), c == 8),
-                       empty_text="No project allocation data found.", font_size=11, cell_pady=10, uniform="alloc_cols")
+                       cell_style=lambda r, c, v: (STATUS_COLORS.get(v, T.TEXT), True) if c == 3 else ((T.DANGER if "⚠" in v else T.TEXT), c == 8),
+                       empty_text="No project allocation data found.", font_size=12, cell_pady=10, uniform="alloc_cols")
 
         import threading
         threading.Thread(target=_fetch, daemon=True).start()
@@ -827,19 +828,19 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     # TAB 5: Damage, Loss & Maintenance Report
     # ==========================================
     def render_damage_loss_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
-        ctk.CTkLabel(top, text="Damage, Loss & Maintenance Report", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("damage")).pack(side="right")
+        ctk.CTkLabel(top, text="Damage, Loss & Maintenance Report", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=lambda: self.open_export_dialog("damage")).pack(side="right")
 
         ctk.CTkLabel(frame, text="Asset depreciation and financial loss metrics from returned condition data.",
-                     font=("Inter", 11), text_color="gray").grid(row=1, column=0, sticky="w", padx=30, pady=(0, 4))
+                     font=T.font(12), text_color=T.TEXT_MUTED).grid(row=1, column=0, sticky="w", padx=30, pady=(0, 4))
 
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
@@ -858,7 +859,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             try:
                 res = rs.damage_loss_report(self.user_info, sd, ed)
             except Exception as e:
-                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
             self.post_ui(lambda: _render(res["rows"], res["summary"]))
 
@@ -869,17 +870,17 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
             # Summary KPI cards
             kpis = [
-                ("💸 Total Loss Value", f"₱{float(summary['total_loss'] or 0):,.2f}", "#D8000C"),
-                ("🔨 Total Damage Value", f"₱{float(summary['total_damage'] or 0):,.2f}", "#E67E22"),
-                ("❌ Items Lost", _fmt(summary['count_lost']), "#D8000C"),
-                ("⚠ Items Damaged", _fmt(summary['count_damaged']), "#E67E22"),
-                ("🔧 Needs Repair", _fmt(summary['count_repair']), "#F39C12"),
+                ("💸 Total Loss Value", f"₱{float(summary['total_loss'] or 0):,.2f}", T.DANGER),
+                ("🔨 Total Damage Value", f"₱{float(summary['total_damage'] or 0):,.2f}", T.WARNING),
+                ("❌ Items Lost", _fmt(summary['count_lost']), T.DANGER),
+                ("⚠ Items Damaged", _fmt(summary['count_damaged']), T.WARNING),
+                ("🔧 Needs Repair", _fmt(summary['count_repair']), T.WARNING_ALT),
             ]
             for label, val, color in kpis:
-                card = ctk.CTkFrame(self._dmg_summary_frame, fg_color="#F9FAFB", corner_radius=8)
+                card = ctk.CTkFrame(self._dmg_summary_frame, fg_color=T.SURFACE_ALT, corner_radius=8)
                 card.pack(side="left", expand=True, fill="x", padx=5, pady=5)
-                ctk.CTkLabel(card, text=label, font=("Inter", 10), text_color="gray").pack(pady=(10, 2))
-                ctk.CTkLabel(card, text=val, font=("Inter", 16, "bold"), text_color=color).pack(pady=(0, 10))
+                ctk.CTkLabel(card, text=label, font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=(10, 2))
+                ctk.CTkLabel(card, text=val, font=T.font(16, "bold"), text_color=color).pack(pady=(0, 10))
 
             # ── Damage/Loss Pie Chart ───────────────────────────
             for w in self._dmg_chart_frame.winfo_children(): w.destroy()
@@ -888,12 +889,12 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             c_rep = summary['count_repair']
             if c_lost + c_dmg + c_rep > 0:
                 fig = self._new_fig(figsize=(5, 2.5), dpi=90)
-                fig.patch.set_facecolor('#FFFFFF')
+                fig.patch.set_facecolor(T.WHITE)
                 ax = fig.add_subplot(111)
                 sizes, lbls, colors = [], [], []
-                if c_lost: sizes.append(c_lost); lbls.append(f"Lost ({c_lost})"); colors.append("#D8000C")
-                if c_dmg: sizes.append(c_dmg); lbls.append(f"Damaged ({c_dmg})"); colors.append("#E67E22")
-                if c_rep: sizes.append(c_rep); lbls.append(f"Needs Repair ({c_rep})"); colors.append("#F39C12")
+                if c_lost: sizes.append(c_lost); lbls.append(f"Lost ({c_lost})"); colors.append(T.DANGER)
+                if c_dmg: sizes.append(c_dmg); lbls.append(f"Damaged ({c_dmg})"); colors.append(T.WARNING)
+                if c_rep: sizes.append(c_rep); lbls.append(f"Needs Repair ({c_rep})"); colors.append(T.WARNING_ALT)
                 ax.pie(sizes, labels=lbls, colors=colors, autopct='%1.1f%%', startangle=140)
                 ax.axis('equal')
                 fig.tight_layout()
@@ -903,13 +904,13 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             # ────────────────────────────────────────────────────
 
             for w in self._dmg_table.winfo_children(): w.destroy()
-            COND_COLORS = {"Lost": "#D8000C", "Damaged": "#E67E22", "Needs Repair": "#F39C12"}
+            COND_COLORS = {"Lost": T.DANGER, "Damaged": T.WARNING, "Needs Repair": T.WARNING_ALT}
             list_table(self._dmg_table, [("Tool ID", 1, 60), ("Tool Name", 4, 160), ("Unit Price", 2, 100), ("Condition", 2, 110), ("Returned By", 3, 130),
                                          ("Return Date", 2, 100), ("Notes", 4, 160)], rows,
                        lambda row: [str(row['tool_id']), str(row['name'] or 'Unknown'), f"₱{float(row['price'] or 0):,.2f}", str(row['cond_flag'] or 'Unknown'),
                                     str(row['returned_by'] or "—"), str(row['return_date'] or "—"), str(row['notes'] or "")],
-                       cell_style=lambda r, c, v: (COND_COLORS.get(v, "#1A1A1A"), True) if c == 3 else ("#1A1A1A", False),
-                       empty_text="No damage or loss records found.", font_size=11, cell_pady=10, uniform="dmg_cols")
+                       cell_style=lambda r, c, v: (COND_COLORS.get(v, T.TEXT), True) if c == 3 else (T.TEXT, False),
+                       empty_text="No damage or loss records found.", font_size=12, cell_pady=10, uniform="dmg_cols")
 
         import threading
         threading.Thread(target=_fetch, daemon=True).start()
@@ -918,7 +919,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     # TAB 6: Low Stock / Procurement Report
     # ==========================================
     def render_low_stock_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(0, weight=0)   # title
@@ -928,16 +929,16 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         # Top bar
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
-        ctk.CTkLabel(top, text="Low Stock / Procurement Report", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("lowstock")).pack(side="right")
+        ctk.CTkLabel(top, text="Low Stock / Procurement Report", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=lambda: self.open_export_dialog("lowstock")).pack(side="right")
 
         # Description
         ctk.CTkLabel(frame, text="Items where current available stock is at or below the set minimum threshold.",
-                     font=("Inter", 11), text_color="gray").grid(row=1, column=0, sticky="w", padx=30, pady=(0, 2))
+                     font=T.font(12), text_color=T.TEXT_MUTED).grid(row=1, column=0, sticky="w", padx=30, pady=(0, 2))
         if self.navigate_to_tool:
             ctk.CTkLabel(frame, text="💡 Click any row to open that item directly in Inventory.",
-                         font=("Inter", 11, "italic"), text_color="#2980B9").grid(row=1, column=0, sticky="e", padx=30, pady=(0, 2))
+                         font=T.font(12, "italic"), text_color=T.INFO_TEXT).grid(row=1, column=0, sticky="e", padx=30, pady=(0, 2))
 
         # Scrollable content
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
@@ -949,7 +950,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             try:
                 rows = rs.low_stock_report(self.user_info)
             except Exception as e:
-                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
             self.post_ui(lambda: _render(rows))
 
@@ -967,11 +968,11 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                         f"{float(row['qty_total'] or 0):g}", f"{float(row['minimum_stock'] or 0):g}", f"{reorder_qty:g}"]
             list_table(self._ls_table, [("PID", 1, 50), ("Name", 4, 150), ("Type", 2, 90), ("Category", 2, 100), ("Supplier", 3, 120), ("UoM", 1, 60),
                                         ("Available", 2, 80), ("Total", 2, 70), ("Min Stock", 2, 80), ("Reorder Qty", 2, 90)], rows, ls_cells,
-                       row_bg=lambda r, i: "#FFF3F3" if float(r['qty_avail'] or 0) == 0 else ("#FFFBF0" if i % 2 == 0 else "white"),
-                       cell_style=lambda r, c, v: (("#D8000C" if float(r['qty_avail'] or 0) == 0 else "#E67E22"), True) if c == 6 else ("#1A1A1A", False),
+                       row_bg=lambda r, i: T.DANGER_BG if float(r['qty_avail'] or 0) == 0 else (T.WARNING_BG if i % 2 == 0 else "white"),
+                       cell_style=lambda r, c, v: ((T.DANGER if float(r['qty_avail'] or 0) == 0 else T.WARNING), True) if c == 6 else (T.TEXT, False),
                        on_row_click=(lambda r: self.navigate_to_tool(r['tool_id'])) if self.navigate_to_tool else None,
                        empty_text="✓ All items are above their minimum stock thresholds.\n\nTip: Set a Minimum Stock value per item in the Inventory module to enable this report.",
-                       font_size=11, cell_pady=8, uniform="ls_cols")
+                       font_size=12, cell_pady=8, uniform="ls_cols")
 
         import threading
         threading.Thread(target=_fetch, daemon=True).start()
@@ -980,18 +981,18 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     # TAB 7: Overdue Transactions Report
     # ==========================================
     def render_overdue_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
-        ctk.CTkLabel(top, text="Overdue Transactions Report", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("overdue")).pack(side="right")
+        ctk.CTkLabel(top, text="Overdue Transactions Report", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=lambda: self.open_export_dialog("overdue")).pack(side="right")
         ctk.CTkLabel(frame, text="Active transactions where the project end date has already passed — sorted by most overdue.",
-                     font=("Inter", 11), text_color="gray").grid(row=1, column=0, sticky="w", padx=30, pady=(0, 4))
+                     font=T.font(12), text_color=T.TEXT_MUTED).grid(row=1, column=0, sticky="w", padx=30, pady=(0, 4))
 
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
@@ -1003,7 +1004,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         self._ov_table = ctk.CTkFrame(scroll, fg_color="transparent")
         self._ov_table.pack(fill="x", pady=(5, 0))
         
-        loading_lbl = ctk.CTkLabel(self._ov_table, text="Loading Overdue Transactions...", font=("Inter", 12, "italic"), text_color="gray")
+        loading_lbl = ctk.CTkLabel(self._ov_table, text="Loading Overdue Transactions...", font=T.font(12, "italic"), text_color=T.TEXT_MUTED)
         loading_lbl.pack(pady=20)
 
         sd, ed, valid = self.get_and_validate_dates()
@@ -1013,7 +1014,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             try:
                 rows = rs.overdue_report(self.user_info, sd, ed)
             except Exception as e:
-                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color="red").pack(pady=10))
+                self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
             self.post_ui(lambda: _render(rows))
 
@@ -1029,16 +1030,16 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             total_value = sum(float(r['price'] or 0) * float(r['units'] or 1) for r in rows)   # price x UNITS held
 
             kpis = [
-                ("🚨 Overdue Items", str(total_overdue), "#D8000C"),
-                ("👷 Workers Involved", str(unique_workers), "#E67E22"),
-                ("📅 Longest Overdue", f"{max_days} days", "#D8000C"),
-                ("💰 At-Risk Value", f"₱{total_value:,.2f}", "#E67E22"),
+                ("🚨 Overdue Items", str(total_overdue), T.DANGER),
+                ("👷 Workers Involved", str(unique_workers), T.WARNING),
+                ("📅 Longest Overdue", f"{max_days} days", T.DANGER),
+                ("💰 At-Risk Value", f"₱{total_value:,.2f}", T.WARNING),
             ]
             for label, val, color in kpis:
-                card = ctk.CTkFrame(self._ov_summary_frame, fg_color="#F9FAFB", corner_radius=8)
+                card = ctk.CTkFrame(self._ov_summary_frame, fg_color=T.SURFACE_ALT, corner_radius=8)
                 card.pack(side="left", expand=True, fill="x", padx=5, pady=5)
-                ctk.CTkLabel(card, text=label, font=("Inter", 10), text_color="gray").pack(pady=(10, 2))
-                ctk.CTkLabel(card, text=val, font=("Inter", 16, "bold"), text_color=color).pack(pady=(0, 10))
+                ctk.CTkLabel(card, text=label, font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=(10, 2))
+                ctk.CTkLabel(card, text=val, font=T.font(16, "bold"), text_color=color).pack(pady=(0, 10))
 
             # ── Overdue Bar Chart (days per worker) ─────────────
             for w in self._ov_chart_frame.winfo_children(): w.destroy()
@@ -1051,9 +1052,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 names = [w[0] for w in top_workers][::-1]
                 days_vals = [w[1] for w in top_workers][::-1]
                 fig = self._new_fig(figsize=(7, 2.5), dpi=90)
-                fig.patch.set_facecolor('#FFFFFF')
+                fig.patch.set_facecolor(T.WHITE)
                 ax = fig.add_subplot(111)
-                ax.barh(names, days_vals, color="#E74C3C")
+                ax.barh(names, days_vals, color=T.DANGER_SOFT)
                 ax.set_xlabel("Days Overdue", fontsize=8)
                 ax.spines["top"].set_visible(False)
                 ax.spines["right"].set_visible(False)
@@ -1072,9 +1073,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                         str(row['project_name'] or '—'), str(due_str), f"{days} days", str(borrow_str), f"₱{float(row['price'] or 0):,.2f}"]
             list_table(self._ov_table, [("Emp ID", 1, 70), ("Worker", 3, 130), ("Tool", 3, 130), ("Project", 3, 130), ("Due Date", 2, 100),
                                         ("Days Overdue", 2, 110), ("Issued On", 2, 100), ("Unit Price", 2, 100)], rows, ov_cells,
-                       row_bg=lambda r, i: "#FFF0F0" if i % 2 == 0 else "#FFF8F8",
-                       cell_style=lambda r, c, v: ("#D8000C", True) if c == 5 else ("#1A1A1A", False),
-                       empty_text="✓ No overdue transactions found.", font_size=11, cell_pady=10, uniform="ov_cols", header_bg="#D8000C")
+                       row_bg=lambda r, i: T.DANGER_BG if i % 2 == 0 else T.DANGER_BG,
+                       cell_style=lambda r, c, v: (T.DANGER, True) if c == 5 else (T.TEXT, False),
+                       empty_text="✓ No overdue transactions found.", font_size=12, cell_pady=10, uniform="ov_cols", header_bg=T.DANGER)
 
         import threading
         threading.Thread(target=_fetch, daemon=True).start()
@@ -1083,18 +1084,18 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     # [PANEL-AWE] Wear Forecast (printable copy of the Maintenance tab)
     # ==========================================
     def render_wear_report_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(1, weight=1)
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
-        ctk.CTkLabel(top, text="Wear & Maintenance Forecast", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("wear")).pack(side="right")
+        ctk.CTkLabel(top, text="Wear & Maintenance Forecast", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=lambda: self.open_export_dialog("wear")).pack(side="right")
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         scroll.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 10))
-        loading = ctk.CTkLabel(scroll, text="Calculating…", text_color="gray", font=("Inter", 12))
+        loading = ctk.CTkLabel(scroll, text="Calculating…", text_color=T.TEXT_MUTED, font=T.font(12))
         loading.pack(pady=40)
 
         def _fetch():
@@ -1112,9 +1113,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             self._wear_report_data = rows
             labels, body, _notes = wear_forecast.pdf_table(rows)
             list_table(scroll, [(l, w, m) for l, (w, m) in zip(labels, [(4, 150), (2, 100), (2, 90), (2, 80), (1, 70), (2, 100), (2, 100), (4, 170)])],
-                       body, lambda cells: cells, row_bg=lambda cells, i: "#FFF3F3" if cells[7] != "-" else ("#F9FAFB" if i % 2 == 0 else "white"),
-                       cell_style=lambda cells, c, v: ("#D8000C", True) if (c == 7 and v != "-") else ("#1A1A1A", False),
-                       empty_text="No equipment to forecast yet.", font_size=11, cell_pady=10, uniform="wearrep_cols")
+                       body, lambda cells: cells, row_bg=lambda cells, i: T.DANGER_BG if cells[7] != "-" else (T.SURFACE_ALT if i % 2 == 0 else "white"),
+                       cell_style=lambda cells, c, v: (T.DANGER, True) if (c == 7 and v != "-") else (T.TEXT, False),
+                       empty_text="No equipment to forecast yet.", font_size=12, cell_pady=10, uniform="wearrep_cols")
 
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -1122,20 +1123,20 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     # [PANEL-AWE] TAB 8: Anomalies & Recommendations
     # ==========================================
     def render_anomaly_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=30, pady=(12, 4))
-        ctk.CTkLabel(top, text="Anomalies & Recommendations", font=("Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 11, "bold"), command=lambda: self.open_export_dialog("anomaly")).pack(side="right")
-        self._anomaly_summary = ctk.CTkLabel(frame, text="", font=("Inter", 11), text_color="gray", wraplength=900, justify="left")
+        ctk.CTkLabel(top, text="Anomalies & Recommendations", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(top, text="⎙ Export PDF", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=lambda: self.open_export_dialog("anomaly")).pack(side="right")
+        self._anomaly_summary = ctk.CTkLabel(frame, text="", font=T.font(12), text_color=T.TEXT_MUTED, wraplength=900, justify="left")
         self._anomaly_summary.grid(row=1, column=0, sticky="w", padx=30, pady=(0, 6))
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
-        loading = ctk.CTkLabel(scroll, text="Analysing…", text_color="gray", font=("Inter", 12))
+        loading = ctk.CTkLabel(scroll, text="Analysing…", text_color=T.TEXT_MUTED, font=T.font(12))
         loading.pack(pady=40)
 
         def _fetch():
@@ -1158,19 +1159,19 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             recs = result["recommendations"]
             if not recs:
                 ctk.CTkLabel(scroll, text="✓ Nothing unusual: no damage outliers, no Category A bottlenecks, no overdue clusters.",
-                             text_color="gray", font=("Inter", 12)).pack(pady=30)
+                             text_color=T.TEXT_MUTED, font=T.font(12)).pack(pady=30)
                 return
-            colors = {"procure": "#2980B9", "damage": "#D8000C", "overdue": "#E67E22"}
+            colors = {"procure": T.INFO_HOVER, "damage": T.DANGER, "overdue": T.WARNING}
             for i, r in enumerate(recs, start=1):
-                card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
+                card = ctk.CTkFrame(scroll, fg_color=T.SURFACE_ALT, corner_radius=8, border_width=1, border_color=T.BORDER)
                 card.pack(fill="x", padx=10, pady=(0, 8))
                 head = ctk.CTkFrame(card, fg_color="transparent")
                 head.pack(fill="x", padx=14, pady=(8, 2))
-                ctk.CTkLabel(head, text=f"{i}. {r['title']}", font=("Inter", 12, "bold"), text_color=colors.get(r["kind"], "#1A1A1A")).pack(side="left")
-                ctk.CTkLabel(head, text=f"≈ P{r['peso_impact']:,.2f}", font=("Inter", 12, "bold"), text_color="#1E4528").pack(side="right")
-                ctk.CTkLabel(card, text=r["text"], font=("Inter", 11), text_color="#1A1A1A", wraplength=820, justify="left").pack(anchor="w", padx=14, pady=(0, 4))
+                ctk.CTkLabel(head, text=f"{i}. {r['title']}", font=T.font(12, "bold"), text_color=colors.get(r["kind"], T.TEXT)).pack(side="left")
+                ctk.CTkLabel(head, text=f"≈ P{r['peso_impact']:,.2f}", font=T.font(12, "bold"), text_color=T.PRIMARY).pack(side="right")
+                ctk.CTkLabel(card, text=r["text"], font=T.font(12), text_color=T.TEXT, wraplength=820, justify="left").pack(anchor="w", padx=14, pady=(0, 4))
                 for line in r["evidence"]:
-                    ctk.CTkLabel(card, text=f"   • {line}", font=("Inter", 10), text_color="#555555", justify="left").pack(anchor="w", padx=14)
+                    ctk.CTkLabel(card, text=f"   • {line}", font=T.font(12), text_color=T.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14)
                 ctk.CTkFrame(card, height=6, fg_color="transparent").pack()
 
         threading.Thread(target=_fetch, daemon=True).start()
@@ -1195,7 +1196,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         dialog = ctk.CTkToplevel(self)
         dialog.title(f"Export: {title}")
         dialog.geometry("460x320")
-        dialog.configure(fg_color="#F4F6F8")
+        dialog.configure(fg_color=T.BG)
         dialog.attributes("-topmost", True)
         dialog.grab_set()
         dialog.resizable(False, False)
@@ -1203,19 +1204,19 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         sw, sh = dialog.winfo_screenwidth(), dialog.winfo_screenheight()
         dialog.geometry(f"460x320+{(sw-460)//2}+{(sh-320)//2}")
 
-        card = ctk.CTkFrame(dialog, fg_color="white", corner_radius=10,
-                            border_width=1, border_color="#E0E0E0")
+        card = ctk.CTkFrame(dialog, fg_color=T.SURFACE, corner_radius=10,
+                            border_width=1, border_color=T.BORDER)
         card.pack(padx=20, pady=20, fill="both", expand=True)
 
         ctk.CTkLabel(card, text="Export Report",
-                     font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(18, 2))
+                     font=T.font(16, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(18, 2))
         ctk.CTkLabel(card, text=title,
-                     font=("Inter", 12), text_color="#1E4528").pack(anchor="w", padx=20, pady=(0, 12))
+                     font=T.font(12), text_color=T.PRIMARY).pack(anchor="w", padx=20, pady=(0, 12))
 
-        ctk.CTkFrame(card, height=1, fg_color="#E0E0E0").pack(fill="x", padx=20, pady=(0, 12))
+        ctk.CTkFrame(card, height=1, fg_color=T.BORDER).pack(fill="x", padx=20, pady=(0, 12))
 
         ctk.CTkLabel(card, text="Additional Criteria / Notes  (optional)",
-                     font=("Inter", 11, "bold"), text_color="#555555").pack(anchor="w", padx=20, pady=(4, 4))
+                     font=T.font(12, "bold"), text_color=T.TEXT_SECONDARY).pack(anchor="w", padx=20, pady=(4, 4))
         notes_entry = ctk.CTkEntry(card, placeholder_text="e.g., Site A only, Q1 review...")
         notes_entry.pack(fill="x", padx=20, pady=(0, 16))
 
@@ -1226,10 +1227,10 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(0, 16))
-        ctk.CTkButton(btn_row, text="⎙ Export Now", fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 12, "bold"), command=do_export).pack(side="left", expand=True, fill="x", padx=(0, 8))
-        ctk.CTkButton(btn_row, text="Cancel", width=90, fg_color="#E0E0E0",
-                      text_color="black", hover_color="#CCCCCC",
+        ctk.CTkButton(btn_row, text="⎙ Export Now", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"), command=do_export).pack(side="left", expand=True, fill="x", padx=(0, 8))
+        ctk.CTkButton(btn_row, text="Cancel", width=90, fg_color=T.BORDER,
+                      text_color=T.TEXT, hover_color=T.BORDER_STRONG,
                       command=dialog.destroy).pack(side="right")
 
         notes_entry.bind("<Return>", lambda e: do_export())

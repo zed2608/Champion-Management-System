@@ -12,6 +12,7 @@ from utils.pdf_table import render_pdf
 from services.paging import fetch_page
 from services.validators import like_pattern
 from views.paged_table import PagedTable
+from ui import theme as T
 
 
 
@@ -19,10 +20,10 @@ def _status_style(status_col, tag_col):
     """Cell colours shared by the transaction tables: Active in red, Retrieved in green, an untagged tool in red."""
     def style(row, col, val):
         if col == status_col:
-            return ("#D8000C" if val == "Active" else "#2ECC71"), True
+            return (T.DANGER if val == "Active" else T.SUCCESS_TEXT), True
         if col == tag_col and val == "Unassigned":
-            return "#D8000C", True
-        return "#1A1A1A", False
+            return T.DANGER, True
+        return T.TEXT, False
     return style
 
 
@@ -82,10 +83,8 @@ class TrackingView(UiMixin, ctk.CTkFrame):
             modal, fg_color="transparent")
         scroll_container.pack(fill="both", expand=True, padx=20, pady=(20, 0))
 
-        ctk.CTkLabel(scroll_container, text="Champion Fine Tooling", font=(
-            "Inter", 20, "bold"), text_color="#1E4528").pack(pady=(0, 2))
-        ctk.CTkLabel(scroll_container, text="Official Issuance Receipt", font=(
-            "Inter", 14), text_color="gray").pack(pady=(0, 20))
+        ctk.CTkLabel(scroll_container, text="Champion Fine Tooling", font=T.font(20, "bold"), text_color=T.PRIMARY).pack(pady=(0, 2))
+        ctk.CTkLabel(scroll_container, text="Official Issuance Receipt", font=T.font(14), text_color=T.TEXT_MUTED).pack(pady=(0, 20))
 
         issued_to = row.get("full_name", self.user_info.get("username", "N/A"))
         trans_type = row.get("type", "Issuance")
@@ -98,30 +97,27 @@ class TrackingView(UiMixin, ctk.CTkFrame):
             f"Issued To: {issued_to}\n"
         )
         ctk.CTkLabel(scroll_container, text=details, justify="left",
-                     font=("Inter", 13)).pack(anchor="w", pady=(0, 20))
+                     font=T.font(14)).pack(anchor="w", pady=(0, 20))
 
-        ctk.CTkLabel(scroll_container, text="Items Deployed:", font=(
-            "Inter", 13, "bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(scroll_container, text="Items Deployed:", font=T.font(14, "bold")).pack(anchor="w", pady=(0, 5))
 
         tool_name = row.get("tool_name", "N/A")
         tag_id = row.get("tag_id", "N/A")
         status = row.get("status", "N/A")
-        ctk.CTkLabel(scroll_container, text=f"• {tool_name} (Tag: {tag_id}) - {status}", font=(
-            "Inter", 12)).pack(anchor="w", padx=10, pady=2)
+        ctk.CTkLabel(scroll_container, text=f"• {tool_name} (Tag: {tag_id}) - {status}", font=T.font(12)).pack(anchor="w", padx=10, pady=2)
 
     def build_admin_view(self):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Tracking & Accountability", font=(
-            "Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkLabel(top_bar, text="Tracking & Accountability", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
 
         tabs = ["📋 Issuance & Retrieval Logs", "🔎 Audit Records", "⚙️ Activity Log"]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
         self.seg_btn = ctk.CTkSegmentedButton(
             top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
-            fg_color="#F0F0F0", selected_color="#1E4528", selected_hover_color="#14301C"
+            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
         )
         self.seg_btn.pack(side="right")
 
@@ -164,14 +160,14 @@ class TrackingView(UiMixin, ctk.CTkFrame):
     # ------------------------------------------
     def render_logs_tab(self):
         frame = ctk.CTkFrame(
-            self.tab_content, fg_color="white", corner_radius=10)
+            self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(1, weight=1)
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 5))
         ctk.CTkLabel(top, text="Issuance & Retrieval Logs",
-                     font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
+                     font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         self.log_search_var = ctk.StringVar()
         self.log_search = ctk.CTkEntry(
@@ -186,7 +182,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.log_search_var.trace_add("write", on_log_search)
 
         ctk.CTkLabel(frame, text="An endless, chronological history book. Records exactly what happened and when (e.g., 'John took a hammer on Tuesday').",
-                     font=("Inter", 11, "italic"), text_color="gray").pack(anchor="w", padx=20, pady=(0, 8))
+                     font=T.font(12, "italic"), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20, pady=(0, 8))
 
         self._log_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
@@ -215,7 +211,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
                 self._log_scroll, self.LOG_COLUMNS, fetch=self._fetch_logs_page,
                 cells=lambda r: [str(r["transaction_id"]), r["type"], r["tool_name"], r["tag_id"], r["full_name"], r["borrow_date"], r["return_date"], r["status"]],
                 cell_style=_status_style(7, 3), on_row_click=self.view_deployment_details, empty_text="No transaction records found.",
-                font_size=11, cell_pady=12, uniform="log_cols")
+                font_size=12, cell_pady=12, uniform="log_cols")
             self._log_table.pack(fill="x", expand=True)
         self._log_table.reload(0)
 
@@ -245,26 +241,26 @@ class TrackingView(UiMixin, ctk.CTkFrame):
     # ------------------------------------------
     def render_audit_tab(self):
         frame = ctk.CTkFrame(
-            self.tab_content, fg_color="white", corner_radius=10)
+            self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 5))
         ctk.CTkLabel(top, text="Audit Trail — Issuance & Retrieval Records",
-                     font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
+                     font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         ctk.CTkLabel(frame, text="Investigating Missing Items: An active math equation. Cross-references Total Inventory vs. Available Stock vs. Active Transactions to flag discrepancies.",
-                     font=("Inter", 11, "italic"), text_color="gray").pack(anchor="w", padx=20, pady=(0, 8))
+                     font=T.font(12, "italic"), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20, pady=(0, 8))
 
         filter_row = ctk.CTkFrame(frame, fg_color="transparent")
         filter_row.pack(fill="x", padx=20, pady=(0, 8))
 
         ctk.CTkLabel(filter_row, text="Filter by Status:",
-                     font=("Inter", 12), text_color="gray").pack(side="left")
+                     font=T.font(12), text_color=T.TEXT_MUTED).pack(side="left")
         self.audit_filter = ctk.CTkOptionMenu(
             filter_row, values=["All", "Active", "Retrieved"],
-            width=120, fg_color="#F9FAFB", text_color="black", command=lambda e: self.load_audit()
+            width=120, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.load_audit()
         )
         self.audit_filter.pack(side="left", padx=8)
 
@@ -280,8 +276,8 @@ class TrackingView(UiMixin, ctk.CTkFrame):
             self._audit_timer = self.after(300, self.load_audit)
         self.audit_search_var.trace_add("write", on_audit_search)
 
-        self.audit_summary = ctk.CTkLabel(frame, text="", font=("Inter", 11, "bold"),
-                                          text_color="#1E4528")
+        self.audit_summary = ctk.CTkLabel(frame, text="", font=T.font(12, "bold"),
+                                          text_color=T.PRIMARY)
         self.audit_summary.pack(anchor="w", padx=20, pady=(0, 5))
 
         self._audit_scroll = ctk.CTkScrollableFrame(
@@ -303,9 +299,9 @@ class TrackingView(UiMixin, ctk.CTkFrame):
                 self._audit_scroll, self.AUDIT_COLUMNS, fetch=self._fetch_audit_page,
                 cells=lambda r: [str(r["transaction_id"]), r["full_name"], r["tool_name"], r["tag_id"], r["borrow_date"], r["return_date"],
                                  r["cond_borrow"], r["cond_return"], r["status"]],
-                row_bg=lambda r, i: "#FFF8F0" if r["status"] == "Active" else ("#F9FAFB" if i % 2 == 0 else "white"),
+                row_bg=lambda r, i: T.WARNING_BG if r["status"] == "Active" else (T.SURFACE_ALT if i % 2 == 0 else "white"),
                 cell_style=_status_style(8, 3), on_loaded=self._audit_loaded, empty_text="No records match the audit criteria.",
-                font_size=11, cell_pady=12, uniform="audit_cols")
+                font_size=12, cell_pady=12, uniform="audit_cols")
             self._audit_table.pack(fill="x", expand=True)
         self._audit_table.reload(0)
 
@@ -346,32 +342,31 @@ class TrackingView(UiMixin, ctk.CTkFrame):
     # ------------------------------------------
     def render_activity_tab(self):
         frame = ctk.CTkFrame(
-            self.tab_content, fg_color="white", corner_radius=10)
+            self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(2, weight=1)
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 5))
         ctk.CTkLabel(top, text="Full System Activity Log",
-                     font=("Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
+                     font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         ctk.CTkLabel(frame,
                      text="Records every login, logout, module visit, edit, search, and transaction. "
                           "Auto-pruned to the latest 10,000 entries to protect the database.",
-                     font=("Inter", 11), text_color="gray",
+                     font=T.font(12), text_color=T.TEXT_MUTED,
                      wraplength=900, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
 
         filter_row = ctk.CTkFrame(frame, fg_color="transparent")
         filter_row.pack(fill="x", padx=20, pady=(0, 8))
 
-        ctk.CTkLabel(filter_row, text="Module:", font=(
-            "Inter", 12), text_color="gray").pack(side="left")
+        ctk.CTkLabel(filter_row, text="Module:", font=T.font(12), text_color=T.TEXT_MUTED).pack(side="left")
         self.act_module_filter = ctk.CTkOptionMenu(
             filter_row,
             values=["All", "Authentication", "Dashboard", "Inventory", "Projects",
                     "Tagging", "Issuance & Retrieval", "Tracking & Accountability",
                     "Reports", "Maintenance", "Role Management", "Profile"],
-            width=180, fg_color="#F9FAFB", text_color="black"
+            width=180, fg_color=T.SURFACE_ALT, text_color=T.TEXT
         )
         self.act_module_filter.pack(side="left", padx=8)
         self.act_module_filter.configure(command=lambda e: self.do_act_search())
@@ -389,17 +384,16 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.act_search_var.trace_add("write", on_act_search)
 
         # [PANEL-AWE] tamper-evidence: recompute the hash chain on demand and print it
-        self.verify_btn = ctk.CTkButton(filter_row, text="🔐 Verify Audit Chain", width=150, fg_color="#1E4528", hover_color="#14301C",
-                                        font=("Inter", 11, "bold"), command=self.verify_audit_chain)
+        self.verify_btn = ctk.CTkButton(filter_row, text="🔐 Verify Audit Chain", width=150, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                                        font=T.font(12, "bold"), command=self.verify_audit_chain)
         self.verify_btn.pack(side="left", padx=(10, 5))
-        self.audit_pdf_btn = ctk.CTkButton(filter_row, text="⎙ Audit Report PDF", width=140, fg_color="#E0E0E0", text_color="black",
-                                           hover_color="#CCCCCC", font=("Inter", 11, "bold"), command=self.export_audit_pdf)
+        self.audit_pdf_btn = ctk.CTkButton(filter_row, text="⎙ Audit Report PDF", width=140, fg_color=T.BORDER, text_color=T.TEXT,
+                                           hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=self.export_audit_pdf)
         self.audit_pdf_btn.pack(side="left", padx=5)
-        self.chain_lbl = ctk.CTkLabel(frame, text="", font=("Inter", 11, "bold"), text_color="gray", wraplength=900, justify="left")
+        self.chain_lbl = ctk.CTkLabel(frame, text="", font=T.font(12, "bold"), text_color=T.TEXT_MUTED, wraplength=900, justify="left")
         self.chain_lbl.pack(anchor="w", padx=20, pady=(0, 4))
 
-        self.act_summary = ctk.CTkLabel(frame, text="", font=(
-            "Inter", 11, "bold"), text_color="#1E4528")
+        self.act_summary = ctk.CTkLabel(frame, text="", font=T.font(12, "bold"), text_color=T.PRIMARY)
         self.act_summary.pack(anchor="w", padx=20, pady=(0, 5))
 
         self._act_scroll = ctk.CTkScrollableFrame(
@@ -408,14 +402,14 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         
         return frame
 
-    ACT_COLORS = {"Login": "#2ECC71", "Logout": "#E74C3C", "Added": "#3498DB", "Edited": "#F39C12", "Archived": "#95A5A6", "Searched": "#9B59B6",
-                  "Viewed": "#1A1A1A", "Issued": "#27AE60", "Retrieved": "#16A085", "Submitted": "#2980B9", "Approved": "#27AE60",
-                  "Flagged": "#D8000C", "Resolved": "#2ECC71"}
+    ACT_COLORS = {"Login": T.SUCCESS_TEXT, "Logout": T.DANGER_SOFT, "Added": T.INFO, "Edited": T.WARNING_ALT, "Archived": T.TEXT_MUTED, "Searched": T.PURPLE_ALT,
+                  "Viewed": T.TEXT, "Issued": T.SUCCESS_DARK, "Retrieved": T.SUCCESS_DARK, "Submitted": T.INFO_HOVER, "Approved": T.SUCCESS_DARK,
+                  "Flagged": T.DANGER, "Resolved": T.SUCCESS_TEXT}
 
     # ---- [PANEL-AWE] audit chain ---------------------------------------------------------------------------------------------------
     def verify_audit_chain(self):
         self.verify_btn.configure(state="disabled", text="Checking…")
-        self.chain_lbl.configure(text="Recomputing every hash, please wait…", text_color="gray")
+        self.chain_lbl.configure(text="Recomputing every hash, please wait…", text_color=T.TEXT_MUTED)
 
         def work():
             try:
@@ -430,11 +424,11 @@ class TrackingView(UiMixin, ctk.CTkFrame):
     def _chain_done(self, result, error):
         self.verify_btn.configure(state="normal", text="🔐 Verify Audit Chain")
         if error:
-            self.chain_lbl.configure(text=f"Could not verify: {error}", text_color="#D8000C")
+            self.chain_lbl.configure(text=f"Could not verify: {error}", text_color=T.DANGER_TEXT)
             return
         head = f"   Head: {result['head_hash']}" if result.get("head_hash") else ""
         self.chain_lbl.configure(text=("✓ " if result["intact"] else "✗ ") + audit_chain.describe(result) + head,
-                                 text_color="#1E4528" if result["intact"] else "#D8000C")
+                                 text_color=T.PRIMARY if result["intact"] else T.DANGER)
 
     def export_audit_pdf(self):
         self.audit_pdf_btn.configure(state="disabled", text="Preparing…")
@@ -492,9 +486,9 @@ class TrackingView(UiMixin, ctk.CTkFrame):
                                    ("Details", 5, 250)],
                 fetch=self._fetch_activity_page,
                 cells=lambda r: [str(r["log_id"]), r["ts"], r["employee"], r["action_type"], r["module"], r["details"]],
-                cell_style=lambda r, c, v: (self.ACT_COLORS.get(v, "#555555"), True) if c == 3 else ("#1A1A1A", False),
+                cell_style=lambda r, c, v: (self.ACT_COLORS.get(v, T.TEXT_SECONDARY), True) if c == 3 else (T.TEXT, False),
                 on_loaded=lambda rows, info: self.act_summary.configure(text=f"  {info.label()} entries") if self.act_summary.winfo_exists() else None,
-                empty_text="No activity records found.", page_size=50, font_size=11, cell_pady=12, uniform="act_cols")
+                empty_text="No activity records found.", page_size=50, font_size=12, cell_pady=12, uniform="act_cols")
             self._act_table.pack(fill="x", expand=True)
         self._act_table.reload(0)
 
@@ -527,15 +521,14 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Tracking & Accountability", font=(
-            "Inter", 16, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkLabel(top_bar, text="Tracking & Accountability", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
 
         tabs = ["👤 My History"]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
         self.seg_btn = ctk.CTkSegmentedButton(
             top_bar, values=tabs, variable=self.tab_var,
-            fg_color="#F0F0F0", selected_color="#1E4528", selected_hover_color="#14301C"
+            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
         )
         self.seg_btn.pack(side="right")
 
@@ -546,17 +539,15 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.tab_content.grid_rowconfigure(0, weight=1)
 
         frame = ctk.CTkFrame(
-            self.tab_content, fg_color="white", corner_radius=10)
+            self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(1, weight=1)
 
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 10))
-        ctk.CTkLabel(top, text="My Deployment History", font=(
-            "Inter", 16, "bold"), text_color="#1A1A1A").pack(side="left")
-        ctk.CTkLabel(frame, text="Click on any transaction record below to view its Deployment Receipt.", font=(
-            "Inter", 11), text_color="gray").pack(anchor="w", padx=20, pady=(0, 10))
+        ctk.CTkLabel(top, text="My Deployment History", font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
+        ctk.CTkLabel(frame, text="Click on any transaction record below to view its Deployment Receipt.", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20, pady=(0, 10))
 
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
@@ -580,7 +571,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
                             conn2.close()
 
         if not user_id:
-            ctk.CTkLabel(scroll, text="Could not resolve user session. Please log out and log back in.", text_color="red").pack(pady=20)
+            ctk.CTkLabel(scroll, text="Could not resolve user session. Please log out and log back in.", text_color=T.DANGER_TEXT).pack(pady=20)
             return
 
         def fetch(page, size):
@@ -605,6 +596,6 @@ class TrackingView(UiMixin, ctk.CTkFrame):
             fetch=fetch,
             cells=lambda r: [str(r["transaction_id"]), r["tool_name"], r["tag_id"], r["borrow_date"], r["return_date"], r["cond_return"], r["status"]],
             cell_style=_status_style(6, 2), on_row_click=self.view_deployment_details, empty_text="You have no deployment history.",
-            font_size=11, cell_pady=12, uniform="staff_cols")
+            font_size=12, cell_pady=12, uniform="staff_cols")
         self._my_table.pack(fill="x", expand=True)
         self._my_table.reload(0)

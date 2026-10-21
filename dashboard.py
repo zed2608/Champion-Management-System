@@ -25,6 +25,7 @@ from views.reports import ReportsView
 from views.maintenance import MaintenanceView
 from views.role_management import RoleManagementView
 from views.help import HelpView
+from ui import theme as T
 
 
 _EMPTY_METRICS = {
@@ -86,7 +87,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
     def build_sidebar(self):
         self.sidebar_frame = ctk.CTkFrame(
-            self, width=250, corner_radius=0, fg_color="#1A3B22")
+            self, width=250, corner_radius=0, fg_color=T.SIDEBAR)
         self.sidebar_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
         self.sidebar_frame.grid_propagate(False)
 
@@ -100,11 +101,11 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             self.sidebar_logo.pack(pady=(30, 10))
         except FileNotFoundError:
             self.sidebar_logo = ctk.CTkLabel(
-                self.sidebar_frame, text="🟢", font=("Inter", 40))
+                self.sidebar_frame, text="🟢", font=T.font(40))
             self.sidebar_logo.pack(pady=(30, 10))
 
         ctk.CTkLabel(self.sidebar_frame, text="Automated Management\nSystem",
-                     font=("Inter", 14, "bold"), text_color="white").pack(pady=(0, 30))
+                     font=T.font(14, "bold"), text_color=T.WHITE).pack(pady=(0, 30))
 
         is_admin = self.user_info.get("role", "Staff") == "Admin"
 
@@ -130,8 +131,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
             btn = ctk.CTkButton(
                 container, text=item, anchor="w",
-                fg_color="transparent", hover_color="#2A6038",
-                text_color="white", font=("Inter", 13, "bold"),
+                fg_color="transparent", hover_color=T.SIDEBAR_ACTIVE,
+                text_color=T.WHITE, font=T.font(14, "bold"),
                 command=lambda m=item: self.show_frame(m)
             )
             btn.pack(side="left", fill="x", expand=True)
@@ -145,14 +146,14 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         ctk.CTkButton(
             self.sidebar_frame, text="Exit", anchor="w",
-            fg_color="transparent", hover_color="#8B0000",
-            text_color="white", font=("Inter", 13, "bold"),
+            fg_color="transparent", hover_color=T.DANGER_DARK,
+            text_color=T.WHITE, font=T.font(14, "bold"),
             command=self.confirm_logout
         ).pack(side="bottom", fill="x", pady=20, padx=10)
 
     def build_topbar(self):
         self.topbar_frame = ctk.CTkFrame(
-            self, height=60, corner_radius=0, fg_color="white")
+            self, height=60, corner_radius=0, fg_color=T.SURFACE)
         self.topbar_frame.grid(row=0, column=1, sticky="ew")
         self.topbar_frame.pack_propagate(False)
 
@@ -164,18 +165,18 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             self.header_logo = ctk.CTkLabel(
                 self.topbar_frame, image=self.topbar_logo_img,
                 text=" Champion Fine Tooling", compound="left",
-                font=("Inter", 14, "bold"), text_color="#1A3B22"
+                font=T.font(14, "bold"), text_color=T.SIDEBAR
             )
             self.header_logo.pack(side="left", padx=30)
         except FileNotFoundError:
             self.header_logo = ctk.CTkLabel(
                 self.topbar_frame, text="Champion Fine Tooling",
-                font=("Inter", 14, "bold"), text_color="#1A3B22"
+                font=T.font(14, "bold"), text_color=T.SIDEBAR
             )
             self.header_logo.pack(side="left", padx=30)
 
         self.time_label = ctk.CTkLabel(
-            self.topbar_frame, text="", font=("Inter", 12), text_color="#666666")
+            self.topbar_frame, text="", font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.time_label.pack(side="right", padx=(10, 30), pady=20)
         self._update_clock()
 
@@ -193,7 +194,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         self.user_name_label = ctk.CTkLabel(
             self.user_text_frame, text=f"{self.user_info['full_name']}",
-            font=("Inter", 14, "bold"), text_color="black"
+            font=T.font(14, "bold"), text_color=T.TEXT
         )
         self.user_name_label.pack(anchor="w")
         self.user_name_label.bind(
@@ -201,7 +202,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         self.user_role_label = ctk.CTkLabel(
             self.user_text_frame, text=f"{self.user_info['role']}",
-            font=("Inter", 12, "bold"), text_color="#2ECC71"
+            font=T.font(12, "bold"), text_color=T.SUCCESS_TEXT
         )
         self.user_role_label.pack(anchor="w")
         self.user_role_label.bind(
@@ -243,7 +244,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
     def _make_header(self, parent, headers, weights, pad_left=20, pad_right=36):
         header_frame = ctk.CTkFrame(
-            parent, fg_color="#1E4528", corner_radius=5, height=35)
+            parent, fg_color=T.PRIMARY, corner_radius=5, height=35)
         header_frame.pack(fill="x", padx=(pad_left, pad_right))
         header_frame.pack_propagate(False)
 
@@ -251,8 +252,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         for col, (text, weight) in enumerate(zip(headers, weights)):
             header_frame.grid_columnconfigure(
                 col, weight=weight, minsize=min_sizes[col])
-            ctk.CTkLabel(header_frame, text=text, font=("Inter", 11, "bold"),
-                         text_color="white", anchor="center").grid(row=0, column=col, padx=10, pady=5, sticky="ew")
+            ctk.CTkLabel(header_frame, text=text, font=T.font(12, "bold"),
+                         text_color=T.WHITE, anchor="center").grid(row=0, column=col, padx=10, pady=5, sticky="ew")
         return header_frame
 
     def _make_row(self, parent, values, weights, bg):
@@ -273,8 +274,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         from db import db
         self._db = db
         self._offline_banner = ctk.CTkLabel(
-            self, text="⚠  Database offline – retrying…  Nothing is being saved.", font=("Inter", 12, "bold"),
-            fg_color="#D8000C", text_color="white", corner_radius=8, height=34)
+            self, text="⚠  Database offline – retrying…  Nothing is being saved.", font=T.font(12, "bold"),
+            fg_color=T.DANGER, text_color=T.WHITE, corner_radius=8, height=34)
         self._offline_retry_job = None
 
         def on_status(online):               # called from whichever thread noticed: hop to the Tk thread
@@ -416,18 +417,18 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         dialog.protocol("WM_DELETE_WINDOW", self._stay_logged_in)
 
         ctk.CTkLabel(dialog, text="⚠ Session Inactivity",
-                     font=("Inter", 15, "bold"), text_color="#C0392B").pack(pady=(20, 4))
+                     font=T.font(16, "bold"), text_color=T.DANGER_TEXT).pack(pady=(20, 4))
         minutes = self._idle_limit_s // 60
         ctk.CTkLabel(dialog, text=f"You have been inactive for {minutes} minute{'s' if minutes != 1 else ''}.",
-                     font=("Inter", 11), text_color="#555555").pack()
+                     font=T.font(12), text_color=T.TEXT_SECONDARY).pack()
 
         self._countdown_label = ctk.CTkLabel(dialog, text=f"Logging out in {self._warn_s} seconds…",
-                                             font=("Inter", 12), text_color="#333333")
+                                             font=T.font(12), text_color=T.TEXT)
         self._countdown_label.pack(pady=(10, 16))
 
         ctk.CTkButton(dialog, text="Stay Logged In", width=160,
-                      fg_color="#1E4528", hover_color="#14301C",
-                      font=("Inter", 12, "bold"),
+                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+                      font=T.font(12, "bold"),
                       command=self._stay_logged_in).pack()
         self._warning_check()
 
@@ -476,14 +477,13 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
     def _show_loading_overlay(self):
         """Show a spinner overlay on the main container while switching frames."""
         overlay = ctk.CTkFrame(self.main_container,
-                               fg_color="white", corner_radius=10)
+                               fg_color=T.SURFACE, corner_radius=10)
         overlay.place(relx=0.5, rely=0.5, anchor="center",
                       relwidth=1.0, relheight=1.0)
-        spinner_lbl = ctk.CTkLabel(overlay, text="⟳", font=(
-            "Inter", 36), text_color="#1E4528")
+        spinner_lbl = ctk.CTkLabel(overlay, text="⟳", font=T.font(40), text_color=T.PRIMARY)
         spinner_lbl.place(relx=0.5, rely=0.5, anchor="center")
         msg_lbl = ctk.CTkLabel(overlay, text="Loading...",
-                               font=("Inter", 13), text_color="gray")
+                               font=T.font(14), text_color=T.TEXT_MUTED)
         msg_lbl.place(relx=0.5, rely=0.56, anchor="center")
 
         # Animate the spinner
@@ -511,9 +511,9 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         for name, btn in self.nav_buttons.items():
             if name == page_name:
-                btn.configure(fg_color="#2A6038", text_color="#F1C40F")
+                btn.configure(fg_color=T.SIDEBAR_ACTIVE, text_color=T.ACCENT)
             else:
-                btn.configure(fg_color="transparent", text_color="white")
+                btn.configure(fg_color="transparent", text_color=T.WHITE)
 
         if self.current_frame is not None:
             self._close_figures()                            # pyplot keeps every figure alive until it is closed
@@ -564,12 +564,12 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                 self.current_frame = ctk.CTkFrame(
                     self.main_container, fg_color="transparent")
                 ctk.CTkLabel(self.current_frame, text=f"{page_name.upper()} MODULE",
-                             font=("Inter", 20), text_color="gray").pack(expand=True)
+                             font=T.font(20), text_color=T.TEXT_MUTED).pack(expand=True)
         except Exception as e:
             import traceback; traceback.print_exc()
             self.current_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
             ctk.CTkLabel(self.current_frame, text=f"Could not load {page_name}. Please try again or contact an administrator.",
-                         font=("Inter", 14), text_color="#D8000C").pack(expand=True)
+                         font=T.font(14), text_color=T.DANGER_TEXT).pack(expand=True)
         finally:
             # Remove overlay whether or not the page built
             if overlay.winfo_exists():
@@ -600,13 +600,13 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
     def _build_insights(self, parent):
         """Four cards for the Admin only: last backup, audit chain, top wear forecasts, top recommendations. They start as "Loading…" and are
         filled from a worker thread (services.dashboard_service.admin_insights), so building the dashboard never waits for them."""
-        panel = ctk.CTkFrame(parent, fg_color="white", corner_radius=10)
+        panel = ctk.CTkFrame(parent, fg_color=T.SURFACE, corner_radius=10)
         panel.pack(fill="x", pady=(0, 10))
         head = ctk.CTkFrame(panel, fg_color="transparent")
         head.pack(fill="x", padx=15, pady=(10, 0))
-        ctk.CTkLabel(head, text="ADMIN INSIGHTS", font=("Inter", 13, "bold"), text_color="#1E4528").pack(side="left")
-        ctk.CTkButton(head, text="↻ Refresh", width=80, height=24, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
-                      font=("Inter", 11, "bold"), command=self._load_insights).pack(side="right")
+        ctk.CTkLabel(head, text="ADMIN INSIGHTS", font=T.font(14, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkButton(head, text="↻ Refresh", width=80, height=24, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
+                      font=T.font(12, "bold"), command=self._load_insights).pack(side="right")
         grid = ctk.CTkFrame(panel, fg_color="transparent")
         grid.pack(fill="x", padx=10, pady=(4, 10))
         grid.grid_columnconfigure((0, 1), weight=1, uniform="ins")
@@ -615,21 +615,21 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                                                ("wear", "Wear forecast - top 5", 1, 0, "Maintenance", 1),
                                                ("recommendations", "Recommendations - top 5", 1, 1, "Reports", 1),
                                                ("savings", "Lost-tool value vs the P10,000 monthly baseline", 2, 0, "Reports", 2)):
-            card = ctk.CTkFrame(grid, fg_color="#F9FAFB", corner_radius=8)
+            card = ctk.CTkFrame(grid, fg_color=T.SURFACE_ALT, corner_radius=8)
             card.grid(row=row, column=col, columnspan=span, padx=5, pady=5, sticky="nsew")
             t = ctk.CTkFrame(card, fg_color="transparent")
             t.pack(fill="x", padx=12, pady=(8, 2))
-            ctk.CTkLabel(t, text=title, font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(side="left")
-            ctk.CTkButton(t, text="Open", width=50, height=20, fg_color="transparent", text_color="#2980B9", hover_color="#EAF2F8",
-                          font=("Inter", 10, "bold"), command=lambda g=go: self.show_frame(g)).pack(side="right")
-            lbl = ctk.CTkLabel(card, text="Loading...", font=("Inter", 11), text_color="gray", justify="left", anchor="w", wraplength=520)
+            ctk.CTkLabel(t, text=title, font=T.font(12, "bold"), text_color=T.TEXT).pack(side="left")
+            ctk.CTkButton(t, text="Open", width=50, height=20, fg_color="transparent", text_color=T.INFO_TEXT, hover_color=T.INFO_BG,
+                          font=T.font(12, "bold"), command=lambda g=go: self.show_frame(g)).pack(side="right")
+            lbl = ctk.CTkLabel(card, text="Loading...", font=T.font(12), text_color=T.TEXT_MUTED, justify="left", anchor="w", wraplength=520)
             lbl.pack(fill="x", padx=12, pady=(0, 10))
             self.ins_labels[key] = lbl
         self._load_insights()
 
     def _load_insights(self):
         for lbl in getattr(self, "ins_labels", {}).values():
-            lbl.configure(text="Loading...", text_color="gray")
+            lbl.configure(text="Loading...", text_color=T.TEXT_MUTED)
 
         def work():
             try:
@@ -644,7 +644,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
     @staticmethod
     def insight_texts(result):
         """{key: (text, colour)} for the four cards (pure: the unit tests read this)."""
-        green, red, grey, dark = "#1E4528", "#D8000C", "gray", "#1A1A1A"
+        green, red, grey, dark=T.PRIMARY, T.DANGER, "gray", T.TEXT
         out = {}
         part = result.get("backup", {})
         if not part:
@@ -724,10 +724,10 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         inner_frame = ctk.CTkFrame(frame, fg_color="transparent")
         inner_frame.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(inner_frame, text="EXECUTIVE DASHBOARD", font=("Inter", 24, "bold"),
-                     text_color="#1A1A1A").pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(inner_frame, text="EXECUTIVE DASHBOARD", font=T.font(20, "bold"),
+                     text_color=T.TEXT).pack(anchor="w", pady=(0, 5))
         ctk.CTkLabel(inner_frame, text="High-level overview of system health and asset utilization. Auto-updates live.",
-                     font=("Inter", 13), text_color="gray").pack(anchor="w", pady=(0, 20))
+                     font=T.font(14), text_color=T.TEXT_MUTED).pack(anchor="w", pady=(0, 20))
 
         metrics = {
             "total_employees": 0, "active_workforce": 0, "available_qty": 0,
@@ -746,65 +746,54 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             cards_frame.grid_columnconfigure(i, weight=1)
 
         # Card 1 – Utilization
-        c1 = ctk.CTkFrame(cards_frame, fg_color="#1E4528",
+        c1 = ctk.CTkFrame(cards_frame, fg_color=T.PRIMARY,
                           corner_radius=10, height=130)
         c1.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
         c1.pack_propagate(False)
-        self.dash_util_lbl = ctk.CTkLabel(c1, text="0%", font=(
-            "Inter", 28, "bold"), text_color="white")
+        self.dash_util_lbl = ctk.CTkLabel(c1, text="0%", font=T.font(28, "bold"), text_color=T.WHITE)
         self.dash_util_lbl.pack(anchor="w", padx=20, pady=(20, 0))
-        ctk.CTkLabel(c1, text="Asset Utilization", font=(
-            "Inter", 13, "bold"), text_color="white").pack(anchor="w", padx=20, pady=(5, 0))
-        ctk.CTkLabel(c1, text="Deployed vs Warehouse", font=(
-            "Inter", 11), text_color="white").pack(anchor="w", padx=20)
+        ctk.CTkLabel(c1, text="Asset Utilization", font=T.font(14, "bold"), text_color=T.WHITE).pack(anchor="w", padx=20, pady=(5, 0))
+        ctk.CTkLabel(c1, text="Deployed vs Warehouse", font=T.font(12), text_color=T.WHITE).pack(anchor="w", padx=20)
 
         # Card 2 – Active Workforce
-        c2 = ctk.CTkFrame(cards_frame, fg_color="#2980B9",
+        c2 = ctk.CTkFrame(cards_frame, fg_color=T.INFO_HOVER,
                           corner_radius=10, height=130)
         c2.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
         c2.pack_propagate(False)
         self.dash_wf_lbl = ctk.CTkLabel(
-            c2, text="0 / 0", font=("Inter", 28, "bold"), text_color="white")
+            c2, text="0 / 0", font=T.font(28, "bold"), text_color=T.WHITE)
         self.dash_wf_lbl.pack(anchor="w", padx=20, pady=(20, 0))
-        ctk.CTkLabel(c2, text="Active Workforce", font=(
-            "Inter", 13, "bold"), text_color="white").pack(anchor="w", padx=20, pady=(5, 0))
-        ctk.CTkLabel(c2, text="Active last 30 days", font=(
-            "Inter", 11), text_color="white").pack(anchor="w", padx=20)
+        ctk.CTkLabel(c2, text="Active Workforce", font=T.font(14, "bold"), text_color=T.WHITE).pack(anchor="w", padx=20, pady=(5, 0))
+        ctk.CTkLabel(c2, text="Active last 30 days", font=T.font(12), text_color=T.WHITE).pack(anchor="w", padx=20)
 
         # Card 3 – Total Inventory
-        c3 = ctk.CTkFrame(cards_frame, fg_color="#F1C40F",
+        c3 = ctk.CTkFrame(cards_frame, fg_color=T.ACCENT,
                           corner_radius=10, height=130)
         c3.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
         c3.pack_propagate(False)
-        self.dash_inv_lbl = ctk.CTkLabel(c3, text="0", font=(
-            "Inter", 28, "bold"), text_color="black")
+        self.dash_inv_lbl = ctk.CTkLabel(c3, text="0", font=T.font(28, "bold"), text_color=T.TEXT)
         self.dash_inv_lbl.pack(anchor="w", padx=20, pady=(20, 0))
-        ctk.CTkLabel(c3, text="Total Inventory", font=(
-            "Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
-        ctk.CTkLabel(c3, text="Total physical items", font=(
-            "Inter", 11), text_color="black").pack(anchor="w", padx=20)
+        ctk.CTkLabel(c3, text="Total Inventory", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(5, 0))
+        ctk.CTkLabel(c3, text="Total physical items", font=T.font(12), text_color=T.TEXT).pack(anchor="w", padx=20)
 
         # Card 4 – Low Stock (admin + staff)
-        c_ls = ctk.CTkFrame(cards_frame, fg_color="#F9FAFB", corner_radius=10,
-                            height=130, border_width=1, border_color="#E0E0E0")
+        c_ls = ctk.CTkFrame(cards_frame, fg_color=T.SURFACE_ALT, corner_radius=10,
+                            height=130, border_width=1, border_color=T.BORDER)
         c_ls.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
         c_ls.pack_propagate(False)
         self.dash_lowstock_top = ctk.CTkFrame(c_ls, fg_color="transparent")
         self.dash_lowstock_top.pack(fill="x", padx=20, pady=(15, 0))
-        self.dash_lowstock_val = ctk.CTkLabel(self.dash_lowstock_top, text="0", font=(
-            "Inter", 28, "bold"), text_color="black")
+        self.dash_lowstock_val = ctk.CTkLabel(self.dash_lowstock_top, text="0", font=T.font(28, "bold"), text_color=T.TEXT)
         self.dash_lowstock_val.pack(side="left")
-        ctk.CTkLabel(c_ls, text="Low Stock Items", font=(
-            "Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
-        ctk.CTkLabel(c_ls, text="Near reorder level →", font=(
-            "Inter", 11), text_color="#888888").pack(anchor="w", padx=20)
+        ctk.CTkLabel(c_ls, text="Low Stock Items", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(5, 0))
+        ctk.CTkLabel(c_ls, text="Near reorder level →", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20)
         self._bind_widget_tree(
             c_ls, lambda *_: self.show_frame("Inventory", highlight_low_stock=True))
 
         if is_admin:
             # Card 5 – Action Items
             self.dash_action_card = ctk.CTkFrame(
-                cards_frame, fg_color="#F9FAFB", corner_radius=10, height=130, border_width=1, border_color="#E0E0E0")
+                cards_frame, fg_color=T.SURFACE_ALT, corner_radius=10, height=130, border_width=1, border_color=T.BORDER)
             self.dash_action_card.grid(
                 row=0, column=4, padx=5, pady=5, sticky="ew")
             self.dash_action_card.pack_propagate(False)
@@ -812,50 +801,46 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                 self.dash_action_card, fg_color="transparent")
             self.dash_action_top.pack(fill="x", padx=20, pady=(15, 0))
             self._render_action_badges(metrics)
-            ctk.CTkLabel(self.dash_action_card, text="Action Items", font=(
-                "Inter", 13, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(5, 0))
-            ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=(
-                "Inter", 11), text_color="#888888").pack(anchor="w", padx=20)
+            ctk.CTkLabel(self.dash_action_card, text="Action Items", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(5, 0))
+            ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20)
             self._bind_widget_tree(self.dash_action_card,
                                    lambda *_: self.show_frame("Maintenance"))
 
         # ── Row 2: Project Status Strip (admin only) ─────────────────────────
         if is_admin:
             strip = ctk.CTkFrame(
-                inner_frame, fg_color="white", corner_radius=10, height=60)
+                inner_frame, fg_color=T.SURFACE, corner_radius=10, height=60)
             strip.pack(fill="x", pady=(0, 10))
             strip.pack_propagate(False)
             strip_inner = ctk.CTkFrame(strip, fg_color="transparent")
             strip_inner.pack(expand=True, fill="both", padx=20)
-            ctk.CTkLabel(strip_inner, text="Projects Status:", font=(
-                "Inter", 12, "bold"), text_color="#555555").pack(side="left", padx=(0, 20))
+            ctk.CTkLabel(strip_inner, text="Projects Status:", font=T.font(12, "bold"), text_color=T.TEXT_SECONDARY).pack(side="left", padx=(0, 20))
             # Active
             pf_active = ctk.CTkFrame(
-                strip_inner, fg_color="#E8F5E9", corner_radius=8)
+                strip_inner, fg_color=T.SUCCESS_BG, corner_radius=8)
             pf_active.pack(side="left", padx=5, pady=10, ipadx=12, ipady=4)
             self.dash_proj_active_lbl = ctk.CTkLabel(
-                pf_active, text="0 Active", font=("Inter", 12, "bold"), text_color="#1E4528")
+                pf_active, text="0 Active", font=T.font(12, "bold"), text_color=T.PRIMARY)
             self.dash_proj_active_lbl.pack()
             # Pending
             pf_pending = ctk.CTkFrame(
-                strip_inner, fg_color="#FFF8E1", corner_radius=8)
+                strip_inner, fg_color=T.WARNING_BG, corner_radius=8)
             pf_pending.pack(side="left", padx=5, pady=10, ipadx=12, ipady=4)
             self.dash_proj_pending_lbl = ctk.CTkLabel(
-                pf_pending, text="0 Pending", font=("Inter", 12, "bold"), text_color="#C07A00")
+                pf_pending, text="0 Pending", font=T.font(12, "bold"), text_color=T.WARNING_TEXT)
             self.dash_proj_pending_lbl.pack()
             # Overdue (merged here from removed card)
             pf_overdue = ctk.CTkFrame(
-                strip_inner, fg_color="#FFF5F5", corner_radius=8)
+                strip_inner, fg_color=T.DANGER_BG, corner_radius=8)
             pf_overdue.pack(side="left", padx=5, pady=10, ipadx=12, ipady=4)
             self.dash_proj_overdue_lbl = ctk.CTkLabel(
-                pf_overdue, text="0 Overdue", font=("Inter", 12, "bold"), text_color="#C0392B")
+                pf_overdue, text="0 Overdue", font=T.font(12, "bold"), text_color=T.DANGER_TEXT)
             self.dash_proj_overdue_lbl.pack()
             # Completed this month
             pf_done = ctk.CTkFrame(
-                strip_inner, fg_color="#E3F2FD", corner_radius=8)
+                strip_inner, fg_color=T.INFO_BG, corner_radius=8)
             pf_done.pack(side="left", padx=5, pady=10, ipadx=12, ipady=4)
-            self.dash_proj_done_lbl = ctk.CTkLabel(pf_done, text="0 Completed (this month)", font=(
-                "Inter", 12, "bold"), text_color="#1565C0")
+            self.dash_proj_done_lbl = ctk.CTkLabel(pf_done, text="0 Completed (this month)", font=T.font(12, "bold"), text_color=T.INFO_DARK)
             self.dash_proj_done_lbl.pack()
             self._bind_widget_tree(
                 strip, lambda *_: self.show_frame("Project Management"))
@@ -872,11 +857,11 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         # Left column: activity feed
         activity_card = ctk.CTkFrame(
-            bottom_frame, fg_color="white", corner_radius=10)
+            bottom_frame, fg_color=T.SURFACE, corner_radius=10)
         activity_card.grid(row=0, column=0, sticky="nsew",
                            padx=(0, 10), pady=10)
         ctk.CTkLabel(activity_card, text="Recent Operations (Deployments & Projects)",
-                     font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 10))
+                     font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 10))
         self.dash_activity_frame = ctk.CTkFrame(
             activity_card, fg_color="transparent")
         self.dash_activity_frame.pack(
@@ -885,12 +870,12 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         # Right column: trend chart (admin) OR my issuances (staff)
         right_card = ctk.CTkFrame(
-            bottom_frame, fg_color="white", corner_radius=10)
+            bottom_frame, fg_color=T.SURFACE, corner_radius=10)
         right_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0), pady=10)
 
         if is_admin:
             ctk.CTkLabel(right_card, text="7-Day Deployment Trend",
-                         font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 5))
+                         font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 5))
             self.dash_chart_frame = ctk.CTkFrame(
                 right_card, fg_color="transparent")
             self.dash_chart_frame.pack(fill="both", expand=True)
@@ -899,7 +884,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
             # Currently Deployed mini-table below chart
             ctk.CTkLabel(right_card, text="Currently Deployed by Project",
-                         font=("Inter", 13, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(10, 4))
+                         font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 4))
             self.dash_deployed_frame = ctk.CTkFrame(
                 right_card, fg_color="transparent")
             self.dash_deployed_frame.pack(fill="x", padx=10, pady=(0, 10))
@@ -907,7 +892,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         else:
             # Staff: My Active Issuances
             ctk.CTkLabel(right_card, text="My Active Issuances",
-                         font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(20, 5))
+                         font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 5))
             self.dash_myissue_frame = ctk.CTkFrame(
                 right_card, fg_color="transparent")
             self.dash_myissue_frame.pack(
@@ -927,8 +912,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
     def _embed_trend_chart(self, parent, chart_data):
         fig, ax = plt.subplots(figsize=(5.2, 2.6), dpi=100)  # Slightly wider
         self._track_fig(fig)
-        fig.patch.set_facecolor("#FFFFFF")
-        ax.set_facecolor("#FFFFFF")
+        fig.patch.set_facecolor(T.WHITE)
+        ax.set_facecolor(T.WHITE)
 
         self._draw_trend(ax, chart_data)
         plt.tight_layout(pad=2.0)
@@ -942,7 +927,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         ax.clear()
         if not chart_data:
             ax.text(0.5, 0.5, "No data available", ha="center", va="center", 
-                    transform=ax.transAxes, color="#aaa", fontsize=11)
+                    transform=ax.transAxes, color=T.TEXT_MUTED, fontsize=11)
             ax.axis("off")
             return
 
@@ -951,8 +936,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         retrieved = [r[2] for r in chart_data]
 
         x = range(len(labels))
-        ax.plot(x, issued, marker="o", color="#27AE60", linewidth=2.5, label="Issued")
-        ax.plot(x, retrieved, marker="o", color="#2980B9", linewidth=2.5, linestyle="--", label="Retrieved")
+        ax.plot(x, issued, marker="o", color=T.SUCCESS_DARK, linewidth=2.5, label="Issued")
+        ax.plot(x, retrieved, marker="o", color=T.INFO_HOVER, linewidth=2.5, linestyle="--", label="Retrieved")
 
         ax.set_xticks(x)
         ax.set_xticklabels(labels, fontsize=10, rotation=0)   # No rotation needed with wider chart
@@ -967,29 +952,29 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             w.destroy()
         if not deployed_rows:
             ctk.CTkLabel(self.dash_deployed_frame, text="No tools currently deployed.",
-                         font=("Inter", 11), text_color="#aaa").pack(pady=8)
+                         font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=8)
             return
         hdr = ctk.CTkFrame(self.dash_deployed_frame,
-                           fg_color="#1E4528", corner_radius=5, height=28)
+                           fg_color=T.PRIMARY, corner_radius=5, height=28)
         hdr.pack(fill="x", padx=0, pady=(0, 1))
         hdr.pack_propagate(False)
         hdr.grid_columnconfigure(0, weight=3)
         hdr.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(hdr, text="Project", font=("Inter", 10, "bold"),
-                     text_color="white", anchor="w").grid(row=0, column=0, padx=8, sticky="ew")
-        ctk.CTkLabel(hdr, text="Tools Out", font=("Inter", 10, "bold"), text_color="white",
+        ctk.CTkLabel(hdr, text="Project", font=T.font(12, "bold"),
+                     text_color=T.WHITE, anchor="w").grid(row=0, column=0, padx=8, sticky="ew")
+        ctk.CTkLabel(hdr, text="Tools Out", font=T.font(12, "bold"), text_color=T.WHITE,
                      anchor="center").grid(row=0, column=1, padx=8, sticky="ew")
         for i, (proj, cnt) in enumerate(deployed_rows):
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
+            bg=T.SURFACE_ALT if i % 2 == 0 else "white"
             row = ctk.CTkFrame(self.dash_deployed_frame,
                                fg_color=bg, height=28)
             row.pack(fill="x", pady=0)
             row.pack_propagate(False)
             row.grid_columnconfigure(0, weight=3)
             row.grid_columnconfigure(1, weight=1)
-            ctk.CTkLabel(row, text=proj, font=("Inter", 10), text_color="#1A1A1A", anchor="w").grid(
+            ctk.CTkLabel(row, text=proj, font=T.font(12), text_color=T.TEXT, anchor="w").grid(
                 row=0, column=0, padx=8, sticky="ew")
-            ctk.CTkLabel(row, text=str(cnt), font=("Inter", 10, "bold"), text_color="#1E4528",
+            ctk.CTkLabel(row, text=str(cnt), font=T.font(12, "bold"), text_color=T.PRIMARY,
                          anchor="center").grid(row=0, column=1, padx=8, sticky="ew")
 
     def _render_my_issuances(self, my_issuances):
@@ -997,34 +982,34 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             w.destroy()
         if not my_issuances:
             ctk.CTkLabel(self.dash_myissue_frame, text="✓ No tools currently issued to you.",
-                         font=("Inter", 11), text_color="#27AE60").pack(pady=20)
+                         font=T.font(12), text_color=T.SUCCESS_TEXT).pack(pady=20)
             return
         hdr = ctk.CTkFrame(self.dash_myissue_frame,
-                           fg_color="#1E4528", corner_radius=5, height=28)
+                           fg_color=T.PRIMARY, corner_radius=5, height=28)
         hdr.pack(fill="x", pady=(0, 1))
         hdr.pack_propagate(False)
         hdr.grid_columnconfigure(0, weight=3)
         hdr.grid_columnconfigure(1, weight=2)
         hdr.grid_columnconfigure(2, weight=2)
-        ctk.CTkLabel(hdr, text="Tool", font=("Inter", 10, "bold"), text_color="white",
+        ctk.CTkLabel(hdr, text="Tool", font=T.font(12, "bold"), text_color=T.WHITE,
                      anchor="w").grid(row=0, column=0, padx=8, sticky="ew")
-        ctk.CTkLabel(hdr, text="Issued", font=("Inter", 10, "bold"), text_color="white",
+        ctk.CTkLabel(hdr, text="Issued", font=T.font(12, "bold"), text_color=T.WHITE,
                      anchor="center").grid(row=0, column=1, padx=4, sticky="ew")
-        ctk.CTkLabel(hdr, text="Project", font=("Inter", 10, "bold"), text_color="white",
+        ctk.CTkLabel(hdr, text="Project", font=T.font(12, "bold"), text_color=T.WHITE,
                      anchor="center").grid(row=0, column=2, padx=8, sticky="ew")
         for i, (tool, date, proj) in enumerate(my_issuances):
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
+            bg=T.SURFACE_ALT if i % 2 == 0 else "white"
             row = ctk.CTkFrame(self.dash_myissue_frame, fg_color=bg, height=28)
             row.pack(fill="x", pady=0)
             row.pack_propagate(False)
             row.grid_columnconfigure(0, weight=3)
             row.grid_columnconfigure(1, weight=2)
             row.grid_columnconfigure(2, weight=2)
-            ctk.CTkLabel(row, text=tool, font=("Inter", 10), text_color="#1A1A1A", anchor="w").grid(
+            ctk.CTkLabel(row, text=tool, font=T.font(12), text_color=T.TEXT, anchor="w").grid(
                 row=0, column=0, padx=8, sticky="ew")
-            ctk.CTkLabel(row, text=date, font=("Inter", 10), text_color="#555",
+            ctk.CTkLabel(row, text=date, font=T.font(12), text_color=T.TEXT_SECONDARY,
                          anchor="center").grid(row=0, column=1, padx=4, sticky="ew")
-            ctk.CTkLabel(row, text=proj, font=("Inter", 10), text_color="#2980B9",
+            ctk.CTkLabel(row, text=proj, font=T.font(12), text_color=T.INFO_TEXT,
                          anchor="center").grid(row=0, column=2, padx=8, sticky="ew")
 
     def _bind_widget_tree(self, widget, callback):
@@ -1043,21 +1028,17 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             w.destroy()
 
         if metrics["action_items"] == 0:
-            ctk.CTkLabel(self.dash_action_top, text="0", font=(
-                "Inter", 28, "bold"), text_color="black").pack(side="left")
-            ctk.CTkLabel(self.dash_action_top, text="✓ All Clear", fg_color="#2ECC71", text_color="white", font=(
-                "Inter", 11, "bold"), corner_radius=6, padx=10, pady=3).pack(side="left", padx=(15, 0), pady=(5, 0))
+            ctk.CTkLabel(self.dash_action_top, text="0", font=T.font(28, "bold"), text_color=T.TEXT).pack(side="left")
+            ctk.CTkLabel(self.dash_action_top, text="✓ All Clear", fg_color=T.SUCCESS, text_color=T.WHITE, font=T.font(12, "bold"), corner_radius=6, padx=10, pady=3).pack(side="left", padx=(15, 0), pady=(5, 0))
             self.dash_action_card.configure(
-                fg_color="#F9FAFB", border_color="#E0E0E0")
+                fg_color=T.SURFACE_ALT, border_color=T.BORDER)
         else:
-            ctk.CTkLabel(self.dash_action_top, text=str(metrics['action_items']), font=(
-                "Inter", 28, "bold"), text_color="#D8000C").pack(side="left")
+            ctk.CTkLabel(self.dash_action_top, text=str(metrics['action_items']), font=T.font(28, "bold"), text_color=T.DANGER_TEXT).pack(side="left")
             self.dash_action_card.configure(
-                fg_color="#FFF5F5", border_color="#D8000C")
+                fg_color=T.DANGER_BG, border_color=T.DANGER)
 
             if metrics['pending_issues'] > 0:
-                ctk.CTkLabel(self.dash_action_top, text=f"⚠ {metrics['pending_issues']} Tool(s)", fg_color="#D8000C", text_color="white", font=(
-                    "Inter", 10, "bold"), corner_radius=6, padx=8, pady=3).pack(side="left", padx=(10, 0), pady=(5, 0))
+                ctk.CTkLabel(self.dash_action_top, text=f"⚠ {metrics['pending_issues']} Tool(s)", fg_color=T.DANGER, text_color=T.WHITE, font=T.font(12, "bold"), corner_radius=6, padx=8, pady=3).pack(side="left", padx=(10, 0), pady=(5, 0))
 
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         if hasattr(self, "dash_action_card") and is_admin:
@@ -1071,20 +1052,16 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             w.destroy()
 
         if metrics["overdue_projects"] == 0:
-            ctk.CTkLabel(self.dash_overdue_top, text="0", font=(
-                "Inter", 28, "bold"), text_color="black").pack(side="left")
-            ctk.CTkLabel(self.dash_overdue_top, text="✓ On Track", fg_color="#2ECC71", text_color="white", font=(
-                "Inter", 11, "bold"), corner_radius=6, padx=10, pady=3).pack(side="left", padx=(10, 0), pady=(5, 0))
+            ctk.CTkLabel(self.dash_overdue_top, text="0", font=T.font(28, "bold"), text_color=T.TEXT).pack(side="left")
+            ctk.CTkLabel(self.dash_overdue_top, text="✓ On Track", fg_color=T.SUCCESS, text_color=T.WHITE, font=T.font(12, "bold"), corner_radius=6, padx=10, pady=3).pack(side="left", padx=(10, 0), pady=(5, 0))
             self.dash_overdue_card.configure(
-                fg_color="#F9FAFB", border_color="#E0E0E0")
+                fg_color=T.SURFACE_ALT, border_color=T.BORDER)
         else:
-            ctk.CTkLabel(self.dash_overdue_top, text=str(metrics['overdue_projects']), font=(
-                "Inter", 28, "bold"), text_color="#D8000C").pack(side="left")
+            ctk.CTkLabel(self.dash_overdue_top, text=str(metrics['overdue_projects']), font=T.font(28, "bold"), text_color=T.DANGER_TEXT).pack(side="left")
             self.dash_overdue_card.configure(
-                fg_color="#FFF5F5", border_color="#D8000C")
+                fg_color=T.DANGER_BG, border_color=T.DANGER)
 
-            ctk.CTkLabel(self.dash_overdue_top, text=f"⚠ {metrics['overdue_projects']} Overdue", fg_color="#D8000C", text_color="white", font=(
-                "Inter", 10, "bold"), corner_radius=6, padx=8, pady=3).pack(side="left", padx=(10, 0), pady=(5, 0))
+            ctk.CTkLabel(self.dash_overdue_top, text=f"⚠ {metrics['overdue_projects']} Overdue", fg_color=T.DANGER, text_color=T.WHITE, font=T.font(12, "bold"), corner_radius=6, padx=8, pady=3).pack(side="left", padx=(10, 0), pady=(5, 0))
 
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         if hasattr(self, "dash_overdue_card") and is_admin:
@@ -1105,29 +1082,29 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             activities = [("-", "No recent activity recorded.", "-", "-")]
 
         for i, (ts, action, item, actor) in enumerate(activities):
-            bg = "#F9FAFB" if i % 2 == 0 else "white"
+            bg=T.SURFACE_ALT if i % 2 == 0 else "white"
             row_frame = self._make_row(self.dash_activity_frame, [
                                        ts, action, item, actor], weights, bg)
 
             font_weight = "normal"
-            color = "#1A1A1A"
+            color=T.TEXT
             if action == "Project Created":
-                color = "#2980B9"
+                color=T.INFO_HOVER
                 font_weight = "bold"
             elif action == "Issued":
-                color = "#27AE60"
+                color=T.SUCCESS_DARK
                 font_weight = "bold"
             elif action == "Retrieved":
-                color = "#2ECC71"
+                color=T.SUCCESS_TEXT
                 font_weight = "bold"
 
-            ctk.CTkLabel(row_frame, text=ts, font=("Inter", 11), text_color="#1A1A1A",
+            ctk.CTkLabel(row_frame, text=ts, font=T.font(12), text_color=T.TEXT,
                          anchor="center").grid(row=0, column=0, padx=10, pady=5, sticky="ew")
-            ctk.CTkLabel(row_frame, text=action, font=("Inter", 11, font_weight), text_color=color,
+            ctk.CTkLabel(row_frame, text=action, font=T.font(12, font_weight), text_color=color,
                          anchor="center").grid(row=0, column=1, padx=10, pady=5, sticky="ew")
-            ctk.CTkLabel(row_frame, text=item, font=("Inter", 11), text_color="#1A1A1A",
+            ctk.CTkLabel(row_frame, text=item, font=T.font(12), text_color=T.TEXT,
                          anchor="center").grid(row=0, column=2, padx=10, pady=5, sticky="ew")
-            ctk.CTkLabel(row_frame, text=actor, font=("Inter", 11), text_color="#1A1A1A",
+            ctk.CTkLabel(row_frame, text=actor, font=T.font(12), text_color=T.TEXT,
                          anchor="center").grid(row=0, column=3, padx=10, pady=5, sticky="ew")
 
     def _update_sidebar_badges(self, metrics):
@@ -1139,7 +1116,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             issues = metrics.get("action_items", 0)
             if issues > 0:
                 self.nav_badges["Maintenance"].configure(
-                    fg_color="#F1C40F", text="")
+                    fg_color=T.ACCENT, text="")
             else:
                 self.nav_badges["Maintenance"].configure(
                     fg_color="transparent", text="")
@@ -1148,7 +1125,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             pending = metrics.get("pending_projects", 0)
             if pending > 0:
                 self.nav_badges["Project Management"].configure(
-                    fg_color="#DB8534", text="")
+                    fg_color=T.WARNING, text="")
             else:
                 self.nav_badges["Project Management"].configure(
                     fg_color="transparent", text="")
@@ -1157,7 +1134,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             resets = metrics.get("pwd_resets", 0)
             if resets > 0:
                 self.nav_badges["Role Management"].configure(
-                    fg_color="#D8000C", text="")
+                    fg_color=T.DANGER, text="")
             else:
                 self.nav_badges["Role Management"].configure(
                     fg_color="transparent", text="")
@@ -1178,11 +1155,11 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         # Low stock card
         ls = metrics.get("low_stock", 0)
         self.dash_lowstock_val.configure(
-            text=str(ls), text_color="#D8000C" if ls > 0 else "black")
+            text=str(ls), text_color=T.DANGER_TEXT if ls > 0 else "black")
         if hasattr(self, "dash_lowstock_top"):
             card = self.dash_lowstock_top.master
-            card.configure(fg_color="#FFF5F5" if ls > 0 else "#F9FAFB",
-                           border_color="#D8000C" if ls > 0 else "#E0E0E0")
+            card.configure(fg_color=T.DANGER_BG if ls > 0 else T.SURFACE_ALT,
+                           border_color=T.DANGER if ls > 0 else T.BORDER)
 
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         if is_admin:
@@ -1196,7 +1173,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                 ov = metrics.get('overdue_projects', 0)
                 self.dash_proj_overdue_lbl.configure(
                     text=f"{ov} Overdue",
-                    text_color="#D8000C" if ov > 0 else "#C0392B"
+                    text_color=T.DANGER_TEXT if ov > 0 else T.DANGER_HOVER
                 )
                 self.dash_proj_done_lbl.configure(
                     text=f"{metrics.get('proj_completed_month', 0)} Completed (this month)")
@@ -1235,11 +1212,11 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
     def embed_chart(self, parent_frame, chart_data):
         fig, ax = plt.subplots(figsize=(4.5, 2.6), dpi=90)
         self._track_fig(fig)
-        fig.patch.set_facecolor("#FFFFFF")
-        ax.set_facecolor("#FFFFFF")
+        fig.patch.set_facecolor(T.WHITE)
+        ax.set_facecolor(T.WHITE)
 
         categories = ["Good", "Repair", "Damaged", "Lost"]
-        colors = ["#2ECC71", "#F1C40F", "#E67E22", "#95A5A6"]
+        colors = [T.SUCCESS_BRIGHT, T.ACCENT, T.WARNING, T.TEXT_MUTED]
 
         bars = ax.bar(categories, chart_data, color=colors, width=0.6)
 
@@ -1254,7 +1231,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                 0.1 if max(chart_data) > 0 else 0.1
             ax.text(bar.get_x() + bar.get_width() / 2, yval + offset,
                     int(yval), ha="center", va="bottom",
-                    fontdict={"family": "sans-serif", "weight": "bold", "color": "#333333"})
+                    fontdict={"family": "sans-serif", "weight": "bold", "color": T.TEXT})
 
         plt.tight_layout()
         canvas = FigureCanva

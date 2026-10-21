@@ -9,6 +9,7 @@ from PIL import Image
 
 from services import validators as v
 from services.scanner import ScannerSession
+from ui import theme as T
 
 POLL_MS = 30
 
@@ -28,12 +29,12 @@ class ScanDialog(ctk.CTkToplevel):
         self._on_code, self._single_shot = on_code, single_shot
         self._job = None
         self._closed = False
-        ctk.CTkLabel(self, text="Align the QR code with the camera", font=("Inter", 14, "bold")).pack(pady=(16, 6))
-        self.video = ctk.CTkLabel(self, text="Starting camera...", font=("Inter", 12), text_color="gray", width=400, height=300)
+        ctk.CTkLabel(self, text="Align the QR code with the camera", font=T.font(14, "bold")).pack(pady=(16, 6))
+        self.video = ctk.CTkLabel(self, text="Starting camera...", font=T.font(12), text_color=T.TEXT_MUTED, width=400, height=300)
         self.video.pack(padx=20)
-        self.status = ctk.CTkLabel(self, text="", font=("Inter", 11), text_color="#555555", wraplength=400, justify="left")
+        self.status = ctk.CTkLabel(self, text="", font=T.font(12), text_color=T.TEXT_SECONDARY, wraplength=400, justify="left")
         self.status.pack(fill="x", padx=20, pady=8)
-        ctk.CTkButton(self, text="Cancel", fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=self.close).pack(pady=(0, 12))
+        ctk.CTkButton(self, text="Cancel", fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=self.close).pack(pady=(0, 12))
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.session = session_factory()
         self.session.start()
@@ -53,10 +54,10 @@ class ScanDialog(ctk.CTkToplevel):
                     if self._deliver(payload):
                         return
                 elif kind == "status":
-                    self.status.configure(text=payload, text_color="#555555")
+                    self.status.configure(text=payload, text_color=T.TEXT_SECONDARY)
                 elif kind == "error":
                     self.video.configure(image=None, text="No picture")
-                    self.status.configure(text=payload, text_color="#D8000C")
+                    self.status.configure(text=payload, text_color=T.DANGER_TEXT)
                 elif kind == "closed":
                     finished = True
         except queue.Empty:

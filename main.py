@@ -12,6 +12,7 @@ import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 from services.errors import friendly_message
 from services import auth_service, validators as _v
+from ui import theme as T
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
@@ -23,7 +24,7 @@ class LoginApp(ctk.CTk):
         self.REMEMBER_FILE = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "remember_config.json")
         self.title("Champion Fine Tooling - Automated Management System")
-        self.configure(fg_color="#F4F6F8")
+        self.configure(fg_color=T.BG)
         self.minsize(450, 680)
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -40,8 +41,8 @@ class LoginApp(ctk.CTk):
             pass
 
 
-        self.main_frame = ctk.CTkFrame(self, fg_color="white", corner_radius=10,
-                                       border_width=1, border_color="#E0E0E0")
+        self.main_frame = ctk.CTkFrame(self, fg_color=T.SURFACE, corner_radius=10,
+                                       border_width=1, border_color=T.BORDER)
         self.main_frame.pack(pady=40, padx=40, fill="both", expand=True)
 
         self.content_frame = ctk.CTkFrame(
@@ -55,12 +56,12 @@ class LoginApp(ctk.CTk):
                          image=self.main_logo_img, text="").pack(pady=(0, 10))
         except FileNotFoundError:
             ctk.CTkLabel(self.content_frame, text="[ LOGO ]",
-                         font=("Inter", 20, "bold"), text_color="green").pack(pady=(0, 10))
+                         font=T.font(20, "bold"), text_color=T.SUCCESS_TEXT).pack(pady=(0, 10))
 
         ctk.CTkLabel(self.content_frame, text="Champion Fine Tooling Corp.",
-                     font=("Inter", 22, "bold"), text_color="#1A1A1A").pack(pady=(0, 2))
+                     font=T.font(20, "bold"), text_color=T.TEXT).pack(pady=(0, 2))
         ctk.CTkLabel(self.content_frame, text="Automated Management System",
-                     font=("Inter", 16), text_color="#888888").pack(pady=(0, 20))
+                     font=T.font(16), text_color=T.TEXT_MUTED).pack(pady=(0, 20))
 
         # --- THE USERNAME FIELD & SCAN BUTTON ---
         self.user_frame_container = ctk.CTkFrame(self.content_frame, fg_color="transparent")
@@ -69,12 +70,12 @@ class LoginApp(ctk.CTk):
         self.user_entry = ctk.CTkEntry(self.user_frame_container,
                                        placeholder_text="Employee ID (e.g. ADM-2026-001)",
                                        width=215, height=40, corner_radius=6,
-                                       fg_color="#F9FAFB", border_color="#D1D5DB",
-                                       text_color="black")
+                                       fg_color=T.SURFACE_ALT, border_color=T.BORDER_STRONG,
+                                       text_color=T.TEXT)
         self.user_entry.pack(side="left", padx=(0, 5))
 
         self.scan_btn = ctk.CTkButton(self.user_frame_container, text="📷 Scan", width=60, height=40,
-                                      fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 12, "bold"),
+                                      fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"),
                                       command=self.open_scanner)
         self.scan_btn.pack(side="right")
         
@@ -93,46 +94,46 @@ class LoginApp(ctk.CTk):
         self.pass_entry = ctk.CTkEntry(self.pass_frame,
                                        placeholder_text="Password",
                                        width=235, height=40, corner_radius=6,
-                                       fg_color="#F9FAFB", border_color="#D1D5DB",
-                                       text_color="black", show="•")
+                                       fg_color=T.SURFACE_ALT, border_color=T.BORDER_STRONG,
+                                       text_color=T.TEXT, show="•")
         self.pass_entry.pack(side="left")
         self.pass_entry.bind("<Return>", lambda e: self.login())
 
         self.show_pwd = False
         self.eye_btn = ctk.CTkButton(self.pass_frame, text="👁", width=40, height=40,
-                                     corner_radius=6, fg_color="#F3F4F6",
-                                     text_color="#4B5563", hover_color="#E5E7EB",
+                                     corner_radius=6, fg_color=T.SURFACE_MUTED,
+                                     text_color=T.TEXT_SECONDARY, hover_color=T.BORDER,
                                      command=self.toggle_password)
         self.eye_btn.pack(side="right", padx=(5, 0))
 
         self.remember_check = ctk.CTkCheckBox(self.content_frame, text="Remember me",
-                                              font=("Inter", 11), checkbox_width=18,
-                                              checkbox_height=18, border_color="#D1D5DB",
-                                              text_color="#666666")
+                                              font=T.font(12), checkbox_width=18,
+                                              checkbox_height=18, border_color=T.BORDER_STRONG,
+                                              text_color=T.TEXT_SECONDARY)
         self.remember_check.pack(anchor="w", pady=(0, 15))
 
         self.error_banner = ctk.CTkLabel(self.content_frame, text="",
-                                         fg_color="transparent", text_color="#D8000C",
-                                         font=("Inter", 11, "bold"), corner_radius=5)
+                                         fg_color="transparent", text_color=T.DANGER_TEXT,
+                                         font=T.font(12, "bold"), corner_radius=5)
         self.error_banner.pack(fill="x", pady=(0, 10))
 
         self.login_button = ctk.CTkButton(self.content_frame, text="Login",
                                           command=self.login, width=280, height=40,
-                                          corner_radius=6, fg_color="#1E4528",
-                                          hover_color="#14301C",
-                                          font=("Inter", 13, "bold"))
+                                          corner_radius=6, fg_color=T.PRIMARY,
+                                          hover_color=T.PRIMARY_HOVER,
+                                          font=T.font(14, "bold"))
         self.login_button.pack(pady=(0, 15))
 
         footer = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         footer.pack(pady=5)
         lbl_u = ctk.CTkLabel(footer, text="Forgot Username?",
-                             font=("Inter", 11), text_color="#666666", cursor="hand2")
+                             font=T.font(12), text_color=T.TEXT_SECONDARY, cursor="hand2")
         lbl_u.pack(side="left", padx=5)
         lbl_u.bind("<Button-1>", lambda e: self.open_forgot_username())
-        ctk.CTkLabel(footer, text="|", font=("Inter", 11),
-                     text_color="#CCCCCC").pack(side="left")
+        ctk.CTkLabel(footer, text="|", font=T.font(12),
+                     text_color=T.BORDER_STRONG).pack(side="left")
         lbl_p = ctk.CTkLabel(footer, text="Forgot Password?",
-                             font=("Inter", 11), text_color="#666666", cursor="hand2")
+                             font=T.font(12), text_color=T.TEXT_SECONDARY, cursor="hand2")
         lbl_p.pack(side="left", padx=5)
         lbl_p.bind("<Button-1>", lambda e: self.open_forgot_password())
 
@@ -178,7 +179,7 @@ class LoginApp(ctk.CTk):
         self.show_pwd = not self.show_pwd
 
     def show_error(self, message):
-        self.error_banner.configure(text=f"⚠ {message}", fg_color="#FFD2D2")
+        self.error_banner.configure(text=f"⚠ {message}", fg_color=T.DANGER_BORDER)
 
     def load_remember_me(self):
         if os.path.exists(self.REMEMBER_FILE):
@@ -239,13 +240,13 @@ class LoginApp(ctk.CTk):
         load_win = ctk.CTkToplevel(self)
         self.center_window(load_win, 400, 200)
         load_win.overrideredirect(True)
-        load_win.configure(fg_color="#1E4528")
+        load_win.configure(fg_color=T.PRIMARY)
         ctk.CTkLabel(load_win, text="Automated Management System",
-                     font=("Inter", 16, "bold"), text_color="white").pack(pady=(40, 5))
+                     font=T.font(16, "bold"), text_color=T.WHITE).pack(pady=(40, 5))
         ctk.CTkLabel(load_win, text="Initializing environment...",
-                     font=("Inter", 11), text_color="#A8D5BA").pack(pady=(0, 20))
+                     font=T.font(12), text_color=T.GREEN_TINT).pack(pady=(0, 20))
         progress = ctk.CTkProgressBar(
-            load_win, width=300, fg_color="#14301C", progress_color="#2ECC71")
+            load_win, width=300, fg_color=T.PRIMARY_HOVER, progress_color=T.SUCCESS_BRIGHT)
         progress.pack()
         progress.set(0)
 
@@ -289,19 +290,19 @@ class LoginApp(ctk.CTk):
         dialog = ctk.CTkToplevel(self)
         dialog.title("Forgot Username")
         self.center_window(dialog, 450, 300)
-        dialog.configure(fg_color="#F4F6F8")
+        dialog.configure(fg_color=T.BG)
         dialog.attributes("-topmost", True)
         dialog.grab_set()
-        main_frame = ctk.CTkFrame(dialog, fg_color="white", corner_radius=10,
-                                  border_width=1, border_color="#E0E0E0")
+        main_frame = ctk.CTkFrame(dialog, fg_color=T.SURFACE, corner_radius=10,
+                                  border_width=1, border_color=T.BORDER)
         main_frame.pack(pady=20, padx=20, fill="both", expand=True)
         content = ctk.CTkFrame(main_frame, fg_color="transparent")
         content.place(relx=0.5, rely=0.5, anchor="center")
         ctk.CTkLabel(content, text="RETRIEVE USERNAME",
-                     font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=10, pady=(10, 5))
+                     font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=10, pady=(10, 5))
         ctk.CTkLabel(content,
                      text="Enter your registered email address to\nretrieve your Employee ID.",
-                     font=("Inter", 11), text_color="gray", justify="left").pack(anchor="w", padx=10, pady=(0, 15))
+                     font=T.font(12), text_color=T.TEXT_MUTED, justify="left").pack(anchor="w", padx=10, pady=(0, 15))
         email_entry = ctk.CTkEntry(content, placeholder_text="Registered Email",
                                    width=340, height=35)
         email_entry.pack(padx=10, pady=(0, 15))
@@ -324,32 +325,32 @@ class LoginApp(ctk.CTk):
 
         btn_frame = ctk.CTkFrame(content, fg_color="transparent")
         btn_frame.pack(fill="x", padx=10, pady=(0, 10))
-        ctk.CTkButton(btn_frame, text="Retrieve Username", fg_color="#1E4528",
-                      hover_color="#14301C",
+        ctk.CTkButton(btn_frame, text="Retrieve Username", fg_color=T.PRIMARY,
+                      hover_color=T.PRIMARY_HOVER,
                       command=retrieve).pack(side="left", expand=True, fill="x", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="Cancel", width=80, fg_color="#E0E0E0",
-                      text_color="black", hover_color="#CCCCCC",
+        ctk.CTkButton(btn_frame, text="Cancel", width=80, fg_color=T.BORDER,
+                      text_color=T.TEXT, hover_color=T.BORDER_STRONG,
                       command=dialog.destroy).pack(side="right")
 
     def open_forgot_password(self):
         dialog = ctk.CTkToplevel(self)
         dialog.title("Request Password Reset")
         self.center_window(dialog, 450, 300)
-        dialog.configure(fg_color="#F4F6F8")
+        dialog.configure(fg_color=T.BG)
         dialog.attributes("-topmost", True)
         dialog.grab_set()
 
-        main_frame = ctk.CTkFrame(dialog, fg_color="white", corner_radius=10,
-                                  border_width=1, border_color="#E0E0E0")
+        main_frame = ctk.CTkFrame(dialog, fg_color=T.SURFACE, corner_radius=10,
+                                  border_width=1, border_color=T.BORDER)
         main_frame.pack(pady=20, padx=20, fill="both", expand=True)
         content = ctk.CTkFrame(main_frame, fg_color="transparent")
         content.place(relx=0.5, rely=0.5, anchor="center")
 
         ctk.CTkLabel(content, text="REQUEST PASSWORD RESET",
-                     font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=10, pady=(10, 5))
+                     font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=10, pady=(10, 5))
         ctk.CTkLabel(content,
                      text="Enter your Employee ID. A notification will be sent\nto the System Administrator to reset your password.",
-                     font=("Inter", 11), text_color="gray", justify="left").pack(anchor="w", padx=10, pady=(0, 15))
+                     font=T.font(12), text_color=T.TEXT_MUTED, justify="left").pack(anchor="w", padx=10, pady=(0, 15))
 
         emp_id_entry = ctk.CTkEntry(content, placeholder_text="Employee ID (e.g. ADM-2026-001)",
                                     width=340, height=35)
@@ -373,9 +374,9 @@ class LoginApp(ctk.CTk):
         btn_frame = ctk.CTkFrame(content, fg_color="transparent")
         btn_frame.pack(fill="x", padx=10, pady=(0, 10))
 
-        ctk.CTkButton(btn_frame, text="Send Request to Admin", fg_color="#D8000C", hover_color="#B00000",
+        ctk.CTkButton(btn_frame, text="Send Request to Admin", fg_color=T.DANGER, hover_color=T.DANGER_DARK,
                       command=send_reset_request).pack(side="left", expand=True, fill="x", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="Cancel", width=80, fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC",
+        ctk.CTkButton(btn_frame, text="Cancel", width=80, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
                       command=dialog.destroy).pack(side="right")
 
     def open_scanner(self):

@@ -3,6 +3,7 @@ from views.ui_thread import UiMixin
 from tkinter import messagebox
 from services import help_service as help_svc
 from services.errors import friendly_message
+from ui import theme as T
 
 class HelpView(UiMixin, ctk.CTkFrame):
     """
@@ -234,7 +235,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 10))
 
-        ctk.CTkLabel(top_bar, text="Help & Support Hub", font=("Inter", 20, "bold"), text_color="#1A1A1A").pack(side="left", padx=20)
+        ctk.CTkLabel(top_bar, text="Help & Support Hub", font=T.font(20, "bold"), text_color=T.TEXT).pack(side="left", padx=20)
 
         tabs = [
             "    ▤ Help Guide    ", 
@@ -246,12 +247,12 @@ class HelpView(UiMixin, ctk.CTkFrame):
 
         self.seg_btn = ctk.CTkSegmentedButton(
             top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
-            fg_color="#F0F0F0", selected_color="#1E4528", selected_hover_color="#14301C"
+            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
         )
         self.seg_btn.pack(side="right", padx=20)
         self.seg_btn.set(tabs[0])
 
-        self.tab_content = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        self.tab_content = ctk.CTkFrame(self, fg_color=T.SURFACE, corner_radius=10)
         self.tab_content.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
         self.tab_content.grid_columnconfigure(0, weight=1)
         self.tab_content.grid_rowconfigure(0, weight=1)
@@ -296,17 +297,17 @@ class HelpView(UiMixin, ctk.CTkFrame):
         return False
 
     def render_guide_tab(self):
-        outer = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        outer = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         outer.grid(row=0, column=0, sticky="nsew")
         outer.grid_columnconfigure(0, weight=1)
         outer.grid_rowconfigure(2, weight=1)
 
         hdr = ctk.CTkFrame(outer, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 0))
-        ctk.CTkLabel(hdr, text="User Guide — Automated Management System", font=("Inter", 18, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkLabel(hdr, text="User Guide — Automated Management System", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
         
         if self.is_admin:
-            ctk.CTkButton(hdr, text="+ Add Guide", width=140, height=38, fg_color="#1E4528", text_color="white", font=("Inter", 12, "bold"), hover_color="#14301C", command=lambda: self.open_guide_modal()).pack(side="right", padx=(10, 0))
+            ctk.CTkButton(hdr, text="+ Add Guide", width=140, height=38, fg_color=T.PRIMARY, text_color=T.WHITE, font=T.font(12, "bold"), hover_color=T.PRIMARY_HOVER, command=lambda: self.open_guide_modal()).pack(side="right", padx=(10, 0))
 
         search_container = ctk.CTkFrame(outer, fg_color="transparent")
         search_container.grid(row=1, column=0, sticky="ew")
@@ -337,29 +338,29 @@ class HelpView(UiMixin, ctk.CTkFrame):
                     continue
 
                 found_any = True
-                card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
+                card = ctk.CTkFrame(scroll, fg_color=T.SURFACE_ALT, corner_radius=8, border_width=1, border_color=T.BORDER)
                 card.pack(fill="x", padx=10, pady=(0, 6))
 
                 title_row = ctk.CTkFrame(card, fg_color="transparent")
                 title_row.pack(fill="x", padx=14, pady=(8, 3))
                 
                 admin_tag = "[Admin Only] " if row["is_admin_only"] else ""
-                ctk.CTkLabel(title_row, text=f"{admin_tag}{row['title']}", font=("Inter", 12, "bold"), text_color="#1E4528").pack(side="left")
+                ctk.CTkLabel(title_row, text=f"{admin_tag}{row['title']}", font=T.font(12, "bold"), text_color=T.PRIMARY).pack(side="left")
                 
                 if self.is_admin:
                     btn_frame = ctk.CTkFrame(title_row, fg_color="transparent")
                     btn_frame.pack(side="right")
-                    ctk.CTkButton(btn_frame, text="✎ Edit", width=60, height=24, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), command=lambda r=row: self.open_guide_modal(r)).pack(side="left", padx=(0, 5))
-                    ctk.CTkButton(btn_frame, text="🗑 Remove", width=60, height=24, fg_color="#D8000C", hover_color="#B00000", font=("Inter", 10, "bold"), command=lambda r_id=row['id']: self.delete_guide(r_id)).pack(side="left")
+                    ctk.CTkButton(btn_frame, text="✎ Edit", width=60, height=24, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda r=row: self.open_guide_modal(r)).pack(side="left", padx=(0, 5))
+                    ctk.CTkButton(btn_frame, text="🗑 Remove", width=60, height=24, fg_color=T.DANGER, hover_color=T.DANGER_DARK, font=T.font(12, "bold"), command=lambda r_id=row['id']: self.delete_guide(r_id)).pack(side="left")
 
                 for point in points_db:
-                    ctk.CTkLabel(card, text=f"  •  {point}", font=("Inter", 11), text_color="#1A1A1A", wraplength=780, justify="left").pack(anchor="w", padx=14, pady=1)
+                    ctk.CTkLabel(card, text=f"  •  {point}", font=T.font(12), text_color=T.TEXT, wraplength=780, justify="left").pack(anchor="w", padx=14, pady=1)
                 ctk.CTkFrame(card, height=6, fg_color="transparent").pack()
         except Exception as e:
-            ctk.CTkLabel(scroll, text=friendly_message(e), text_color="red").pack(pady=10)
+            ctk.CTkLabel(scroll, text=friendly_message(e), text_color=T.DANGER_TEXT).pack(pady=10)
 
         if not found_any:
-            ctk.CTkLabel(scroll, text=f'No sections found for "{keyword}".', text_color="gray").pack(pady=20)
+            ctk.CTkLabel(scroll, text=f'No sections found for "{keyword}".', text_color=T.TEXT_MUTED).pack(pady=20)
             
     def delete_guide(self, guide_id):
         if not messagebox.askyesno("Confirm Delete", "Are you sure you want to remove this guide?", parent=self.winfo_toplevel()): return
@@ -372,7 +373,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
     def open_guide_modal(self, existing_row=None):
         modal = ctk.CTkToplevel(self)
         modal.title("Edit Guide" if existing_row else "Add Guide")
-        modal.configure(fg_color="white")
+        modal.configure(fg_color=T.SURFACE)
         modal.attributes("-topmost", True)
         modal.grab_set()
         
@@ -381,20 +382,20 @@ class HelpView(UiMixin, ctk.CTkFrame):
         y = (modal.winfo_screenheight() // 2) - (600 // 2)
         modal.geometry(f"500x600+{x}+{y}")
 
-        ctk.CTkLabel(modal, text="Guide Title:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(20, 5))
+        ctk.CTkLabel(modal, text="Guide Title:", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 5))
         title_entry = ctk.CTkEntry(modal, placeholder_text="e.g., How to Issue Tools")
         title_entry.pack(fill="x", padx=20)
 
-        ctk.CTkLabel(modal, text="Display Sequence (1, 2, 3...):", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(10, 5))
+        ctk.CTkLabel(modal, text="Display Sequence (1, 2, 3...):", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 5))
         seq_entry = ctk.CTkEntry(modal, placeholder_text="0")
         seq_entry.pack(fill="x", padx=20)
 
         admin_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(modal, text="Hide from Staff (Admin Only)", variable=admin_var, fg_color="#1E4528").pack(anchor="w", padx=20, pady=10)
+        ctk.CTkCheckBox(modal, text="Hide from Staff (Admin Only)", variable=admin_var, fg_color=T.PRIMARY).pack(anchor="w", padx=20, pady=10)
 
-        ctk.CTkLabel(modal, text="Steps (Bullet Points):", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(10, 5))
+        ctk.CTkLabel(modal, text="Steps (Bullet Points):", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 5))
         
-        steps_frame = ctk.CTkScrollableFrame(modal, fg_color="#F9FAFB", height=150)
+        steps_frame = ctk.CTkScrollableFrame(modal, fg_color=T.SURFACE_ALT, height=150)
         steps_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         
         step_entries = []
@@ -406,7 +407,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
             e.pack(side="left", fill="x", expand=True)
             e.insert(0, content)
             step_entries.append(e)
-            ctk.CTkButton(row, text="✕", width=25, fg_color="#FFEAEA", text_color="#D8000C", hover_color="#FFC0C0", command=lambda: [row.destroy(), step_entries.remove(e)]).pack(side="right", padx=5)
+            ctk.CTkButton(row, text="✕", width=25, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda: [row.destroy(), step_entries.remove(e)]).pack(side="right", padx=5)
 
         if existing_row:
             title_entry.insert(0, existing_row['title'])
@@ -418,7 +419,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
         if not step_entries:
             add_step_field() # Add first empty field
             
-        ctk.CTkButton(modal, text="+ Add Another Step", fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=add_step_field).pack(padx=20, pady=5)
+        ctk.CTkButton(modal, text="+ Add Another Step", fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=add_step_field).pack(padx=20, pady=5)
 
         def save_guide():
             t = title_entry.get().strip()
@@ -439,21 +440,21 @@ class HelpView(UiMixin, ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=20)
-        ctk.CTkButton(btn_row, text="Update Guide" if existing_row else "Save Guide", fg_color="#1E4528", hover_color="#14301C", command=save_guide).pack(side="left", expand=True, fill="x", padx=(0, 5))
-        ctk.CTkButton(btn_row, text="Cancel", fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=modal.destroy).pack(side="right", expand=True, fill="x", padx=(5, 0))
+        ctk.CTkButton(btn_row, text="Update Guide" if existing_row else "Save Guide", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, command=save_guide).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        ctk.CTkButton(btn_row, text="Cancel", fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=modal.destroy).pack(side="right", expand=True, fill="x", padx=(5, 0))
 
     def render_faq_tab(self):
-        outer = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        outer = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         outer.grid(row=0, column=0, sticky="nsew")
         outer.grid_columnconfigure(0, weight=1)
         outer.grid_rowconfigure(2, weight=1)
 
         hdr = ctk.CTkFrame(outer, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 0))
-        ctk.CTkLabel(hdr, text="Frequently Asked Questions", font=("Inter", 18, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkLabel(hdr, text="Frequently Asked Questions", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
         
         if self.is_admin:
-            ctk.CTkButton(hdr, text="+ Add FAQ", width=140, height=38, fg_color="#1E4528", text_color="white", font=("Inter", 12, "bold"), hover_color="#14301C", command=lambda: self.open_faq_modal()).pack(side="right", padx=(10, 0))
+            ctk.CTkButton(hdr, text="+ Add FAQ", width=140, height=38, fg_color=T.PRIMARY, text_color=T.WHITE, font=T.font(12, "bold"), hover_color=T.PRIMARY_HOVER, command=lambda: self.open_faq_modal()).pack(side="right", padx=(10, 0))
 
         search_container = ctk.CTkFrame(outer, fg_color="transparent")
         search_container.grid(row=1, column=0, sticky="ew")
@@ -484,28 +485,28 @@ class HelpView(UiMixin, ctk.CTkFrame):
                     continue
 
                 found_any = True
-                card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
+                card = ctk.CTkFrame(scroll, fg_color=T.SURFACE_ALT, corner_radius=8, border_width=1, border_color=T.BORDER)
                 card.pack(fill="x", padx=10, pady=(0, 6))
 
                 q_row = ctk.CTkFrame(card, fg_color="transparent")
                 q_row.pack(fill="x", padx=14, pady=(10, 2))
                 
                 admin_tag = "[Admin Only] " if row["is_admin_only"] else ""
-                ctk.CTkLabel(q_row, text=f"Q{idx}.  {admin_tag}{row['question']}", font=("Inter", 11, "bold"), text_color="#1E4528", wraplength=650, justify="left").pack(side="left")
+                ctk.CTkLabel(q_row, text=f"Q{idx}.  {admin_tag}{row['question']}", font=T.font(12, "bold"), text_color=T.PRIMARY, wraplength=650, justify="left").pack(side="left")
 
                 if self.is_admin:
                     btn_frame = ctk.CTkFrame(q_row, fg_color="transparent")
                     btn_frame.pack(side="right")
-                    ctk.CTkButton(btn_frame, text="✎ Edit", width=60, height=24, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), command=lambda r=row: self.open_faq_modal(r)).pack(side="left", padx=(0, 5))
-                    ctk.CTkButton(btn_frame, text="🗑 Remove", width=60, height=24, fg_color="#D8000C", hover_color="#B00000", font=("Inter", 10, "bold"), command=lambda r_id=row['id']: self.delete_faq(r_id)).pack(side="left")
+                    ctk.CTkButton(btn_frame, text="✎ Edit", width=60, height=24, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda r=row: self.open_faq_modal(r)).pack(side="left", padx=(0, 5))
+                    ctk.CTkButton(btn_frame, text="🗑 Remove", width=60, height=24, fg_color=T.DANGER, hover_color=T.DANGER_DARK, font=T.font(12, "bold"), command=lambda r_id=row['id']: self.delete_faq(r_id)).pack(side="left")
 
-                ctk.CTkLabel(card, text=f"      {row['answer']}", font=("Inter", 11), text_color="#1A1A1A", wraplength=780, justify="left").pack(anchor="w", padx=14, pady=(0, 10))
+                ctk.CTkLabel(card, text=f"      {row['answer']}", font=T.font(12), text_color=T.TEXT, wraplength=780, justify="left").pack(anchor="w", padx=14, pady=(0, 10))
                 idx += 1
         except Exception as e:
-            ctk.CTkLabel(scroll, text=friendly_message(e), text_color="red").pack(pady=10)
+            ctk.CTkLabel(scroll, text=friendly_message(e), text_color=T.DANGER_TEXT).pack(pady=10)
 
         if not found_any:
-            ctk.CTkLabel(scroll, text=f'No FAQs found for "{keyword}".', text_color="gray").pack(pady=20)
+            ctk.CTkLabel(scroll, text=f'No FAQs found for "{keyword}".', text_color=T.TEXT_MUTED).pack(pady=20)
             
     def delete_faq(self, faq_id):
         if not messagebox.askyesno("Confirm Delete", "Are you sure you want to remove this FAQ?", parent=self.winfo_toplevel()): return
@@ -518,7 +519,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
     def open_faq_modal(self, existing_row=None):
         modal = ctk.CTkToplevel(self)
         modal.title("Edit FAQ" if existing_row else "Add FAQ")
-        modal.configure(fg_color="white")
+        modal.configure(fg_color=T.SURFACE)
         modal.attributes("-topmost", True)
         modal.grab_set()
         
@@ -527,20 +528,20 @@ class HelpView(UiMixin, ctk.CTkFrame):
         y = (modal.winfo_screenheight() // 2) - (600 // 2)
         modal.geometry(f"500x600+{x}+{y}")
 
-        ctk.CTkLabel(modal, text="Question:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(20, 5))
+        ctk.CTkLabel(modal, text="Question:", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 5))
         q_entry = ctk.CTkEntry(modal)
         q_entry.pack(fill="x", padx=20)
 
-        ctk.CTkLabel(modal, text="Answer:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(10, 5))
+        ctk.CTkLabel(modal, text="Answer:", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 5))
         a_entry = ctk.CTkTextbox(modal, height=100)
         a_entry.pack(fill="both", expand=True, padx=20)
 
-        ctk.CTkLabel(modal, text="Display Sequence:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(10, 5))
+        ctk.CTkLabel(modal, text="Display Sequence:", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 5))
         seq_entry = ctk.CTkEntry(modal, placeholder_text="0")
         seq_entry.pack(fill="x", padx=20)
 
         admin_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(modal, text="Hide from Staff (Admin Only)", variable=admin_var, fg_color="#1E4528").pack(anchor="w", padx=20, pady=10)
+        ctk.CTkCheckBox(modal, text="Hide from Staff (Admin Only)", variable=admin_var, fg_color=T.PRIMARY).pack(anchor="w", padx=20, pady=10)
 
         if existing_row:
             q_entry.insert(0, existing_row['question'])
@@ -567,21 +568,21 @@ class HelpView(UiMixin, ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=20)
-        ctk.CTkButton(btn_row, text="Update FAQ" if existing_row else "Save FAQ", fg_color="#1E4528", hover_color="#14301C", command=save_faq).pack(side="left", expand=True, fill="x", padx=(0, 5))
-        ctk.CTkButton(btn_row, text="Cancel", fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=modal.destroy).pack(side="right", expand=True, fill="x", padx=(5, 0))
+        ctk.CTkButton(btn_row, text="Update FAQ" if existing_row else "Save FAQ", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, command=save_faq).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        ctk.CTkButton(btn_row, text="Cancel", fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=modal.destroy).pack(side="right", expand=True, fill="x", padx=(5, 0))
 
     def render_sysreq_tab(self):
-        outer = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        outer = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         outer.grid(row=0, column=0, sticky="nsew")
         outer.grid_columnconfigure(0, weight=1)
         outer.grid_rowconfigure(1, weight=1)
 
         hdr = ctk.CTkFrame(outer, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 4))
-        ctk.CTkLabel(hdr, text="System Requirements", font=("Inter", 18, "bold"), text_color="#1E4528").pack(side="left")
+        ctk.CTkLabel(hdr, text="System Requirements", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
         
         if self.is_admin:
-            ctk.CTkButton(hdr, text="+ Add Requirement", width=140, height=38, fg_color="#1E4528", text_color="white", font=("Inter", 12, "bold"), hover_color="#14301C", command=lambda: self.open_sysreq_modal()).pack(side="right", padx=(10, 0))
+            ctk.CTkButton(hdr, text="+ Add Requirement", width=140, height=38, fg_color=T.PRIMARY, text_color=T.WHITE, font=T.font(12, "bold"), hover_color=T.PRIMARY_HOVER, command=lambda: self.open_sysreq_modal()).pack(side="right", padx=(10, 0))
 
         self._sysreq_scroll_frame = ctk.CTkScrollableFrame(outer, fg_color="transparent")
         self._sysreq_scroll_frame.grid(row=1, column=0, sticky="nsew")
@@ -598,28 +599,28 @@ class HelpView(UiMixin, ctk.CTkFrame):
                 db_rows = help_svc.list_requirements(self.user_info, req_type)
                 if not db_rows: return
 
-                ctk.CTkLabel(parent, text=title, font=("Inter", 13, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(6, 4))
-                card = ctk.CTkFrame(parent, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
+                ctk.CTkLabel(parent, text=title, font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(6, 4))
+                card = ctk.CTkFrame(parent, fg_color=T.SURFACE_ALT, corner_radius=8, border_width=1, border_color=T.BORDER)
                 card.pack(fill="x", padx=20, pady=(0, 12))
     
                 for row_idx, db_row in enumerate(db_rows):
-                    row = ctk.CTkFrame(card, fg_color="#F0F0F0" if row_idx % 2 == 0 else "transparent", height=34)
+                    row = ctk.CTkFrame(card, fg_color=T.SURFACE_MUTED if row_idx % 2 == 0 else "transparent", height=34)
                     row.pack(fill="x")
                     row.pack_propagate(False)
                     row.grid_columnconfigure(0, weight=1)
                     row.grid_columnconfigure(1, weight=2)
                     row.grid_columnconfigure(2, weight=0)
                     
-                    ctk.CTkLabel(row, text=db_row["component"], font=("Inter", 11, "bold"), text_color="#1E4528").grid(row=0, column=0, padx=14, pady=6, sticky="w")
-                    ctk.CTkLabel(row, text=db_row["specification"], font=("Inter", 11), text_color="#1A1A1A").grid(row=0, column=1, padx=14, pady=6, sticky="w")
+                    ctk.CTkLabel(row, text=db_row["component"], font=T.font(12, "bold"), text_color=T.PRIMARY).grid(row=0, column=0, padx=14, pady=6, sticky="w")
+                    ctk.CTkLabel(row, text=db_row["specification"], font=T.font(12), text_color=T.TEXT).grid(row=0, column=1, padx=14, pady=6, sticky="w")
                     
                     if self.is_admin:
                         act = ctk.CTkFrame(row, fg_color="transparent")
                         act.grid(row=0, column=2, padx=8, pady=4, sticky="e")
-                        ctk.CTkButton(act, text="✎ Edit", width=50, height=24, fg_color="#3498DB", hover_color="#2980B9", font=("Inter", 10, "bold"), command=lambda r=db_row: self.open_sysreq_modal(r)).pack(side="left", padx=(0, 4))
-                        ctk.CTkButton(act, text="🗑 Remove", width=50, height=24, fg_color="#D8000C", hover_color="#B00000", font=("Inter", 10, "bold"), command=lambda r_id=db_row["id"]: self.delete_sysreq(r_id)).pack(side="left")
+                        ctk.CTkButton(act, text="✎ Edit", width=50, height=24, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda r=db_row: self.open_sysreq_modal(r)).pack(side="left", padx=(0, 4))
+                        ctk.CTkButton(act, text="🗑 Remove", width=50, height=24, fg_color=T.DANGER, hover_color=T.DANGER_DARK, font=T.font(12, "bold"), command=lambda r_id=db_row["id"]: self.delete_sysreq(r_id)).pack(side="left")
             except Exception as e:
-                ctk.CTkLabel(parent, text=friendly_message(e), text_color="red").pack(pady=10)
+                ctk.CTkLabel(parent, text=friendly_message(e), text_color=T.DANGER_TEXT).pack(pady=10)
 
         render_table(frame, "Hardware Requirements", "Hardware")
         render_table(frame, "Software Requirements", "Software")
@@ -628,7 +629,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
             frame,
             text="Note: The system is a LAN-based desktop application. No internet connection is required "
                  "for normal operation. All data is stored locally in the MySQL database.",
-            font=("Inter", 11), text_color="gray", wraplength=780, justify="left"
+            font=T.font(12), text_color=T.TEXT_MUTED, wraplength=780, justify="left"
         ).pack(anchor="w", padx=20, pady=(0, 20))
 
     def delete_sysreq(self, req_id):
@@ -642,7 +643,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
     def open_sysreq_modal(self, existing_row=None):
         dialog = ctk.CTkToplevel(self.winfo_toplevel())
         dialog.title("Edit Requirement" if existing_row else "Add Requirement")
-        dialog.configure(fg_color="white")
+        dialog.configure(fg_color=T.SURFACE)
         dialog.attributes("-topmost", True)
         dialog.grab_set()
         
@@ -651,22 +652,22 @@ class HelpView(UiMixin, ctk.CTkFrame):
         y = (dialog.winfo_screenheight() // 2) - (600 // 2)
         dialog.geometry(f"500x600+{x}+{y}")
 
-        ctk.CTkLabel(dialog, text="Requirement Type:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(20, 5))
+        ctk.CTkLabel(dialog, text="Requirement Type:", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 5))
         type_var = ctk.StringVar(value="Hardware")
         rad_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         rad_frame.pack(fill="x", padx=20)
-        ctk.CTkRadioButton(rad_frame, text="Hardware", variable=type_var, value="Hardware", fg_color="#1E4528").pack(side="left", padx=(0, 20))
-        ctk.CTkRadioButton(rad_frame, text="Software", variable=type_var, value="Software", fg_color="#1E4528").pack(side="left")
+        ctk.CTkRadioButton(rad_frame, text="Hardware", variable=type_var, value="Hardware", fg_color=T.PRIMARY).pack(side="left", padx=(0, 20))
+        ctk.CTkRadioButton(rad_frame, text="Software", variable=type_var, value="Software", fg_color=T.PRIMARY).pack(side="left")
 
-        ctk.CTkLabel(dialog, text="Component / Label:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(10, 5))
+        ctk.CTkLabel(dialog, text="Component / Label:", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 5))
         comp_entry = ctk.CTkEntry(dialog, placeholder_text="e.g., RAM")
         comp_entry.pack(fill="x", padx=20)
 
-        ctk.CTkLabel(dialog, text="Specification / Value:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(10, 5))
+        ctk.CTkLabel(dialog, text="Specification / Value:", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 5))
         spec_entry = ctk.CTkEntry(dialog, placeholder_text="e.g., Minimum 8 GB")
         spec_entry.pack(fill="x", padx=20)
         
-        ctk.CTkLabel(dialog, text="Display Sequence:", font=("Inter", 12, "bold"), text_color="black").pack(anchor="w", padx=20, pady=(10, 5))
+        ctk.CTkLabel(dialog, text="Display Sequence:", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 5))
         seq_entry = ctk.CTkEntry(dialog, placeholder_text="0")
         seq_entry.pack(fill="x", padx=20)
 
@@ -695,19 +696,19 @@ class HelpView(UiMixin, ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(dialog, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=20)
-        ctk.CTkButton(btn_row, text="Update Requirement" if existing_row else "Save Requirement", fg_color="#1E4528", hover_color="#14301C", command=save_req).pack(side="left", expand=True, fill="x", padx=(0, 5))
-        ctk.CTkButton(btn_row, text="Cancel", fg_color="#E0E0E0", text_color="black", hover_color="#CCCCCC", command=dialog.destroy).pack(side="right", expand=True, fill="x", padx=(5, 0))
+        ctk.CTkButton(btn_row, text="Update Requirement" if existing_row else "Save Requirement", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, command=save_req).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        ctk.CTkButton(btn_row, text="Cancel", fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=dialog.destroy).pack(side="right", expand=True, fill="x", padx=(5, 0))
 
     def render_tickets_tab(self):
-        frame = ctk.CTkFrame(self.tab_content, fg_color="white", corner_radius=10)
+        frame = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
 
         if not self.is_admin:
-            form_bg = ctk.CTkFrame(frame, fg_color="#F9FAFB", corner_radius=10)
+            form_bg = ctk.CTkFrame(frame, fg_color=T.SURFACE_ALT, corner_radius=10)
             form_bg.pack(fill="x", padx=20, pady=(20, 10))
 
-            ctk.CTkLabel(form_bg, text="Submit an Inquiry", font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=15, pady=(15, 5))
+            ctk.CTkLabel(form_bg, text="Submit an Inquiry", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=15, pady=(15, 5))
 
             subj_entry = ctk.CTkEntry(form_bg, placeholder_text="Subject...")
             subj_entry.pack(fill="x", padx=15, pady=5)
@@ -731,9 +732,9 @@ class HelpView(UiMixin, ctk.CTkFrame):
                 subj_entry.delete(0, 'end'); msg_entry.delete("1.0", "end")
                 load_ticket_list()
 
-            ctk.CTkButton(form_bg, text="Send to Admin", fg_color="#1E4528", hover_color="#14301C", command=submit_ticket).pack(anchor="e", padx=15, pady=(5, 15))
+            ctk.CTkButton(form_bg, text="Send to Admin", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, command=submit_ticket).pack(anchor="e", padx=15, pady=(5, 15))
 
-        ctk.CTkLabel(frame, text="Ticket Inbox" if self.is_admin else "My Previous Tickets", font=("Inter", 14, "bold"), text_color="#1A1A1A").pack(anchor="w", padx=20, pady=(10, 5))
+        ctk.CTkLabel(frame, text="Ticket Inbox" if self.is_admin else "My Previous Tickets", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 5))
 
         scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=20, pady=(0, 20))
@@ -743,28 +744,28 @@ class HelpView(UiMixin, ctk.CTkFrame):
             try:
                 tickets = help_svc.list_tickets(self.user_info)
             except Exception as e:
-                ctk.CTkLabel(scroll, text=friendly_message(e), text_color="red").pack(pady=10)
+                ctk.CTkLabel(scroll, text=friendly_message(e), text_color=T.DANGER_TEXT).pack(pady=10)
                 return
             try:
                 for t in tickets:
-                    card = ctk.CTkFrame(scroll, fg_color="#F9FAFB", corner_radius=8, border_width=1, border_color="#E0E0E0")
+                    card = ctk.CTkFrame(scroll, fg_color=T.SURFACE_ALT, corner_radius=8, border_width=1, border_color=T.BORDER)
                     card.pack(fill="x", pady=5)
 
                     header = ctk.CTkFrame(card, fg_color="transparent")
                     header.pack(fill="x", padx=15, pady=(10, 5))
 
-                    status_col = "#D8000C" if t['status'] == 'Open' else "#2ECC71"
-                    ctk.CTkLabel(header, text=f"[{t['status']}]", font=("Inter", 12, "bold"), text_color=status_col).pack(side="left", padx=(0, 10))
-                    ctk.CTkLabel(header, text=t['subject'], font=("Inter", 12, "bold"), text_color="#1A1A1A").pack(side="left")
+                    status_col=T.DANGER if t['status'] == 'Open' else T.SUCCESS_TEXT
+                    ctk.CTkLabel(header, text=f"[{t['status']}]", font=T.font(12, "bold"), text_color=status_col).pack(side="left", padx=(0, 10))
+                    ctk.CTkLabel(header, text=t['subject'], font=T.font(12, "bold"), text_color=T.TEXT).pack(side="left")
                     if self.is_admin:
-                        ctk.CTkLabel(header, text=f"From: {t['full_name']}", font=("Inter", 11), text_color="gray").pack(side="right")
+                        ctk.CTkLabel(header, text=f"From: {t['full_name']}", font=T.font(12), text_color=T.TEXT_MUTED).pack(side="right")
 
-                    ctk.CTkLabel(card, text=t['message'], font=("Inter", 11), text_color="#555555", justify="left", wraplength=700).pack(anchor="w", padx=15, pady=5)
+                    ctk.CTkLabel(card, text=t['message'], font=T.font(12), text_color=T.TEXT_SECONDARY, justify="left", wraplength=700).pack(anchor="w", padx=15, pady=5)
 
                     if t['admin_reply']:
-                        reply_box = ctk.CTkFrame(card, fg_color="#E8F8F5", corner_radius=5)
+                        reply_box = ctk.CTkFrame(card, fg_color=T.INFO_BG, corner_radius=5)
                         reply_box.pack(fill="x", padx=15, pady=(5, 10))
-                        ctk.CTkLabel(reply_box, text=f"Admin Reply: {t['admin_reply']}", font=("Inter", 11, "bold"), text_color="#1E4528", justify="left", wraplength=650).pack(anchor="w", padx=10, pady=10)
+                        ctk.CTkLabel(reply_box, text=f"Admin Reply: {t['admin_reply']}", font=T.font(12, "bold"), text_color=T.PRIMARY, justify="left", wraplength=650).pack(anchor="w", padx=10, pady=10)
                     elif self.is_admin and t['status'] == 'Open':
                         reply_entry = ctk.CTkEntry(card, placeholder_text="Type reply here...")
                         reply_entry.pack(fill="x", padx=15, pady=5)
@@ -779,8 +780,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
                                 return
                             load_ticket_list()
 
-                        ctk.CTkButton(card, text="Reply & Resolve", width=120, height=28, fg_color="#3498DB", hover_color="#2980B9", command=send_reply).pack(anchor="e", padx=15, pady=(0, 10))
+                        ctk.CTkButton(card, text="Reply & Resolve", width=120, height=28, fg_color=T.INFO, hover_color=T.INFO_HOVER, command=send_reply).pack(anchor="e", padx=15, pady=(0, 10))
             except Exception as e:
-                ctk.CTkLabel(scroll, text=friendly_message(e), text_color="red").pack(pady=10)
+                ctk.CTkLabel(scroll, text=friendly_message(e), text_color=T.DANGER_TEXT).pack(pady=10)
 
         load_ticket_list()

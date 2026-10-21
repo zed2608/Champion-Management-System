@@ -14,8 +14,9 @@ import customtkinter as ctk
 
 from services.errors import friendly_message
 from services.paging import DEFAULT_PAGE_SIZE, PAGE_SIZES, PageInfo
+from ui import theme as T
 
-HEADER_BG = "#1E4528"
+HEADER_BG=T.PRIMARY
 POLL_MS = 40
 
 
@@ -25,7 +26,7 @@ class PagedTable(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent", **kw)
         self.columns, self._fetch, self._cells = columns, fetch, cells
         self._row_bg, self._cell_style, self._on_click, self._on_loaded = row_bg, cell_style, on_row_click, on_loaded
-        self._empty_text, self._fsize, self._cell_pady, self._checkbox, self._uniform = empty_text, font_size, cell_pady, checkbox, uniform
+        self._empty_text, self._fsize, self._cell_pady, self._checkbox, self._uniform = empty_text, min(T.SIZES, key=lambda s: abs(s - font_size)), cell_pady, checkbox, uniform
         self._header_bg = header_bg
         self._actions = actions or {}                      # {column: {"text", "command"(row), "fg", "hover", "width"}}: one button per row
         self.page, self.page_size = 0, page_size
@@ -43,18 +44,18 @@ class PagedTable(ctk.CTkFrame):
     def _build_bar(self):
         bar = ctk.CTkFrame(self, fg_color="transparent")
         bar.pack(fill="x", pady=(0, 4))
-        self.info_lbl = ctk.CTkLabel(bar, text="", font=("Inter", 11), text_color="#555555")
+        self.info_lbl = ctk.CTkLabel(bar, text="", font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.info_lbl.pack(side="left")
-        self.next_btn = ctk.CTkButton(bar, text="Next ▶", width=70, height=26, command=lambda: self.goto(self.page + 1), font=("Inter", 11, "bold"))
-        self.last_btn = ctk.CTkButton(bar, text="Last ⏭", width=60, height=26, command=lambda: self.goto(10 ** 9), font=("Inter", 11, "bold"))
-        self.page_lbl = ctk.CTkLabel(bar, text="Page 1 of 1", font=("Inter", 11, "bold"), width=90)
-        self.prev_btn = ctk.CTkButton(bar, text="◀ Prev", width=70, height=26, command=lambda: self.goto(self.page - 1), font=("Inter", 11, "bold"))
-        self.first_btn = ctk.CTkButton(bar, text="⏮ First", width=60, height=26, command=lambda: self.goto(0), font=("Inter", 11, "bold"))
+        self.next_btn = ctk.CTkButton(bar, text="Next ▶", width=70, height=26, command=lambda: self.goto(self.page + 1), font=T.font(12, "bold"))
+        self.last_btn = ctk.CTkButton(bar, text="Last ⏭", width=60, height=26, command=lambda: self.goto(10 ** 9), font=T.font(12, "bold"))
+        self.page_lbl = ctk.CTkLabel(bar, text="Page 1 of 1", font=T.font(12, "bold"), width=90)
+        self.prev_btn = ctk.CTkButton(bar, text="◀ Prev", width=70, height=26, command=lambda: self.goto(self.page - 1), font=T.font(12, "bold"))
+        self.first_btn = ctk.CTkButton(bar, text="⏮ First", width=60, height=26, command=lambda: self.goto(0), font=T.font(12, "bold"))
         self.size_menu = ctk.CTkOptionMenu(bar, values=[str(s) for s in PAGE_SIZES], width=70, height=26, command=self._size_changed)
         self.size_menu.set(str(self.page_size))
         for w in (self.last_btn, self.next_btn, self.page_lbl, self.prev_btn, self.first_btn):
             w.pack(side="right", padx=2)
-        ctk.CTkLabel(bar, text="Rows:", font=("Inter", 11), text_color="#555555").pack(side="right", padx=(8, 2))
+        ctk.CTkLabel(bar, text="Rows:", font=T.font(12), text_color=T.TEXT_SECONDARY).pack(side="right", padx=(8, 2))
         self.size_menu.pack(side="right", padx=2)
 
     def _build_grid(self):
@@ -65,8 +66,8 @@ class PagedTable(ctk.CTkFrame):
         for col, (title, _w, _m) in enumerate(self.columns):
             cell = ctk.CTkFrame(self.grid_frame, fg_color=self._header_bg, corner_radius=0)
             cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            ctk.CTkLabel(cell, text=title, font=("Inter", self._fsize, "bold"), text_color="white", anchor="center").pack(fill="both", expand=True, padx=2, pady=10)
-        self.message = ctk.CTkLabel(self.grid_frame, text="", text_color="gray", font=("Inter", 12, "italic"))
+            ctk.CTkLabel(cell, text=title, font=T.font(self._fsize, "bold"), text_color=T.WHITE, anchor="center").pack(fill="both", expand=True, padx=2, pady=10)
+        self.message = ctk.CTkLabel(self.grid_frame, text="", text_color=T.TEXT_MUTED, font=T.font(12, "italic"))
 
     def _make_slot(self, index):
         slot = {"row": None, "cells": [], "labels": [], "check": None, "check_var": None}
@@ -77,8 +78,8 @@ class PagedTable(ctk.CTkFrame):
                 spec = self._actions[col]
                 holder = ctk.CTkFrame(cell, fg_color="transparent")
                 holder.pack(expand=True)
-                btn = ctk.CTkButton(holder, text=spec["text"], width=spec.get("width", 60), height=28, fg_color=spec.get("fg", "#2980B9"),
-                                    hover_color=spec.get("hover", "#1F618D"), font=("Inter", 11, "bold"),
+                btn = ctk.CTkButton(holder, text=spec["text"], width=spec.get("width", 60), height=28, fg_color=spec.get("fg", T.INFO_HOVER),
+                                    hover_color=spec.get("hover", T.INFO_DARK), font=T.font(12, "bold"),
                                     command=lambda s=slot, sp=spec: sp["command"](s["row"]) if s["row"] is not None else None)
                 btn.pack(expand=True, pady=self._cell_pady)
                 slot["cells"].append(cell)
@@ -93,7 +94,7 @@ class PagedTable(ctk.CTkFrame):
                 slot["cells"].append(cell)
                 slot["labels"].append(None)
                 continue
-            lbl = ctk.CTkLabel(cell, text="", font=("Inter", self._fsize), justify="center", anchor="center", cursor="hand2" if self._on_click else "")
+            lbl = ctk.CTkLabel(cell, text="", font=T.font(self._fsize), justify="center", anchor="center", cursor="hand2" if self._on_click else "")
             lbl.configure(wraplength=max(20, minsize - 10))
             lbl.pack(fill="both", expand=True, padx=4, pady=self._cell_pady)
             if self._on_click:
@@ -188,7 +189,7 @@ class PagedTable(ctk.CTkFrame):
                 row = rows[i]
                 slot["row"] = row
                 values = self._cells(row)
-                bg = self._row_bg(row, i) if self._row_bg else ("#F9FAFB" if i % 2 == 0 else "white")
+                bg = self._row_bg(row, i) if self._row_bg else (T.SURFACE_ALT if i % 2 == 0 else "white")
                 for col, cell in enumerate(slot["cells"]):
                     cell.configure(fg_color=bg)
                     cell.grid()
@@ -201,10 +202,10 @@ class PagedTable(ctk.CTkFrame):
                         slot["check_var"].set("on" if (enabled and checked) else "off")
                         continue
                     val = "" if values[col] is None else str(values[col])
-                    color, bold = ("#1A1A1A", False)
+                    color, bold = (T.TEXT, False)
                     if self._cell_style:
                         color, bold = self._cell_style(row, col, val)
-                    lbl.configure(text=val, text_color=color, font=("Inter", self._fsize, "bold" if bold else "normal"))
+                    lbl.configure(text=val, text_color=color, font=T.font(self._fsize, "bold" if bold else "normal"))
         self.info_lbl.configure(text=self.info.label())
         self.page_lbl.configure(text=f"Page {self.info.page + 1} of {self.info.pages}")
         self._set_buttons(True)
