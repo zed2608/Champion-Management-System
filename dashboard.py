@@ -26,6 +26,7 @@ from views.maintenance import MaintenanceView
 from views.role_management import RoleManagementView
 from views.help import HelpView
 from ui import components as C
+from ui import motion
 from ui import theme as T
 
 
@@ -789,7 +790,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         ctk.CTkLabel(c_ls, text="Low Stock Items", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(5, 0))
         ctk.CTkLabel(c_ls, text="Near reorder level →", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20)
         self._bind_widget_tree(
-            c_ls, lambda *_: self.show_frame("Inventory", highlight_low_stock=True))
+            c_ls, lambda *_: self.show_frame("Inventory", highlight_low_stock=True), hover=True)
 
         if is_admin:
             # Card 5 – Action Items
@@ -805,7 +806,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             ctk.CTkLabel(self.dash_action_card, text="Action Items", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(5, 0))
             ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20)
             self._bind_widget_tree(self.dash_action_card,
-                                   lambda *_: self.show_frame("Maintenance"))
+                                   lambda *_: self.show_frame("Maintenance"), hover=True)
 
         # ── Row 2: Project Status Strip (admin only) ─────────────────────────
         if is_admin:
@@ -1013,7 +1014,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             ctk.CTkLabel(row, text=proj, font=T.font(12), text_color=T.INFO_TEXT,
                          anchor="center").grid(row=0, column=2, padx=8, sticky="ew")
 
-    def _bind_widget_tree(self, widget, callback):
+    def _bind_widget_tree(self, widget, callback, hover=False):
         try:
             widget.configure(cursor="hand2")
             widget.bind("<Button-1>", callback)
@@ -1021,6 +1022,10 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             pass
         for child in widget.winfo_children():
             self._bind_widget_tree(child, callback)
+        if hover:                                            # a card the person can click: fade to a slightly tinted colour under the mouse
+            base = motion._as_hex(widget.cget("fg_color"))
+            if base:
+                motion.hover_fade(widget, base, motion.mix(base, T.PRIMARY, 0.08), targets=list(widget.winfo_children()))
 
     def _render_action_badges(self, metrics):
         if not hasattr(self, "dash_action_top"):

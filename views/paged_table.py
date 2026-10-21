@@ -15,6 +15,7 @@ import customtkinter as ctk
 from services.errors import friendly_message
 from services.paging import DEFAULT_PAGE_SIZE, PAGE_SIZES, PageInfo
 from ui import components as C
+from ui import motion
 from ui import theme as T
 
 HEADER_BG=T.PRIMARY
@@ -101,6 +102,9 @@ class PagedTable(ctk.CTkFrame):
             if self._on_click:
                 cell.bind("<Button-1>", lambda e, s=slot: self._clicked(s))
                 lbl.bind("<Button-1>", lambda e, s=slot: self._clicked(s))
+                for w in (cell, lbl):                                   # a row the person can click fades to a tinted colour under the mouse
+                    w.bind("<Enter>", lambda e, s=slot: self._row_hover(s, True), add="+")
+                    w.bind("<Leave>", lambda e, s=slot: self._row_hover(s, False), add="+")
             slot["cells"].append(cell)
             slot["labels"].append(lbl)
         self._slots.append(slot)
@@ -191,7 +195,9 @@ class PagedTable(ctk.CTkFrame):
                 slot["row"] = row
                 values = self._cells(row)
                 bg = self._row_bg(row, i) if self._row_bg else (T.SURFACE_ALT if i % 2 == 0 else "white")
+                slot["bg"], slot["hover"] = bg, False
                 for col, cell in enumerate(slot["cells"]):
+                    motion.cancel(cell, "fg_color")
                     cell.configure(fg_color=bg)
                     cell.grid()
                     lbl = slot["labels"][col]
@@ -223,6 +229,23 @@ class PagedTable(ctk.CTkFrame):
     def _clicked(self, slot):
         if slot["row"] is not None and self._on_click:
             self._on_click(slot["row"])
+
+    def _row_hover(self, slot, over):
+        base = slot.get("bg")
+        if slot["row"] is None or not motion._as_hex(base) or bool(slot.get("hover")) == over:
+            return
+        if not over:                                                    # moving between two cells of the same row is not leaving it
+            first, last = slot["cells"][0], slot["cells"][-1]
+            try:
+                x, y = first.winfo_pointerxy()
+                if first.winfo_rootx() <= x < last.winfo_rootx() + last.winfo_width() and first.winfo_rooty() <= y < first.winfo_rooty() + first.winfo_height():
+                    return
+            except Exception:
+                pass
+        slot["hover"] = over
+        tint = motion.mix(base, T.PRIMARY, 0.10)
+        for cell in slot["cells"]:
+            motion.tween_color(cell, "fg_color", base if over else tint, tint if over else base, T.ANIM_FAST)
 
     def _toggled(self, slot):
         if slot["row"] is not None and self._checkbox:

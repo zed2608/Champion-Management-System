@@ -8,6 +8,7 @@ import tkinter as tk
 
 import customtkinter as ctk
 
+from ui import motion
 from ui import theme as T
 
 def apply_widget_defaults():
@@ -59,11 +60,12 @@ def button(parent, text="", command=None, kind="primary", compact=False, **kw):
     style = BUTTON_KINDS[kind]
     kw.pop("height", None)
     kw.pop("corner_radius", None)
-    return ctk.CTkButton(parent, text=text, command=command, height=BUTTON_HEIGHT_COMPACT if compact else BUTTON_HEIGHT,
+    btn = ctk.CTkButton(parent, text=text, command=command, height=BUTTON_HEIGHT_COMPACT if compact else BUTTON_HEIGHT,
                          corner_radius=T.RADIUS_SM, font=kw.pop("font", T.font(12, "bold")), cursor="hand2",
                          fg_color=kw.pop("fg_color", style["fg_color"]), hover_color=kw.pop("hover_color", style["hover_color"]),
                          text_color=kw.pop("text_color", style["text_color"]), text_color_disabled=kw.pop("text_color_disabled", T.TEXT_MUTED),
                          **kw)
+    return motion.enhance_button(btn)               # hover fade, press effect, pointer cursor (all off under CHAMPION_REDUCE_MOTION=1)
 
 
 def field(parent, **kw):
