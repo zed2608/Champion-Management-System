@@ -155,3 +155,38 @@ def test_reduced_motion_makes_a_real_button_change_at_once(root, monkeypatch):
     b._canvas.event_generate("<Enter>")
     root.update()
     assert b.cget("fg_color") == T.PRIMARY_HOVER
+
+
+def test_count_up_reaches_the_exact_number_and_only_moves_when_it_changed(root, monkeypatch):
+    import customtkinter as ctk
+    monkeypatch.setattr(motion, "_env_loaded", True)
+    monkeypatch.delenv("CHAMPION_REDUCE_MOTION", raising=False)
+    lbl = ctk.CTkLabel(root, text="0")
+    lbl.pack()
+    motion.count_up(lbl, 40, lambda v: f"{v:g}%")
+    shown = []
+    end = time.time() + 1.0
+    while time.time() < end:
+        root.update()
+        t = lbl.cget("text")
+        if not shown or shown[-1] != t:
+            shown.append(t)
+        time.sleep(0.005)
+    values = [float(x.rstrip("%")) for x in shown]
+    assert values[-1] == 40 and values == sorted(values) and len(values) >= 4        # a visible count, ending exactly on the number
+    motion.count_up(lbl, 40, lambda v: f"{v:g}%")                                      # unchanged: no new animation
+    assert lbl.cget("text") == "40%" and "count" not in getattr(lbl, "_motion_jobs", {})
+    motion.count_up(lbl, 25.5, lambda v: f"{v:g}%")                                    # counts down from the previous number
+    pump(root, 0.8)
+    assert lbl.cget("text") == "25.5%"
+
+
+def test_count_up_is_instant_under_reduced_motion_and_accepts_decimals(root, monkeypatch):
+    import customtkinter as ctk
+    from decimal import Decimal
+    monkeypatch.setattr(motion, "_env_loaded", True)
+    monkeypatch.setenv("CHAMPION_REDUCE_MOTION", "1")
+    lbl = ctk.CTkLabel(root, text="0")
+    lbl.pack()
+    motion.count_up(lbl, Decimal("988.5"), lambda v: f"{v:g}")
+    assert lbl.cget("text") == "988.5"

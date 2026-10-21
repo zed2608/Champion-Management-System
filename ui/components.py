@@ -119,6 +119,35 @@ def label(parent, text="", size=12, weight="normal", color=None, **kw):
     return ctk.CTkLabel(parent, text=text, font=T.font(size, weight), text_color=color or T.TEXT, **kw)
 
 
+class KpiCard(ctk.CTkFrame):
+    """The dashboard's number card: same size and type everywhere. Number on top, label below, a small status line under it, and a
+    slim colour stripe on the left. ``with_value=False`` leaves the number row empty (the Action Items card fills it with badges)."""
+
+    def __init__(self, parent, title, note, accent, value="0", with_value=True, **kw):
+        super().__init__(parent, fg_color=T.SURFACE, corner_radius=T.RADIUS_MD, border_width=1, border_color=T.BORDER, height=130, **kw)
+        self.pack_propagate(False)
+        self.stripe = ctk.CTkFrame(self, fg_color=accent, width=5, corner_radius=3)
+        self.stripe.pack(side="left", fill="y", padx=(T.S3, 0), pady=T.S4)
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.pack(side="left", fill="both", expand=True, padx=(T.S3, T.S3))
+        self.top = ctk.CTkFrame(body, fg_color="transparent")
+        self.top.pack(fill="x", pady=(T.S4, 0))
+        self.value_label = None
+        if with_value:
+            self.value_label = ctk.CTkLabel(self.top, text=value, font=T.font(28, "bold"), text_color=T.TEXT)
+            self.value_label.pack(side="left")
+        self.title_label = ctk.CTkLabel(body, text=title, font=T.font(14, "bold"), text_color=T.TEXT, anchor="w")
+        self.title_label.pack(anchor="w", pady=(T.S1, 0))
+        self.note_label = ctk.CTkLabel(body, text=note, font=T.font(12), text_color=T.TEXT_MUTED, anchor="w")
+        self.note_label.pack(anchor="w")
+        self._hover_base = T.SURFACE
+
+    def set_state(self, fg, border):
+        """Change the card colours (e.g. red when something needs attention); hover fades keep returning to THIS colour."""
+        self._hover_base = fg
+        self.configure(fg_color=fg, border_color=border)
+
+
 class MoreMenu(ctk.CTkButton):
     """A ghost "More" button that opens a small menu of extra actions, so a toolbar never shows more than three secondary buttons."""
 

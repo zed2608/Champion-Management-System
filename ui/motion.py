@@ -149,6 +149,45 @@ def _pointer_inside(widget):
         return False
 
 
+def count_up(label, target, fmt=lambda v: f"{v:g}", ms=400, steps=10):
+    """Show ``fmt(target)`` in ``label``, counting from what it showed before (0 the first time) over about 400 ms.
+    Nothing happens when the number did not change; with reduced motion the number is simply set."""
+    try:
+        target = float(target)
+    except (TypeError, ValueError):
+        label.configure(text=str(target))
+        return
+    previous = getattr(label, "_count_value", None)
+    label._count_value = target
+    cancel(label, "count")
+    if previous == target:
+        _apply(label, "text", fmt(target))
+        return
+    start = 0.0 if previous is None else previous
+    if reduced_motion() or ms <= 0:
+        _apply(label, "text", fmt(target))
+        return
+    jobs = _jobs(label)
+    delay = max(10, ms // steps)
+
+    def step(i=1):
+        jobs.pop("count", None)
+        try:
+            if not label.winfo_exists():
+                return
+            t = i / steps
+            eased = 1 - (1 - t) ** 2                                   # fast at first, settles gently
+            value = target if i >= steps else start + (target - start) * eased
+            if i < steps and float(target).is_integer() and float(start).is_integer():
+                value = round(value)
+            _apply(label, "text", fmt(value))
+            if i < steps:
+                jobs["count"] = label.after(delay, step, i + 1)
+        except tk.TclError:
+            return
+    step(1)
+
+
 def hover_fade(widget, normal, hover, attr="fg_color", ms=T.ANIM_FAST, pointer=True, targets=None):
     """Fade ``widget`` to ``hover`` while the mouse is over it (or over any of ``targets``, e.g. its labels)."""
     if pointer:

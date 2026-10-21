@@ -25,6 +25,7 @@ from views.reports import ReportsView
 from views.maintenance import MaintenanceView
 from views.role_management import RoleManagementView
 from views.help import HelpView
+from ui import charts          # noqa: F401  (applies the one shared Matplotlib style)
 from ui import components as C
 from ui import motion
 from ui.toast import ToastHost
@@ -629,7 +630,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             ctk.CTkLabel(t, text=title, font=T.font(12, "bold"), text_color=T.TEXT).pack(side="left")
             C.button(t, compact=True, kind="ghost", text="Open", width=50, text_color=T.INFO_TEXT, hover_color=T.INFO_BG, 
                           command=lambda g=go: self.show_frame(g)).pack(side="right")
-            lbl = ctk.CTkLabel(card, text="Loading...", font=T.font(12), text_color=T.TEXT_MUTED, justify="left", anchor="w", wraplength=520)
+            lbl = ctk.CTkLabel(card, text="Loading...", font=T.font(12), text_color=T.TEXT_MUTED, justify="left", anchor="w", wraplength=430)
             lbl.pack(fill="x", padx=12, pady=(0, 10))
             self.ins_labels[key] = lbl
         self._load_insights()
@@ -752,64 +753,33 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         for i in range(num_cards):
             cards_frame.grid_columnconfigure(i, weight=1)
 
-        # Card 1 – Utilization
-        c1 = ctk.CTkFrame(cards_frame, fg_color=T.PRIMARY,
-                          corner_radius=10, height=130)
+        # Five (admin) or four (staff) cards of the SAME size and type: number on top, label below, a status line under it.
+        c1 = C.KpiCard(cards_frame, "Asset Utilization", "Deployed vs warehouse", T.PRIMARY, "0%")
         c1.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
-        c1.pack_propagate(False)
-        self.dash_util_lbl = ctk.CTkLabel(c1, text="0%", font=T.font(28, "bold"), text_color=T.WHITE)
-        self.dash_util_lbl.pack(anchor="w", padx=20, pady=(20, 0))
-        ctk.CTkLabel(c1, text="Asset Utilization", font=T.font(14, "bold"), text_color=T.WHITE).pack(anchor="w", padx=20, pady=(5, 0))
-        ctk.CTkLabel(c1, text="Deployed vs Warehouse", font=T.font(12), text_color=T.WHITE).pack(anchor="w", padx=20)
+        self.dash_util_lbl, self.dash_util_note = c1.value_label, c1.note_label
 
-        # Card 2 – Active Workforce
-        c2 = ctk.CTkFrame(cards_frame, fg_color=T.INFO_HOVER,
-                          corner_radius=10, height=130)
+        c2 = C.KpiCard(cards_frame, "Active Workforce", "Active in the last 30 days", T.INFO, "0 / 0")
         c2.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-        c2.pack_propagate(False)
-        self.dash_wf_lbl = ctk.CTkLabel(
-            c2, text="0 / 0", font=T.font(28, "bold"), text_color=T.WHITE)
-        self.dash_wf_lbl.pack(anchor="w", padx=20, pady=(20, 0))
-        ctk.CTkLabel(c2, text="Active Workforce", font=T.font(14, "bold"), text_color=T.WHITE).pack(anchor="w", padx=20, pady=(5, 0))
-        ctk.CTkLabel(c2, text="Active last 30 days", font=T.font(12), text_color=T.WHITE).pack(anchor="w", padx=20)
+        self.dash_wf_lbl = c2.value_label
 
-        # Card 3 – Total Inventory
-        c3 = ctk.CTkFrame(cards_frame, fg_color=T.ACCENT,
-                          corner_radius=10, height=130)
+        c3 = C.KpiCard(cards_frame, "Total Inventory", "Total physical items", T.ACCENT, "0")
         c3.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
-        c3.pack_propagate(False)
-        self.dash_inv_lbl = ctk.CTkLabel(c3, text="0", font=T.font(28, "bold"), text_color=T.TEXT)
-        self.dash_inv_lbl.pack(anchor="w", padx=20, pady=(20, 0))
-        ctk.CTkLabel(c3, text="Total Inventory", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(5, 0))
-        ctk.CTkLabel(c3, text="Total physical items", font=T.font(12), text_color=T.TEXT).pack(anchor="w", padx=20)
+        self.dash_inv_lbl = c3.value_label
 
-        # Card 4 – Low Stock (admin + staff)
-        c_ls = ctk.CTkFrame(cards_frame, fg_color=T.SURFACE_ALT, corner_radius=10,
-                            height=130, border_width=1, border_color=T.BORDER)
+        # Low stock (admin + staff): a click opens Inventory filtered to the low items
+        c_ls = C.KpiCard(cards_frame, "Low Stock Items", "Near reorder level →", T.DANGER, "0")
         c_ls.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
-        c_ls.pack_propagate(False)
-        self.dash_lowstock_top = ctk.CTkFrame(c_ls, fg_color="transparent")
-        self.dash_lowstock_top.pack(fill="x", padx=20, pady=(15, 0))
-        self.dash_lowstock_val = ctk.CTkLabel(self.dash_lowstock_top, text="0", font=T.font(28, "bold"), text_color=T.TEXT)
-        self.dash_lowstock_val.pack(side="left")
-        ctk.CTkLabel(c_ls, text="Low Stock Items", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(5, 0))
-        ctk.CTkLabel(c_ls, text="Near reorder level →", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20)
+        self.dash_lowstock_card, self.dash_lowstock_top, self.dash_lowstock_val = c_ls, c_ls.top, c_ls.value_label
+        self.dash_lowstock_note = c_ls.note_label
         self._bind_widget_tree(
             c_ls, lambda *_: self.show_frame("Inventory", highlight_low_stock=True), hover=True)
 
         if is_admin:
-            # Card 5 – Action Items
-            self.dash_action_card = ctk.CTkFrame(
-                cards_frame, fg_color=T.SURFACE_ALT, corner_radius=10, height=130, border_width=1, border_color=T.BORDER)
-            self.dash_action_card.grid(
-                row=0, column=4, padx=5, pady=5, sticky="ew")
-            self.dash_action_card.pack_propagate(False)
-            self.dash_action_top = ctk.CTkFrame(
-                self.dash_action_card, fg_color="transparent")
-            self.dash_action_top.pack(fill="x", padx=20, pady=(15, 0))
+            # Action Items: the number and its badges are drawn by _render_action_badges
+            card5 = C.KpiCard(cards_frame, "Action Items", "Maintenance →", T.WARNING, with_value=False)
+            card5.grid(row=0, column=4, padx=5, pady=5, sticky="ew")
+            self.dash_action_card, self.dash_action_top = card5, card5.top
             self._render_action_badges(metrics)
-            ctk.CTkLabel(self.dash_action_card, text="Action Items", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(5, 0))
-            ctk.CTkLabel(self.dash_action_card, text="Maintenance →", font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w", padx=20)
             self._bind_widget_tree(self.dash_action_card,
                                    lambda *_: self.show_frame("Maintenance"), hover=True)
 
@@ -1033,9 +1003,9 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         for child in widget.winfo_children():
             self._bind_widget_tree(child, callback)
         if hover:                                            # a card the person can click: fade to a slightly tinted colour under the mouse
-            base = motion._as_hex(widget.cget("fg_color"))
-            if base:
-                motion.hover_fade(widget, base, motion.mix(base, T.PRIMARY, 0.08), targets=list(widget.winfo_children()))
+            if motion._as_hex(widget.cget("fg_color")):
+                base = lambda w=widget: getattr(w, "_hover_base", None) or w.cget("fg_color")
+                motion.hover_fade(widget, base, lambda w=widget: motion.mix(base(w), T.PRIMARY, 0.08), targets=list(widget.winfo_children()))
 
     def _render_action_badges(self, metrics):
         if not hasattr(self, "dash_action_top"):
@@ -1163,19 +1133,19 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         if not hasattr(self, 'dash_util_lbl') or not self.dash_util_lbl.winfo_exists():
             return
 
-        self.dash_util_lbl.configure(text=f"{metrics['utilization_pct']}%")
-        self.dash_wf_lbl.configure(
-            text=f"{metrics['active_workforce']} / {metrics['total_employees']}")
-        self.dash_inv_lbl.configure(text=str(metrics['total_physical']))
+        motion.count_up(self.dash_util_lbl, metrics['utilization_pct'], lambda v: f"{v:g}%")
+        self.dash_util_note.configure(text=f"{float(metrics['borrowed_qty']):g} of {float(metrics['total_physical']):g} units out")
+        total_staff = metrics['total_employees']
+        motion.count_up(self.dash_wf_lbl, metrics['active_workforce'], lambda v: f"{v:g} / {total_staff}")
+        motion.count_up(self.dash_inv_lbl, metrics['total_physical'], lambda v: f"{v:g}")
 
         # Low stock card
         ls = metrics.get("low_stock", 0)
-        self.dash_lowstock_val.configure(
-            text=str(ls), text_color=T.DANGER_TEXT if ls > 0 else "black")
-        if hasattr(self, "dash_lowstock_top"):
-            card = self.dash_lowstock_top.master
-            card.configure(fg_color=T.DANGER_BG if ls > 0 else T.SURFACE_ALT,
-                           border_color=T.DANGER if ls > 0 else T.BORDER)
+        motion.count_up(self.dash_lowstock_val, ls, lambda v: f"{v:g}")
+        self.dash_lowstock_val.configure(text_color=T.DANGER_TEXT if ls > 0 else T.TEXT)
+        self.dash_lowstock_note.configure(text="Near reorder level →" if ls > 0 else "Everything above its minimum")
+        if hasattr(self, "dash_lowstock_card"):
+            self.dash_lowstock_card.set_state(T.DANGER_BG if ls > 0 else T.SURFACE, T.DANGER if ls > 0 else T.BORDER)
 
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         if is_admin:

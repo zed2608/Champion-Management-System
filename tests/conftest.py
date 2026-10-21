@@ -7,6 +7,7 @@ DB tests run against a THROWAWAY MySQL database and are skipped unless TEST_DB_U
 The user needs CREATE/DROP on `test%` databases. Database names MUST start with "test": the fixtures drop and recreate
 them, so anything else aborts the run. The application's own DB_* settings are never used here.
 """
+import gc
 import itertools
 import os
 import sys
@@ -48,6 +49,14 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "db" in item.keywords:
             item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+def _collect_garbage_on_the_main_thread():
+    """Free every cyclic leftover of the finished test (closed windows, their variables and images) HERE, on the main thread. If the collector
+    runs inside a background thread instead, Python frees Tk objects off the main thread, which kills the whole process on Windows (0x80000003)."""
+    yield
+    gc.collect()
 
 
 @pytest.fixture(scope="session")

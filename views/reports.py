@@ -8,6 +8,7 @@ import tempfile
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
 import matplotlib
+from ui import charts          # noqa: F401  (applies the one shared Matplotlib style)
 from ui import components as C
 from ui import theme as T
 matplotlib.use("TkAgg")
