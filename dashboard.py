@@ -27,6 +27,7 @@ from views.role_management import RoleManagementView
 from views.help import HelpView
 from ui import components as C
 from ui import motion
+from ui.toast import ToastHost
 from ui import theme as T
 
 
@@ -73,12 +74,16 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         self.dashboard_refresh_job = None
         self._warning_dialog = None
 
+        self.toasts = ToastHost(self)
         self.show_frame("Dashboard")
         self._setup_inactivity()
         self.dashboard_refresh_job = self.after(
             15000, self._auto_refresh_dashboard)
 
         self._init_offline_banner()
+        name = (self.user_info.get("full_name") or "").strip()
+        if name:                                              # a short non-modal greeting after login
+            self.after(700, lambda: self.show_toast(f"Welcome back, {name}", "info", 3000))
         from services.tool_cache import tool_cache   # [CONCURRENCY] O(1) scan lookups, kept fresh across terminals
         tool_cache.start()
 
@@ -1013,6 +1018,11 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                          anchor="center").grid(row=0, column=1, padx=4, sticky="ew")
             ctk.CTkLabel(row, text=proj, font=T.font(12), text_color=T.INFO_TEXT,
                          anchor="center").grid(row=0, column=2, padx=8, sticky="ew")
+
+    def show_toast(self, message, kind="success", ms=3500):
+        """A short non-modal notice at the top right (screens call this after something already happened)."""
+        text = str(message).lstrip("✓✕ ").strip()
+        return self.toasts.show(text, kind, ms)
 
     def _bind_widget_tree(self, widget, callback, hover=False):
         try:

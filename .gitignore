@@ -31,3 +31,5 @@ remember_config.json
 # demo QR pictures and screenshots made by scripts
 demo_qr/
 .env.demo
+ui_prefs.json
+ui_prefs.json.part

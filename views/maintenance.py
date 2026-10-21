@@ -555,7 +555,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         uid = self.user_info.get("user_id")
         if uid:
             log_action(uid, "Edited", "Maintenance", f"Restored Tool PID: {tool_id} ('{res['name']}') from Archive")
-        messagebox.showinfo("Success", "Tool restored to active inventory.")
+        C.notify(self, "Tool restored to active inventory.")
         self.load_archived_tools(keep_page=True)
 
     # ------------------------------------------
@@ -616,7 +616,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         uid = self.user_info.get("user_id")
         if uid:
             log_action(uid, "Edited", "Maintenance", f"Restored employee {res['name']} ({res['employee_id']}) from Archive")
-        messagebox.showinfo("Success", f"{res['name']} was restored.")
+        C.notify(self, f"{res['name']} was restored.")
         self.load_archived_employees(keep_page=True)
 
     # ------------------------------------------
@@ -682,7 +682,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         uid = self.user_info.get("user_id")
         if uid:
             log_action(uid, "Edited", "Maintenance", f"Restored Project '{res['name']}' (PID: {project_id}) to {res['status']}")
-        messagebox.showinfo("Success", f"Project restored as {res['status']}.")
+        C.notify(self, f"Project restored as {res['status']}.")
         self.load_archived_projects(keep_page=True)
 
     # ------------------------------------------

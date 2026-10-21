@@ -4,6 +4,8 @@ from tkinter import messagebox
 from services import help_service as help_svc
 from services.errors import friendly_message
 from ui import components as C
+from ui import intro as intro_module
+from ui import prefs
 from ui import theme as T
 
 class HelpView(UiMixin, ctk.CTkFrame):
@@ -242,7 +244,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "    ▤ Help Guide    ", 
             "         💬 FAQs         ", 
             " ⛭ System Requirements ", 
-            "   ✉ Support Tickets   "
+            "   ✉ Support Tickets   ",
+            "     ℹ About     "
         ]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
@@ -271,6 +274,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
             self.render_sysreq_tab()
         elif "Support Tickets" in selected_tab:
             self.render_tickets_tab()
+        elif "About" in selected_tab:
+            self.render_about_tab()
 
     def _build_search_bar(self, parent, on_search, placeholder="Search keywords..."):
         bar = ctk.CTkFrame(parent, fg_color="transparent")
@@ -572,6 +577,27 @@ class HelpView(UiMixin, ctk.CTkFrame):
         C.button(btn_row, kind="primary", text="Update FAQ" if existing_row else "Save FAQ", command=save_faq).pack(side="left", expand=True, fill="x", padx=(0, 5))
         C.button(btn_row, kind="secondary", text="Cancel", command=modal.destroy).pack(side="right", expand=True, fill="x", padx=(5, 0))
 
+    def render_about_tab(self):
+        outer = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
+        outer.grid(row=0, column=0, sticky="nsew")
+        ctk.CTkLabel(outer, text="About the Champion Management System", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(anchor="w", padx=20, pady=(16, 8))
+        lines = ["Automated tool issuance, retrieval, inventory and maintenance for Champion Fine Tooling Corporation.",
+                 "Built by Cayper Tech, Technological Institute of the Philippines (Software Engineering 2 and Project Management 3).",
+                 intro_module.ABOUT_TEAM_NOTE]
+        for line in lines:
+            ctk.CTkLabel(outer, text=line, font=T.font(12), text_color=T.TEXT, wraplength=820, justify="left", anchor="w").pack(anchor="w", padx=20, pady=3)
+        row = ctk.CTkFrame(outer, fg_color="transparent")
+        row.pack(anchor="w", padx=20, pady=(16, 4))
+        C.button(row, kind="primary", text="▶ Replay the intro", width=160,
+                 command=lambda: intro_module.IntroWindow(self.winfo_toplevel(), first_run=False)).pack(side="left")
+        self.about_status = ctk.CTkLabel(outer, text="", font=T.font(12), text_color=T.TEXT_MUTED)
+
+        def reset_intro():
+            ok = prefs.set("intro_seen", False)
+            self.about_status.configure(text="The intro will be shown the next time the program starts." if ok else "Could not save this setting on this computer.")
+        C.button(row, kind="secondary", text="Show it again at next start", width=200, command=reset_intro).pack(side="left", padx=(10, 0))
+        self.about_status.pack(anchor="w", padx=20, pady=4)
+
     def render_sysreq_tab(self):
         outer = ctk.CTkFrame(self.tab_content, fg_color=T.SURFACE, corner_radius=10)
         outer.grid(row=0, column=0, sticky="nsew")
@@ -729,7 +755,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
                 except Exception as e:
                     messagebox.showerror("Could not send", friendly_message(e), parent=self.winfo_toplevel())
                     return
-                messagebox.showinfo("Success", "Ticket submitted to the Admin.", parent=self.winfo_toplevel())
+                C.notify(self, "Ticket submitted to the Admin.")
                 subj_entry.delete(0, 'end'); msg_entry.delete("1.0", "end")
                 load_ticket_list()
 

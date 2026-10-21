@@ -551,7 +551,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
             if self.user_info.get("user_id"):
                 log_action(self.user_info['user_id'], "Edited", "Role Management",
                            f"Edited user {res['name']} ({res['employee_id']}){' and cleared the lockout' if res['unlocked'] else ''}")
-            messagebox.showinfo("Updated", "User account updated successfully.", parent=modal)
+            C.notify(self, "User account updated successfully.")
             modal.destroy()
             self.load_user_table()
             dashboard = self.winfo_toplevel()

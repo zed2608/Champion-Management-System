@@ -296,7 +296,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         self.user_info['email'] = res['email']
         self.dashboard.refresh_topbar()
         self.build_left_card()
-        messagebox.showinfo("Success", "Profile updated securely.")
+        C.notify(self, "Profile updated securely.")
 
     def open_password_modal(self):
         dialog = ctk.CTkToplevel(self)

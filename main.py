@@ -410,5 +410,7 @@ class LoginApp(ctk.CTk):
 
 
 if __name__ == "__main__":
+    from ui.intro import run_startup
     app = LoginApp()
+    run_startup(app)                  # splash (about 1.5 s), the four-slide intro on the first launch, then the login window
     app.mainloop()

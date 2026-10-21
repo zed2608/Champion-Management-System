@@ -16,6 +16,7 @@ from services.errors import friendly_message
 from services.paging import DEFAULT_PAGE_SIZE, PAGE_SIZES, PageInfo
 from ui import components as C
 from ui import motion
+from ui.skeleton import Skeleton
 from ui import theme as T
 
 HEADER_BG=T.PRIMARY
@@ -119,7 +120,8 @@ class PagedTable(ctk.CTkFrame):
             self.page = max(0, page)
         self._seq += 1
         seq, page_no, size = self._seq, self.page, self.page_size
-        self._show_message("↻ Loading... Please wait")
+        self._show_message("")
+        self._show_skeleton(True)                      # grey placeholder rows instead of an empty frame while the page loads
         self._set_buttons(False)
 
         def work():
@@ -159,15 +161,28 @@ class PagedTable(ctk.CTkFrame):
             self._poll_job = self.after(POLL_MS, self._poll)
             return
         _seq, rows, info, error = newest
+        self._show_skeleton(False)
         if error is not None:
-            self._show_message(error, "red")
+            self._show_message(error, T.DANGER_TEXT)
             self._set_buttons(True)
             return
         self.info, self.page, self.rows = info, info.page, rows
         self._paint()
 
     # ---- drawing --------------------------------------------------------------------------------------------------------------
-    def _show_message(self, text, color="gray"):
+    def _show_skeleton(self, on):
+        sk = getattr(self, "_skeleton", None)
+        if sk is not None:
+            try:
+                sk.destroy()
+            except Exception:
+                pass
+            self._skeleton = None
+        if on:
+            self._skeleton = Skeleton(self.grid_frame, rows=min(max(self.page_size, 4), 8))
+            self._skeleton.grid(row=1, column=0, columnspan=len(self.columns), sticky="ew", pady=T.S3)
+
+    def _show_message(self, text, color=T.TEXT_MUTED):
         for slot in self._slots:
             for c in slot["cells"]:
                 c.grid_remove()
@@ -194,7 +209,7 @@ class PagedTable(ctk.CTkFrame):
                 row = rows[i]
                 slot["row"] = row
                 values = self._cells(row)
-                bg = self._row_bg(row, i) if self._row_bg else (T.SURFACE_ALT if i % 2 == 0 else "white")
+                bg = self._row_bg(row, i) if self._row_bg else (T.SURFACE_ALT if i % 2 == 0 else T.SURFACE)
                 slot["bg"], slot["hover"] = bg, False
                 for col, cell in enumerate(slot["cells"]):
                     motion.cancel(cell, "fg_color")

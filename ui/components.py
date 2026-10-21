@@ -5,6 +5,7 @@ They return ordinary CustomTkinter widgets (a button is still a CTkButton), so e
 Colours, fonts and sizes come from ui.theme only.
 """
 import tkinter as tk
+from tkinter import messagebox
 
 import customtkinter as ctk
 
@@ -100,6 +101,18 @@ def card(parent, **kw):
     kw.pop("border_width", None)
     return ctk.CTkFrame(parent, fg_color=kw.pop("fg_color", T.SURFACE), corner_radius=T.RADIUS_MD, border_width=1,
                         border_color=kw.pop("border_color", T.BORDER), **kw)
+
+
+def notify(widget, message, kind="success"):
+    """Tell the person something that already happened, without making them click: a toast on the main window. Falls back to a plain dialog
+    when the screen is used without the main window (tests, tools). Never use this for a question or a destructive confirmation."""
+    show = getattr(widget.winfo_toplevel(), "show_toast", None)
+    if show is not None:
+        show(message, kind)
+    elif kind == "error":
+        messagebox.showerror("Error", message, parent=widget.winfo_toplevel())
+    else:
+        messagebox.showinfo("Done", message, parent=widget.winfo_toplevel())
 
 
 def label(parent, text="", size=12, weight="normal", color=None, **kw):
