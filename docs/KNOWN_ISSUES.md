@@ -1,34 +1,31 @@
 # Known issues and things only a person can verify
 
-Last updated at the end of Phase 3. Nothing here is hidden: if it is listed, it was not done or not verified.
+Last updated after the overnight session (Phase 4 and Part C). Nothing here is hidden: if it is listed, it was not done or not verified.
 
-## Not verified by automated tests (needs a person at a real computer)
-1. **A real webcam.** The scanner is tested with a fake camera and fake pictures (reading a code, 2-second repeat filter, unplug and
-   reconnect, "no camera", "camera in use", glare retries, releasing the camera). Nobody has yet scanned a printed sticker with a real
-   camera under real light. See the hand-test list in the final summary.
-2. **Backup and restore buttons.** The service is tested against a throwaway database with the real `mysqldump` and `mysql` programs
-   (good file, cut-short file, junk file, wrong database, failing program, restore round trip). The Browse dialogs and the pop-ups were
-   not clicked by a test.
-3. **The 15-minute inactivity logout** is tested with a fake clock (14:59 no warning, 15:01 warning, 30 seconds later logout, "Stay logged
-   in", "No" on the logout question). A real 15-minute wait was not done.
-4. **Look and feel of the paged tables** (spacing, how the page buttons look on your screen size).
+## Not verified by a person (automatic tests only)
+The full step-by-step list is `docs/HAND_TEST_CHECKLIST.md`. In short, nobody has yet:
+1. clicked through the screens (tests call the same functions the buttons call and build every screen for Staff and Admin, but do not click and cannot judge looks);
+2. scanned a printed sticker with a real webcam (tested with a fake camera);
+3. pressed the Backup / Restore buttons or used the Browse dialogs (the service is tested with the real `mysqldump` / `mysql` on throwaway databases);
+4. waited out the 15-minute inactivity logout (tested with a fake clock);
+5. opened a PDF in a viewer or printed anything (PDFs are written and read back by tests; `os.startfile` is replaced in tests);
+6. watched the Admin dashboard cards, the Verify Audit Chain button or the Anomalies tab on real data. Anomalies in particular need weeks of real use to say anything.
 
 ## Decisions and limits worth knowing
-- **Reports are paged on screen only.** A report must be computed over ALL rows (the ABC ranking, the totals, the charts and the PDF
-  need the whole set), so the database is asked once for the whole result and the screen shows 25/50/100 rows at a time.
-  Every other table (Inventory, Issuance history, Tracking logs/audit/activity/my history, the four Maintenance tables, backup
-  history) asks the database for one page at a time (`LIMIT`/`OFFSET` plus a total count).
-- **Row widgets are recycled** in every paged table. Rows are not re-created on page change; only text and colours change.
-- **Help text already stored in your database** (the guide that says "inactivity for 5 minutes") was seeded from the old built-in text
-  and is not rewritten automatically. Edit that guide once in Help > Guide (Admin), or delete it and the new built-in text is
-  re-seeded on the next start when the table is empty.
-- **`remember_config.json`** is tracked by git and changes whenever someone ticks "remember me" on the login screen. It was left alone.
-- **Restore needs every other computer logged out.** The screen says so, but nothing forces it; MySQL is replaced under their feet.
-- **`.env`** shows as modified in git. That is yours and was never staged.
-- **SQL in screens.** No screen writes to the database any more (no INSERT/UPDATE/DELETE/commit in `views/`, `dashboard.py` or
-  `main.py`). Read-only SELECTs that feed the paged tables (Inventory, Issuance history, Tracking, the Maintenance tables, a few lookups in
-  Projects/Profile/Role Management) still live in the screens and go through the shared `services.paging.fetch_page` helper; moving those
-  reads into services is a clean-up, not a safety issue.
+- **A full disk and a locked folder during PDF export are simulated** (the write is made to fail after bytes are on disk); they were not reproduced on a real disk.
+- **PDFs go to the Windows temp folder** and are opened; there is no "choose a folder" dialog.
+- **Audit chain:** makes tampering detectable, not impossible. Someone with full MySQL administrator rights can drop the triggers or the table.
+- **Reports are paged on screen only** (a report must be computed over all rows). Every other table asks the database for one page at a time.
+- **Help text already stored in your database** (the guide that says "inactivity for 5 minutes") is not rewritten automatically. Edit the guide once in Help > Guide (Admin).
+- **Restore needs every other computer logged out.** The screen says so; nothing forces it.
+- **Helper scripts in `scripts/`** (`check_db.py`, `debug_dates.py`, `import_test.py`, `migrate_db_to_lan.py`, `seed admin.py`) were not reviewed or deleted. They may connect to whatever `.env` points at; do not run them casually.
+- **SQL in screens:** screens no longer write to the database. Read-only SELECTs that feed paged tables still live in the screens (a clean-up, not a safety issue).
+- **Tests take about 10 minutes and must run serially.** The migration holds a server-wide lock; running the suite (or two copies of it) in parallel makes tests fail with "Another migration is running".
+- **The PyInstaller spec (`ChampionManagement.spec`) has never been run.**
+
+## Secrets: action needed from you
+- `.env` and `remember_config.json` are no longer tracked (they stay on your disk). **They are still in git history**, and the old `.env.example` contained the previous cloud
+  database's host and password in a comment. Rotate that password and scrub history yourself, as you said you would. History was not rewritten.
 
 ## Reverted or skipped steps
-None. Every Phase 3 step (B1 to B6) was completed and committed.
+None. Part B (Phase 4) was already committed before the overnight session; it was audited, not rebuilt. `requirements.txt` already met the brief and needed no change.

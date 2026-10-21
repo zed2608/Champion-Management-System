@@ -8,3 +8,8 @@ Start state found: branch `refactor/industrial-hardening` at ab3a49a. Phase 4 st
 | Step | Commit | Tests | Exit |
 |---|---|---|---|
 | Part A: tests + PDF/quantity fixes + checklist (Part B audited, already in git) | 7ff44ab | 501 / 501 | 0 (serial, 9m49s) |
+| Part C: README, spec, CHANGELOG, clean-install script | 2ac50a7 | 501 / 501 (no code change since) | 0 |
+| Part C: untrack .env / remember_config.json / __pycache__, .env.example placeholders | 32d65af | 501 / 501 (no code change since) | 0 |
+| Part C: delete spy.py, _test.py, scripts/fix_thread_dates.py | d5c4127 | 501 / 501 (no code change since) | 0 |
+| Part C: requirements.txt checked in a clean venv (CLEAN INSTALL OK), no change needed | - | - | - |
+| KNOWN_ISSUES, MORNING_SUMMARY | next commit | - | - |
