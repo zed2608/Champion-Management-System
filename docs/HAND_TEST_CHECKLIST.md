@@ -175,3 +175,23 @@ Legend: **Do** = exact clicks. **Expect** = what you must see. Write PASS or FAI
 | 47 | 15-minute idle logout | warning at ~14:30, logout 30 s later, "Stay Logged In" works |
 
 (10 rows; 23 + 24 and 43 + 44 are each one test in two clicks.)
+
+---
+
+## Polish branch checks (`ui/defense-polish`): only your eyes can judge these
+
+Do these on the polish branch with the **demo database** (see `docs/DEMO_SETUP.md`), not your real data. Each takes under a minute.
+
+P1. **Splash.** Start with `python scripts/run_demo.py`. *Expect:* a borderless green splash with a thin yellow progress line that fills in about 1.5 seconds, then the intro (first launch) or the login window. It must not flash a white window first.
+P2. **Intro.** On the first start: four slides; **Next ▶**, **◀ Back**, **Skip**, the arrow keys and **Esc** all work; four dots show where you are; the last button says **Done ✓**. Tick **Don't show again**, finish, restart. *Expect:* no intro. Then Help > **ℹ About** > **▶ Replay the intro** shows it again, and **Show it again at next start** brings it back on the next launch. Reading all four slides takes under 20 seconds.
+P3. **Welcome toast.** After login a small card "Welcome back, <your name>" appears at the top right, shrinks its thin timer bar and disappears by itself after about 3 seconds. *Expect:* it never covers the green **+ Add ...** button of the page and never needs a click.
+P4. **Toasts after actions.** Archive and restore a tool, update your profile, restore an archived employee. *Expect:* a green toast (not a pop-up you must click). A **destructive** action (archive, restore database, delete) still asks "Are you sure?" first.
+P5. **Hover and click feel.** Move the mouse over buttons, sidebar items, the Low Stock and Action Items cards and table rows. *Expect:* each fades smoothly (about a tenth of a second), the pointer turns into a hand, a button darkens briefly while pressed. Nothing flickers when you slide across a row or card. Leave the mouse over a sidebar item you just clicked: it stays highlighted as the active page.
+P6. **Reduced motion.** Put `CHAMPION_REDUCE_MOTION=1` in `.env`, restart. *Expect:* no fades, no count-up, no pulsing placeholders, a shorter still splash; everything still works. Remove the line to get the animations back.
+P7. **Loading placeholders.** Open Inventory, Issuance & Retrieval, Tracking. *Expect:* grey bars (gently pulsing) instead of an empty white frame for a moment, then the rows.
+P8. **KPI cards.** Admin dashboard: five cards of identical size, number on top, label below, a small grey status line, a coloured stripe on the left. Numbers count up in about 0.4 seconds when the dashboard opens or refreshes. Low Stock turns pink when something is below its minimum. Log in as Staff: four cards, no ADMIN INSIGHTS panel. All five ADMIN INSIGHTS cards (backup, audit chain, wear, recommendations, and the savings line) are still there for Admin.
+P9. **Readable from 2 metres.** Stand 2 m from the screen at the resolution you will present at. *Expect:* sidebar, card numbers, table text and the green headers are readable; grey hint text is the faintest thing and is still legible. If something is too small, note the screen and tell me.
+P10. **Every screen still reachable.** Click every sidebar item and every tab: Dashboard, Project Management, Inventory, Issuance & Retrieval (2 tabs), Tracking (3 tabs), Reports (9 tabs), Maintenance (6 tabs), Role Management, Help (5 tabs), Profile (click your name top right). *Expect:* each opens with a title, a one-line subtitle, and the primary action (**+ Add ...**) on the right where the screen has one. No overlapping or cut-off text at 1366 x 768.
+P11. **One full issue/return still works.** Issuance & Retrieval > **📤 Issue Tools** to a demo worker, then **📥 Retrieve Tools** with one **Damaged** (empty details refused, then accepted). *Expect:* the same results as before the polish (one success box, a receipt, a ticket number, quantities right in Inventory).
+P12. **Colours.** Buttons come in four looks only: green (main action), grey (secondary), text-only (quiet) and red (danger). Statuses are readable on white (no pale green or yellow text).
+P13. **Dark/light switch.** Not built (see `docs/POLISH_SUMMARY.md`): there is nothing to check.

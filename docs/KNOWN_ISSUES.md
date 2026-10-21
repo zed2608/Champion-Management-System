@@ -29,3 +29,11 @@ The full step-by-step list is `docs/HAND_TEST_CHECKLIST.md`. In short, nobody ha
 
 ## Reverted or skipped steps
 None. Part B (Phase 4) was already committed before the overnight session; it was audited, not rebuilt. `requirements.txt` already met the brief and needed no change.
+
+## Polish branch (`ui/defense-polish`)
+- **Not verified by a person:** how it looks and feels (hover fades, press effect, toast position and timing, splash and intro, count-up, skeleton placeholders, text size from 2 metres). The automated tests check colours, sizes, positions and behaviour, not taste. See "Polish branch checks" in `docs/HAND_TEST_CHECKLIST.md`.
+- **Dark/light switch not built.** Screens pass single colour strings to CustomTkinter, the PDF/receipt code and Matplotlib, so a switch would leave half the window light. The dark palette exists in `ui/theme.py` and passes the contrast check; wiring it in is a follow-up.
+- **"After" screenshots are from right after step 7**, not from the very last commit (the PC screen locked when I tried to re-capture; the black pictures were discarded). The only visual difference is the wrap width of the Recommendations card text. See `docs/screenshots/README.md`.
+- **Test flakes seen, not caused by the polish:** one full run exited silently with code 127 at 58% (passed on rerun, cause unknown); a test that compares today's date fails if a run crosses midnight (it did once; it passes alone); `test_after_jobs_are_cancelled_when_the_screen_is_destroyed` is timing-sensitive on a busy PC; and a rare Windows process crash (0x80000003) happens when Python frees a closed window's objects on a background thread. The last one is mitigated by collecting garbage on the main thread after every test (`tests/conftest.py`) and by waiting for loader threads in the screen tests; the program itself only meets this situation while closing a window mid-load.
+- **Fonts:** the old code asked for "Inter", which is not installed, so Windows used a default. Segoe UI ships with Windows, so nothing needs installing.
+- **`champion_demo` data is dated relative to the day it was built.** Rebuild it on the morning of the demo (docs/DEMO_SETUP.md, step 2).
