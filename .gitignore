@@ -33,3 +33,4 @@ demo_qr/
 .env.demo
 ui_prefs.json
 ui_prefs.json.part
+!.env.demo.example
