@@ -13,3 +13,4 @@ One line per step: step, commit, tests, exit code of the full SERIAL run. Behavi
 | 7. Dashboard tidy: KPI cards, count-up, shared chart style, Phase 4 cards kept | 7487ec4 | 559 / 559 | 0 (serial, 11m47s) |
 | 8. Dark/light switch | not built (see DOC_SYNC R2) | - | - |
 | 9. Demo seeder (c49357d) + run_demo.py + DEMO_SETUP.md | c5bfed1 | 559 / 559 | 0 (serial, 11m47s) |
+| Docs: summary, known issues, DOC_SYNC R, checklist, after-screenshots | d39966a | 559 / 559 (no code change since) | 0 |
