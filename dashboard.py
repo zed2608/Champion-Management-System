@@ -25,6 +25,7 @@ from views.reports import ReportsView
 from views.maintenance import MaintenanceView
 from views.role_management import RoleManagementView
 from views.help import HelpView
+from ui import components as C
 from ui import theme as T
 
 
@@ -129,10 +130,10 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                 self.sidebar_frame, fg_color="transparent")
             container.pack(fill="x", pady=2, padx=10)
 
-            btn = ctk.CTkButton(
-                container, text=item, anchor="w",
-                fg_color="transparent", hover_color=T.SIDEBAR_ACTIVE,
-                text_color=T.WHITE, font=T.font(14, "bold"),
+            btn = C.button(
+                container, kind="ghost", compact=True, text=item, anchor="w", text_color=T.WHITE, hover_color=T.SIDEBAR_ACTIVE, font=T.font(14, "bold"),
+                
+                
                 command=lambda m=item: self.show_frame(m)
             )
             btn.pack(side="left", fill="x", expand=True)
@@ -144,10 +145,10 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             self.nav_buttons[item] = btn
             self.nav_badges[item] = badge
 
-        ctk.CTkButton(
-            self.sidebar_frame, text="Exit", anchor="w",
-            fg_color="transparent", hover_color=T.DANGER_DARK,
-            text_color=T.WHITE, font=T.font(14, "bold"),
+        C.button(
+            self.sidebar_frame, kind="ghost", compact=True, text="Exit", anchor="w", text_color=T.WHITE, hover_color=T.DANGER_DARK, font=T.font(14, "bold"),
+            
+            
             command=self.confirm_logout
         ).pack(side="bottom", fill="x", pady=20, padx=10)
 
@@ -426,9 +427,9 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                                              font=T.font(12), text_color=T.TEXT)
         self._countdown_label.pack(pady=(10, 16))
 
-        ctk.CTkButton(dialog, text="Stay Logged In", width=160,
-                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                      font=T.font(12, "bold"),
+        C.button(dialog, kind="primary", text="Stay Logged In", width=160,
+                      
+                      
                       command=self._stay_logged_in).pack()
         self._warning_check()
 
@@ -605,8 +606,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         head = ctk.CTkFrame(panel, fg_color="transparent")
         head.pack(fill="x", padx=15, pady=(10, 0))
         ctk.CTkLabel(head, text="ADMIN INSIGHTS", font=T.font(14, "bold"), text_color=T.PRIMARY).pack(side="left")
-        ctk.CTkButton(head, text="↻ Refresh", width=80, height=24, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
-                      font=T.font(12, "bold"), command=self._load_insights).pack(side="right")
+        C.button(head, compact=True, kind="secondary", text="↻ Refresh", width=80, 
+                      command=self._load_insights).pack(side="right")
         grid = ctk.CTkFrame(panel, fg_color="transparent")
         grid.pack(fill="x", padx=10, pady=(4, 10))
         grid.grid_columnconfigure((0, 1), weight=1, uniform="ins")
@@ -620,8 +621,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             t = ctk.CTkFrame(card, fg_color="transparent")
             t.pack(fill="x", padx=12, pady=(8, 2))
             ctk.CTkLabel(t, text=title, font=T.font(12, "bold"), text_color=T.TEXT).pack(side="left")
-            ctk.CTkButton(t, text="Open", width=50, height=20, fg_color="transparent", text_color=T.INFO_TEXT, hover_color=T.INFO_BG,
-                          font=T.font(12, "bold"), command=lambda g=go: self.show_frame(g)).pack(side="right")
+            C.button(t, compact=True, kind="ghost", text="Open", width=50, text_color=T.INFO_TEXT, hover_color=T.INFO_BG, 
+                          command=lambda g=go: self.show_frame(g)).pack(side="right")
             lbl = ctk.CTkLabel(card, text="Loading...", font=T.font(12), text_color=T.TEXT_MUTED, justify="left", anchor="w", wraplength=520)
             lbl.pack(fill="x", padx=12, pady=(0, 10))
             self.ins_labels[key] = lbl

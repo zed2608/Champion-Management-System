@@ -9,6 +9,7 @@ from PIL import Image
 
 from services import validators as v
 from services.scanner import ScannerSession
+from ui import components as C
 from ui import theme as T
 
 POLL_MS = 30
@@ -34,7 +35,7 @@ class ScanDialog(ctk.CTkToplevel):
         self.video.pack(padx=20)
         self.status = ctk.CTkLabel(self, text="", font=T.font(12), text_color=T.TEXT_SECONDARY, wraplength=400, justify="left")
         self.status.pack(fill="x", padx=20, pady=8)
-        ctk.CTkButton(self, text="Cancel", fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=self.close).pack(pady=(0, 12))
+        C.button(self, kind="secondary", text="Cancel", command=self.close).pack(pady=(0, 12))
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.session = session_factory()
         self.session.start()

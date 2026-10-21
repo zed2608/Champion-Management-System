@@ -9,6 +9,7 @@ import difflib
 from services.validators import fmt_qty
 from services.errors import friendly_message
 from services import project_service as ps
+from ui import components as C
 from ui import theme as T
 
 
@@ -37,7 +38,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Project Management", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        self.page_header = C.PageHeader(top_bar, "Project Management", "Plan, approve and track every deployment",
+                                        primary=("+ Add Project", self.open_draft_project_modal) if self.is_admin else None)
+        self.page_header.pack(fill="x")
 
         self.inner = ctk.CTkFrame(self, fg_color="transparent")
         self.inner.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 20))
@@ -69,7 +72,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
         def field(label, ph):
             ctk.CTkLabel(form_card, text=label, font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
-            e = ctk.CTkEntry(form_card, placeholder_text=ph, takefocus=True)
+            e = C.field(form_card, placeholder_text=ph, takefocus=True)
             e.pack(fill="x", padx=20, pady=(5, 10))
             return e
 
@@ -90,12 +93,12 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         worker_input_row = ctk.CTkFrame(form_card, fg_color="transparent")
         worker_input_row.pack(fill="x", padx=20, pady=(5, 5))
 
-        self.worker_single_entry = ctk.CTkEntry(worker_input_row, placeholder_text="Employee ID or name...", takefocus=True)
+        self.worker_single_entry = C.field(worker_input_row, placeholder_text="Employee ID or name...", takefocus=True)
         self.worker_single_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
-        self.btn_add_worker = ctk.CTkButton(worker_input_row, text="+ Add", width=55, height=32, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=self._add_worker_from_entry)
+        self.btn_add_worker = C.button(worker_input_row, compact=True, kind="primary", text="+ Add", width=55, command=self._add_worker_from_entry)
         self.btn_add_worker.pack(side="left", padx=(0, 5))
-        self.btn_scan_worker = ctk.CTkButton(worker_input_row, text="📷 Scan", width=65, height=32, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=self.scan_worker)
+        self.btn_scan_worker = C.button(worker_input_row, compact=True, kind="primary", text="📷 Scan", width=65, command=self.scan_worker)
         self.btn_scan_worker.pack(side="left")
 
         self.worker_tags_frame = ctk.CTkScrollableFrame(
@@ -105,7 +108,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self._refresh_worker_tags()
 
         ctk.CTkLabel(form_card, text="Tools & Equipment Needed *", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
-        self.browse_btn = ctk.CTkButton(form_card, text="🔍 Browse Inventory Catalog", fg_color=T.ACCENT, text_color=T.TEXT, hover_color=T.ACCENT_HOVER, font=T.font(12, "bold"), command=self.open_tool_picker)
+        self.browse_btn = C.button(form_card, kind="secondary", text="🔍 Browse Inventory Catalog", command=self.open_tool_picker)
         self.browse_btn.pack(fill="x", padx=20, pady=(5, 10))
 
         cart_bg = ctk.CTkFrame(form_card, fg_color=T.SURFACE_ALT, corner_radius=8)
@@ -125,26 +128,26 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(start_f, text="Start Date", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
         start_input_row = ctk.CTkFrame(start_f, fg_color="transparent")
         start_input_row.pack(fill="x", pady=(5, 0))
-        self.p_start = ctk.CTkEntry(
+        self.p_start = C.field(
             start_input_row, placeholder_text="YYYY-MM-DD", takefocus=True)
         self.p_start.pack(side="left", fill="x", expand=True)
         self.p_start.bind(
             "<KeyRelease>", lambda e: self._format_date_mask(e, self.p_start))
-        ctk.CTkButton(start_input_row, text="📅", width=35, fg_color=T.BORDER, text_color=T.TEXT,
-                      hover_color=T.BORDER_STRONG, command=lambda: self.open_date_picker(self.p_start)).pack(side="left", padx=(5, 0))
+        C.button(start_input_row, kind="secondary", text="📅", width=35, 
+                      command=lambda: self.open_date_picker(self.p_start)).pack(side="left", padx=(5, 0))
 
         end_f = ctk.CTkFrame(row_dates, fg_color="transparent")
         end_f.grid(row=0, column=1, sticky="ew", padx=(5, 0))
         ctk.CTkLabel(end_f, text="End Date", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
         end_input_row = ctk.CTkFrame(end_f, fg_color="transparent")
         end_input_row.pack(fill="x", pady=(5, 0))
-        self.p_end = ctk.CTkEntry(
+        self.p_end = C.field(
             end_input_row, placeholder_text="YYYY-MM-DD", takefocus=True)
         self.p_end.pack(side="left", fill="x", expand=True)
         self.p_end.bind(
             "<KeyRelease>", lambda e: self._format_date_mask(e, self.p_end))
-        ctk.CTkButton(end_input_row, text="📅", width=35, fg_color=T.BORDER, text_color=T.TEXT,
-                      hover_color=T.BORDER_STRONG, command=lambda: self.open_date_picker(self.p_end)).pack(side="left", padx=(5, 0))
+        C.button(end_input_row, kind="secondary", text="📅", width=35, 
+                      command=lambda: self.open_date_picker(self.p_end)).pack(side="left", padx=(5, 0))
 
         self.p_name.bind("<Return>", lambda e: self.p_head.focus_set())
         self.p_head.bind("<Return>", lambda e: self.p_client.focus_set())
@@ -159,9 +162,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(20, 20))
         btn_text = "Update Project" if edit_row else ("Save & Approve (Ready for Deployment)" if self.is_admin else "Save as Draft")
-        self.btn_save = ctk.CTkButton(btn_row, text=btn_text, height=40, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(14, "bold"), command=self.save_project)
+        self.btn_save = C.button(btn_row, kind="primary", text=btn_text, command=self.save_project)
         self.btn_save.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        ctk.CTkButton(btn_row, text="Cancel", height=40, width=90, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(14, "bold"), command=self.draft_modal.destroy).pack(side="right")
+        C.button(btn_row, kind="secondary", text="Cancel", width=90, command=self.draft_modal.destroy).pack(side="right")
 
         if edit_row:
             self.editing_project_id = edit_row['project_id']
@@ -310,7 +313,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             entry_widget.insert(0, cal.get_date())
             top.destroy()
 
-        ctk.CTkButton(top, text="Confirm", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=set_date).pack(pady=(0, 10), padx=10, fill="x")
+        C.button(top, kind="primary", text="Confirm", command=set_date).pack(pady=(0, 10), padx=10, fill="x")
 
     def _add_worker_from_entry(self):
         val = self.worker_single_entry.get().strip()
@@ -364,12 +367,12 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         search_frame.pack(fill="x", padx=20, pady=(0, 5))
 
         ctk.CTkLabel(search_frame, text="Name:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
-        search_name = ctk.CTkEntry(
+        search_name = C.field(
             search_frame, placeholder_text="Item name...", width=180, takefocus=True)
         search_name.pack(side="left", padx=(5, 10))
 
         ctk.CTkLabel(search_frame, text="PID:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
-        search_pid = ctk.CTkEntry(
+        search_pid = C.field(
             search_frame, placeholder_text="Product ID...", width=100, takefocus=True)
         search_pid.pack(side="left", padx=(5, 10))
 
@@ -379,9 +382,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         def do_reset(): search_name.delete(
             0, 'end'); search_pid.delete(0, 'end'); load_catalog()
 
-        ctk.CTkButton(search_frame, text="Search", width=80, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=do_search).pack(side="left", padx=5)
-        ctk.CTkButton(search_frame, text="↻ Reset", width=80, fg_color=T.BORDER, text_color=T.TEXT,
-                      hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=do_reset).pack(side="left", padx=5)
+        C.button(search_frame, kind="primary", text="Search", width=80, command=do_search).pack(side="left", padx=5)
+        C.button(search_frame, kind="secondary", text="↻ Reset", width=80, 
+                      command=do_reset).pack(side="left", padx=5)
 
         search_name.bind("<Return>", lambda e: do_search())
         search_pid.bind("<Return>", lambda e: do_search())
@@ -474,8 +477,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                     inp_cell = ctk.CTkFrame(
                         cat_inner, fg_color=bg, corner_radius=0)
                     inp_cell.grid(row=r_idx, column=5, sticky="nsew")
-                    qty_entry = ctk.CTkEntry(
-                        inp_cell, width=55, height=26, justify="center")
+                    qty_entry = C.field(
+                        inp_cell, width=55, justify="center")
                     # pack(expand=True) forces it into dead center of the cell
                     qty_entry.pack(expand=True, pady=10)
                     qty_entry.bind("<Return>", lambda e, r=row,
@@ -484,7 +487,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                     btn_cell = ctk.CTkFrame(
                         cat_inner, fg_color=bg, corner_radius=0)
                     btn_cell.grid(row=r_idx, column=6, sticky="nsew")
-                    btn = ctk.CTkButton(btn_cell, text="+ Add", width=55, height=26, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda r=row, q_e=qty_entry: self.add_from_catalog(r, q_e, modal))
+                    btn = C.button(btn_cell, compact=True, kind="primary", text="+ Add", width=55, command=lambda r=row, q_e=qty_entry: self.add_from_catalog(r, q_e, modal))
                     # Perfectly centered inside cell
                     btn.pack(expand=True, pady=10)
 
@@ -497,8 +500,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                     conn.close()
 
         load_catalog()
-        ctk.CTkButton(modal, text="Done / Close Catalog", height=35, fg_color=T.BORDER, text_color=T.TEXT,
-                      hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=modal.destroy).pack(pady=(5, 15))
+        C.button(modal, kind="secondary", text="Done / Close Catalog", 
+                      command=modal.destroy).pack(pady=(5, 15))
 
     def add_from_catalog(self, row_data, qty_entry, modal):
         try:
@@ -702,7 +705,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(top, text="Project Deployment Plans", font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         self.proj_search_var = ctk.StringVar()
-        self.proj_search = ctk.CTkEntry(top, placeholder_text="Search project or client...", width=250, takefocus=True, textvariable=self.proj_search_var)
+        self.proj_search = C.field(top, placeholder_text="Search project or client...", width=250, takefocus=True, textvariable=self.proj_search_var)
         self.proj_search.pack(side="right", padx=(5, 0))
 
         self._proj_search_timer = None
@@ -711,9 +714,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             self._proj_search_timer = self.after(300, lambda: self.load_projects(self.proj_search.get().strip()))
         self.proj_search_var.trace_add("write", on_proj_search)
         
-        if self.is_admin:
-            ctk.CTkButton(top, text="+ Add Project", width=140, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=self.open_draft_project_modal).pack(side="right", padx=(10, 5))
-        else:
+        if not self.is_admin:
             ctk.CTkLabel(top, text="View only: ask an administrator to create or change projects.", font=T.font(12, "italic"),
                          text_color=T.TEXT_MUTED).pack(side="right", padx=(10, 10))
 
@@ -818,7 +819,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                 btn_color=T.INFO if row['status'] == 'Pending' else T.BORDER_STRONG
                 btn_text = "Review" if row['status'] == 'Pending' else "View"
                 
-                btn = ctk.CTkButton(btn_cell, text=btn_text, width=65, height=28, fg_color=btn_color, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda r=row: self.open_project_modal(r))
+                btn = ctk.CTkButton(btn_cell, text=btn_text, width=65, height=28, fg_color=btn_color, text_color=T.ON_INFO if row['status'] == 'Pending' else T.TEXT,
+                                    hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda r=row: self.open_project_modal(r))
                 # expand=True forces the button perfectly into the horizontal and vertical center
                 btn.pack(expand=True, pady=10)
 
@@ -935,26 +937,26 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
         raw_status = row['status'].replace(' (OVERDUE)', '')
         if raw_status in ['Pending', 'Approved'] and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Edit Project", width=90, fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER, text_color=T.TEXT, font=T.font(12, "bold"), command=trigger_edit_mode).pack(side="left", padx=5)
+            C.button(btn_frame, kind="secondary", text="Edit Project", width=90, command=trigger_edit_mode).pack(side="left", padx=5)
             
         if raw_status == 'Pending' and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Ready for Deployment", fg_color=T.SUCCESS, hover_color=T.SUCCESS_DARK, text_color=T.TEXT, font=T.font(12, "bold"), command=lambda: update_proj_status('Approved')).pack(side="left", padx=5)
+            C.button(btn_frame, kind="primary", text="Ready for Deployment", command=lambda: update_proj_status('Approved')).pack(side="left", padx=5)
             
         if raw_status == 'Approved' and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Deploy / Mark Ongoing", fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: update_proj_status('Ongoing')).pack(side="left", padx=5)
+            C.button(btn_frame, kind="primary", text="Deploy / Mark Ongoing", command=lambda: update_proj_status('Ongoing')).pack(side="left", padx=5)
             
         if raw_status == 'Ongoing' and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Complete Project", fg_color=T.SUCCESS_DARK, hover_color=T.SUCCESS_DARK, font=T.font(12, "bold"), command=lambda: update_proj_status('Completed')).pack(side="left", padx=5)
+            C.button(btn_frame, kind="primary", text="Complete Project", command=lambda: update_proj_status('Completed')).pack(side="left", padx=5)
             
         if raw_status in ['Pending', 'Approved', 'Ongoing'] and self.is_admin:
             btn_text = "Decline Project" if raw_status == 'Pending' else "Cancel Project"
             cmd_status = "Declined" if raw_status == 'Pending' else "Cancelled"
-            ctk.CTkButton(btn_frame, text=btn_text, fg_color=T.DANGER_SOFT, hover_color=T.DANGER_HOVER, font=T.font(12, "bold"), command=lambda s=cmd_status: update_proj_status(s)).pack(side="left", padx=5)
+            C.button(btn_frame, kind="danger", text=btn_text, command=lambda s=cmd_status: update_proj_status(s)).pack(side="left", padx=5)
             
         if raw_status in ['Completed', 'Declined', 'Cancelled'] and self.is_admin:
-            ctk.CTkButton(btn_frame, text="Archive", fg_color=T.TEXT_MUTED, hover_color=T.TEXT_MUTED, font=T.font(12, "bold"), command=lambda: self.archive_project(row['project_id'], row['name'], modal, raw_status)).pack(side="left", padx=5)
+            C.button(btn_frame, kind="secondary", text="Archive", command=lambda: self.archive_project(row['project_id'], row['name'], modal, raw_status)).pack(side="left", padx=5)
             
-        ctk.CTkButton(btn_frame, text="Close", width=70, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=modal.destroy).pack(side="right", padx=5)
+        C.button(btn_frame, kind="secondary", text="Close", width=70, command=modal.destroy).pack(side="right", padx=5)
 
     def archive_project(self, project_id, project_name, modal, current_status=None):
         if not messagebox.askyesno("Confirm Archive", f"Archive project '{project_name}' to the archive vault?\n\nIt will be moved to Maintenance > Archived Projects.", parent=modal):

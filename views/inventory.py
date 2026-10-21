@@ -17,6 +17,7 @@ from services.paging import fetch_page
 from services.validators import like_pattern
 from views.paged_table import PagedTable
 from services import inventory_service as inv_svc
+from ui import components as C
 from ui import theme as T
 
 
@@ -45,7 +46,10 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Inventory Catalog", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        is_staff = self.user_info.get("role", "").lower() == "staff"
+        self.page_header = C.PageHeader(top_bar, "Inventory Catalog", "Every tool and consumable: stock, tags and condition",
+                                        primary=None if is_staff else ("+ Add New Item", self.open_add_item_modal))
+        self.page_header.pack(fill="x")
 
     def open_add_item_modal(self):
         self.add_modal = ctk.CTkToplevel(self)
@@ -88,12 +92,12 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(form_card, text="💡 Consumables (e.g. boxes of nails) support fractional returns. (e.g., return 0.5 for half box).", font=T.font(12), text_color=T.TEXT_MUTED, justify="left", wraplength=300).pack(anchor="w", padx=20, pady=(0, 10))
 
         ctk.CTkLabel(form_card, text="Product Name *", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
-        self.name_entry = ctk.CTkEntry(
+        self.name_entry = C.field(
             form_card, placeholder_text="e.g., #2 Nails (Box)")
         self.name_entry.pack(fill="x", padx=20, pady=(5, 10))
 
         ctk.CTkLabel(form_card, text="Description", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
-        self.desc_entry = ctk.CTkEntry(
+        self.desc_entry = C.field(
             form_card, placeholder_text="Brief details about the item...")
         self.desc_entry.pack(fill="x", padx=20, pady=(5, 10))
 
@@ -115,19 +119,19 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         p_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
         p_frame.grid(row=0, column=0, sticky="ew", padx=(0, 5))
         ctk.CTkLabel(p_frame, text="Price", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
-        self.price_entry = ctk.CTkEntry(
-            p_frame, placeholder_text="0.00", height=36)
+        self.price_entry = C.field(
+            p_frame, placeholder_text="0.00")
         self.price_entry.pack(fill="x", pady=(5, 0))
 
         q_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
         q_frame.grid(row=0, column=1, sticky="ew", padx=(5, 0))
         ctk.CTkLabel(q_frame, text="Quantity *", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
-        self.qty_entry = ctk.CTkEntry(q_frame, placeholder_text="0", height=36)
+        self.qty_entry = C.field(q_frame, placeholder_text="0")
         self.qty_entry.pack(fill="x", pady=(5, 0))
 
         ctk.CTkLabel(form_card, text="Storage Location", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
-        self.loc_entry = ctk.CTkEntry(
-            form_card, placeholder_text="e.g., Shelf A1", height=36)
+        self.loc_entry = C.field(
+            form_card, placeholder_text="e.g., Shelf A1")
         self.loc_entry.pack(fill="x", padx=20, pady=(5, 20))
 
         self.name_entry.bind("<Return>", lambda e: self.desc_entry.focus_set())
@@ -141,8 +145,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         btn_row.pack(fill="x", padx=20, pady=(10, 20))
         btn_row.grid_columnconfigure((0, 1), weight=1)
 
-        ctk.CTkButton(btn_row, text="Save Item", height=40, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(14, "bold"), command=self.validate_and_save).grid(row=0, column=0, padx=(0, 5), sticky="ew")
-        ctk.CTkButton(btn_row, text="Cancel", height=40, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(14, "bold"), command=self.add_modal.destroy).grid(row=0, column=1, padx=(5, 0), sticky="ew")
+        C.button(btn_row, kind="primary", text="Save Item", command=self.validate_and_save).grid(row=0, column=0, padx=(0, 5), sticky="ew")
+        C.button(btn_row, kind="secondary", text="Cancel", command=self.add_modal.destroy).grid(row=0, column=1, padx=(5, 0), sticky="ew")
 
         self.name_entry.focus_set()
         self.load_dynamic_dropdowns()
@@ -189,8 +193,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         search_frame.pack(fill="x", padx=20, pady=(20, 10))
 
         self.search_var = ctk.StringVar()
-        self.search_entry = ctk.CTkEntry(
-            search_frame, placeholder_text="Universal search (Name, Tag, ID, Supplier, Loc, Desc)...", width=350, height=38, textvariable=self.search_var)
+        self.search_entry = C.field(
+            search_frame, placeholder_text="Search name, tag, supplier, location...", width=350, textvariable=self.search_var)
         self.search_entry.pack(side="left", padx=(0, 10))
 
         self._search_timer = None
@@ -206,20 +210,16 @@ class InventoryView(UiMixin, ctk.CTkFrame):
 
         is_staff = self.user_info.get("role", "").lower() == "staff"
 
-        if not is_staff:
-            ctk.CTkButton(search_frame, text="+ Add New Item", width=120, height=38, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                          font=T.font(12, "bold"), command=self.open_add_item_modal).pack(side="right", padx=(10, 0))
-            
-        ctk.CTkButton(search_frame, text="📷 Scan & Test QR", width=140, height=38, fg_color=T.PURPLE, hover_color=T.PURPLE_HOVER, 
-                      font=T.font(12, "bold"), command=self.open_test_scanner).pack(side="right", padx=(10, 0))
+        C.button(search_frame, kind="secondary", text="📷 Scan & Test QR", width=140, 
+                      command=self.open_test_scanner).pack(side="right", padx=(10, 0))
         
-        self.batch_print_btn = ctk.CTkButton(search_frame, text="⎙ Batch Print Tags", width=140, height=38, fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER, text_color=T.TEXT, font=T.font(12, "bold"), command=self.execute_batch_print)
+        self.batch_print_btn = C.button(search_frame, kind="secondary", text="⎙ Batch Print Tags", width=140, command=self.execute_batch_print)
         self.batch_print_btn.pack(side="right", padx=(10, 0))
 
         hint_text = ("💡 Click a row to View  ·  tick ☑ tagged items, then Batch Print Tags" if is_staff
                      else "💡 Click a row to View/Edit  ·  tick ☑ tagged items, then Batch Print Tags")
-        ctk.CTkLabel(search_frame, text=hint_text,
-                     font=T.font(12, "italic"), text_color=T.TEXT_MUTED).pack(side="right", padx=10)
+        ctk.CTkLabel(table_card, text=hint_text,
+                     font=T.font(12, "italic"), text_color=T.TEXT_MUTED).pack(anchor="w", padx=22)
 
         self.data_scroll = ctk.CTkScrollableFrame(
             table_card, fg_color="transparent")
@@ -614,7 +614,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             frame = ctk.CTkFrame(parent, fg_color="transparent")
             frame.pack(fill="x", pady=4)
             ctk.CTkLabel(frame, text=label, width=90, anchor="w", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
-            entry = ctk.CTkEntry(frame)
+            entry = C.field(frame)
             entry.pack(side="left", fill="x", expand=True)
             entry.insert(0, str(value) if value else "")
             return entry
@@ -677,7 +677,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         tag_row = ctk.CTkFrame(form_scroll, fg_color="transparent")
         tag_row.pack(fill="x", pady=4)
         ctk.CTkLabel(tag_row, text="Tag ID", width=90, anchor="w", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
-        tag_entry = ctk.CTkEntry(tag_row)
+        tag_entry = C.field(tag_row)
         tag_entry.pack(side="left", fill="x", expand=True)
         current_tag = data.get('tag_id') or ''
         tag_entry.insert(0, current_tag)
@@ -696,8 +696,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             update_preview()
 
         if not is_staff_modal or staff_can_tag:
-            ctk.CTkButton(tag_row, text="↻ Auto-Gen", width=80, fg_color=T.ACCENT, text_color=T.TEXT,
-                          hover_color=T.ACCENT_HOVER, font=T.font(12, "bold"), command=generate_smart_tag).pack(side="left", padx=(5, 0))
+            C.button(tag_row, kind="secondary", text="↻ Auto-Gen", width=80, 
+                          command=generate_smart_tag).pack(side="left", padx=(5, 0))
 
         def save_tag():
             new_tag = tag_entry.get().strip()
@@ -737,11 +737,11 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         if not is_staff_modal or staff_can_tag:
             tag_btn_row = ctk.CTkFrame(form_scroll, fg_color="transparent")
             tag_btn_row.pack(fill="x", pady=10)
-            tag_ui["save_btn"] = ctk.CTkButton(tag_btn_row, text="Save Tag Link", width=120, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=save_tag)
+            tag_ui["save_btn"] = C.button(tag_btn_row, kind="primary", text="Save Tag Link", width=120, command=save_tag)
             tag_ui["save_btn"].pack(side="left", expand=True, fill="x", padx=(0, 5))
             if not is_staff_modal:                               # unlinking is Admin only
-                ctk.CTkButton(tag_btn_row, text="Unlink Current Tag", width=120, fg_color=T.SURFACE, border_width=1, border_color=T.DANGER, text_color=T.DANGER_TEXT,
-                              hover_color=T.DANGER_BORDER, font=T.font(12, "bold"), command=unlink_tag).pack(side="right", expand=True, fill="x", padx=(5, 0))
+                C.button(tag_btn_row, kind="secondary", text="Unlink Current Tag", width=120, border_width=1, border_color=T.DANGER, 
+                              command=unlink_tag).pack(side="right", expand=True, fill="x", padx=(5, 0))
         elif is_staff_modal and current_tag:
             ctk.CTkLabel(form_scroll, text="This tool already has a tag. Only an administrator can change or remove it. You can still print it.",
                          font=T.font(12), text_color=T.TEXT_MUTED, justify="left", wraplength=450).pack(anchor="w", pady=(0, 5))
@@ -829,7 +829,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                     "Print Error", f"Failed to generate document.\n{e}", parent=modal)
                 modal.attributes("-topmost", True)
 
-        ctk.CTkButton(preview_frame, text="⎙ Generate Print File", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=execute_print).pack(pady=(5, 10))
+        C.button(preview_frame, kind="primary", text="⎙ Generate Print File", command=execute_print).pack(pady=(5, 10))
         # --- END TAGGING SECTION ---
 
         def execute_update():
@@ -909,12 +909,12 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             uom_menu.configure(state="disabled")
             status_menu.configure(state="disabled")
         else:
-            ctk.CTkButton(btn_row, text="Update", fg_color=T.ACCENT, text_color=T.TEXT, hover_color=T.ACCENT_HOVER, font=T.font(12, "bold"), command=execute_update).pack(side="left", padx=5)
+            C.button(btn_row, kind="secondary", text="Update", command=execute_update).pack(side="left", padx=5)
 
             arch_btn_text = "Restore" if is_arch else "Archive"
             ctk.CTkButton(btn_row, text=arch_btn_text, fg_color=T.WARNING_BORDER, text_color=T.TEXT, hover_color=T.WARNING_BORDER, font=T.font(12, "bold"), command=execute_archive).pack(side="left", padx=5)
 
-        ctk.CTkButton(btn_row, text="Close", fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=modal.destroy).pack(side="right", padx=5)
+        C.button(btn_row, kind="secondary", text="Close", command=modal.destroy).pack(side="right", padx=5)
 
     def clear_form(self):
         self.type_menu.set("Equipment")

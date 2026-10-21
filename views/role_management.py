@@ -12,6 +12,7 @@ import re
 import difflib
 from services.errors import friendly_message
 from services import user_service
+from ui import components as C
 from ui import theme as T
 
 
@@ -22,13 +23,16 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
 
         self.user_info = user_info or {}
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=0)
+        self.grid_rowconfigure(1, weight=1)
 
         self.build_ui()
 
     def build_ui(self):
+        C.PageHeader(self, "Role Management", "Register staff and workers, and control who can sign in",
+                     primary=("+ Register New User", self.open_register_modal)).grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
         self.inner = ctk.CTkFrame(self, fg_color="transparent")
-        self.inner.grid(row=0, column=0, sticky="nsew")
+        self.inner.grid(row=1, column=0, sticky="nsew")
         self.inner.grid_columnconfigure(0, weight=1)
         self.inner.grid_rowconfigure(0, weight=1)
 
@@ -106,13 +110,12 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                          font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
             pass_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
             pass_row.pack(fill="x", padx=20, pady=(5, 4))
-            self.reg_pass = ctk.CTkEntry(pass_row, placeholder_text="Min. 8 characters", show="•")
+            self.reg_pass = C.field(pass_row, placeholder_text="Min. 8 characters", show="•")
             self.reg_pass.pack(side="left", fill="x", expand=True, padx=(0, 5))
             self._show_pass = False
-            eye_pass = ctk.CTkButton(pass_row, text="👁", width=38, height=38,
-                                     fg_color=T.SURFACE_MUTED, text_color=T.TEXT_SECONDARY,
-                                     hover_color=T.BORDER, corner_radius=6,
-                                     font=T.font(14))
+            eye_pass = C.button(pass_row, kind="secondary", text="👁", width=38, 
+                                     
+                                     corner_radius=6)
             eye_pass.pack(side="left")
 
             def _toggle_pass():
@@ -150,13 +153,12 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                          font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
             confirm_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
             confirm_row.pack(fill="x", padx=20, pady=(5, 10))
-            self.reg_confirm = ctk.CTkEntry(confirm_row, placeholder_text="Re-enter password", show="•")
+            self.reg_confirm = C.field(confirm_row, placeholder_text="Re-enter password", show="•")
             self.reg_confirm.pack(side="left", fill="x", expand=True, padx=(0, 5))
             self._show_confirm = False
-            eye_confirm = ctk.CTkButton(confirm_row, text="👁", width=38, height=38,
-                                        fg_color=T.SURFACE_MUTED, text_color=T.TEXT_SECONDARY,
-                                        hover_color=T.BORDER, corner_radius=6,
-                                        font=T.font(14))
+            eye_confirm = C.button(confirm_row, kind="secondary", text="👁", width=38, 
+                                        
+                                        corner_radius=6)
             eye_confirm.pack(side="left")
 
             def _toggle_confirm():
@@ -168,13 +170,13 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         btn_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(15, 20))
         btn_row.grid_columnconfigure((0, 1), weight=1)
-        ctk.CTkButton(btn_row, text="Register", height=40,
-                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                      font=T.font(14, "bold"),
+        C.button(btn_row, kind="primary", text="Register", 
+                      
+                      
                       command=self.execute_register).grid(row=0, column=0, padx=(0, 5), sticky="ew")
-        ctk.CTkButton(btn_row, text="Cancel", height=40,
-                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
-                      font=T.font(14, "bold"),
+        C.button(btn_row, kind="secondary", text="Cancel", 
+                      
+                      
                       command=self.reg_modal.destroy).grid(row=0, column=1, padx=(5, 0), sticky="ew")
 
     def _on_reg_role_change(self, role):
@@ -241,7 +243,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         self.user_search_var = ctk.StringVar()
-        self.user_search = ctk.CTkEntry(
+        self.user_search = C.field(
             top, placeholder_text="Search name or ID...", width=200, textvariable=self.user_search_var)
         self.user_search.pack(side="right", padx=(5, 0))
         
@@ -251,7 +253,6 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
             self._user_search_timer = self.after(300, self.load_user_table)
         self.user_search_var.trace_add("write", on_user_search)
                                        
-        ctk.CTkButton(top, text="+ Register New User", width=150, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=self.open_register_modal).pack(side="right", padx=(10, 5))
 
         self.user_scroll = ctk.CTkScrollableFrame(
             table_card, fg_color="transparent")
@@ -345,14 +346,14 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 action_frame = ctk.CTkFrame(btn_cell, fg_color="transparent")
                 action_frame.pack(expand=True, pady=6)
                 
-                ctk.CTkButton(action_frame, text="Edit", width=56, height=28,
-                              fg_color=T.ACCENT, text_color=T.TEXT,
-                              hover_color=T.ACCENT_HOVER, font=T.font(12, "bold"),
+                C.button(action_frame, compact=True, kind="secondary", text="Edit", width=56, 
+                              
+                              
                               command=lambda r=row: self.open_edit_modal(r)).pack(side="left", padx=(0, 4))
                               
-                ctk.CTkButton(action_frame, text="🔖 Badge", width=80, height=28,
-                              fg_color=T.INFO, text_color=T.WHITE,
-                              hover_color=T.INFO_HOVER, font=T.font(12, "bold"),
+                C.button(action_frame, compact=True, kind="primary", text="🔖 Badge", width=80, 
+                              
+                              
                               command=lambda r=row: self.print_user_badge(r)).pack(side="left", padx=(0, 4))
                               
                 ctk.CTkButton(action_frame, text="Archive", width=56, height=28,
@@ -413,7 +414,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         def make_field(lbl, val):
             ctk.CTkLabel(form, text=lbl, font=T.font(12, "bold"),
                          text_color=T.TEXT).pack(anchor="w")
-            e = ctk.CTkEntry(form, height=35)
+            e = C.field(form)
             e.insert(0, val)
             e.pack(fill="x", pady=(4, 10))
             return e
@@ -449,15 +450,14 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 pass_row = ctk.CTkFrame(pass_section, fg_color="transparent")
                 pass_row.pack(fill="x", pady=(4, 5))
                 
-                e = ctk.CTkEntry(pass_row, placeholder_text="Optional new password",
-                                 show="•", height=35)
+                e = C.field(pass_row, placeholder_text="Optional new password",
+                                 show="•")
                 e.pack(side="left", fill="x", expand=True, padx=(0, 5))
                 
                 show_pwd_state = [False]
-                eye_btn = ctk.CTkButton(pass_row, text="👁", width=38, height=35,
-                                        fg_color=T.SURFACE_MUTED, text_color=T.TEXT_SECONDARY,
-                                        hover_color=T.BORDER, corner_radius=6,
-                                        font=T.font(14))
+                eye_btn = C.button(pass_row, kind="secondary", text="👁", width=38, 
+                                        
+                                        corner_radius=6)
                 eye_btn.pack(side="left")
                 
                 def _toggle_edit_pass():
@@ -497,14 +497,13 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 ctk.CTkLabel(pass_section, text="Confirm New Password", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
                 conf_row = ctk.CTkFrame(pass_section, fg_color="transparent")
                 conf_row.pack(fill="x", pady=(4, 15))
-                conf_e = ctk.CTkEntry(conf_row, placeholder_text="Re-enter new password", show="•", height=35)
+                conf_e = C.field(conf_row, placeholder_text="Re-enter new password", show="•")
                 conf_e.pack(side="left", fill="x", expand=True, padx=(0, 5))
                 
                 show_conf_state = [False]
-                eye_conf_btn = ctk.CTkButton(conf_row, text="👁", width=38, height=35,
-                                        fg_color=T.SURFACE_MUTED, text_color=T.TEXT_SECONDARY,
-                                        hover_color=T.BORDER, corner_radius=6,
-                                        font=T.font(14))
+                eye_conf_btn = C.button(conf_row, kind="secondary", text="👁", width=38, 
+                                        
+                                        corner_radius=6)
                 eye_conf_btn.pack(side="left")
                 
                 def _toggle_conf_pass():
@@ -563,11 +562,11 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=30, pady=(5, 20))
-        ctk.CTkButton(btn_row, text="Save Changes", height=38,
-                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+        C.button(btn_row, kind="primary", text="Save Changes", 
+                      
                       command=save_edit).pack(side="left", padx=(0, 10), fill="x", expand=True)
-        ctk.CTkButton(btn_row, text="Cancel", height=38,
-                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
+        C.button(btn_row, kind="secondary", text="Cancel", 
+                      
                       command=modal.destroy).pack(side="right", padx=(10, 0), fill="x", expand=True)
 
     def print_user_badge(self, row):

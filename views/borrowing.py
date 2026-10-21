@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta, date as _date
 import calendar as _cal
 import threading
+from ui import components as C
 from ui import theme as T
 
 def _fmt_qty(x) -> str:
@@ -53,7 +54,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Issuance & Retrieval", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        C.PageHeader(top_bar, "Issuance & Retrieval", "Issue tools to workers and take them back").pack(side="left")
 
         tabs = ["📋 Deployment History", "📅 Deployment Schedule"]
         self.tab_var = ctk.StringVar(value="📋 Deployment History")
@@ -152,23 +153,23 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         nav = ctk.CTkFrame(card, fg_color="transparent")
         nav.pack(fill="x", padx=20, pady=(20, 8))
 
-        ctk.CTkButton(nav, text="◀", width=34, height=34,
-                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
-                      font=T.font(14, "bold"),
+        C.button(nav, kind="secondary", text="◀", width=34, 
+                      
+                      
                       command=self._cal_prev).pack(side="left")
 
         month_label = datetime(self._cal_year, self._cal_month, 1).strftime("%B  %Y")
         ctk.CTkLabel(nav, text=month_label,
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left", padx=14)
 
-        ctk.CTkButton(nav, text="▶", width=34, height=34,
-                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
-                      font=T.font(14, "bold"),
+        C.button(nav, kind="secondary", text="▶", width=34, 
+                      
+                      
                       command=self._cal_next).pack(side="left")
 
-        ctk.CTkButton(nav, text="Today", width=74, height=34,
-                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                      font=T.font(12, "bold"),
+        C.button(nav, kind="primary", text="Today", width=74, 
+                      
+                      
                       command=self._cal_goto_today).pack(side="right")
 
         # ── Legend ──────────────────────────────────────────────
@@ -322,9 +323,9 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             ctk.CTkLabel(pcard, text=p["status"],
                          font=T.font(12, "bold"), text_color=color).pack(anchor="w", padx=10, pady=(2, 4))
             if self.navigate_to:
-                ctk.CTkButton(pcard, text="→ View Project", width=120, height=26,
-                              fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                              font=T.font(12, "bold"),
+                C.button(pcard, compact=True, kind="primary", text="→ View Project", width=120, 
+                              
+                              
                               command=lambda pid=p["project_id"]: self.navigate_to(pid)
                               ).pack(anchor="w", padx=10, pady=(0, 8))
 
@@ -383,10 +384,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(form_card, text="1. Assignee ID (Employee ID)", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         b_emp_row = ctk.CTkFrame(form_card, fg_color="transparent")
         b_emp_row.pack(fill="x", padx=20, pady=(5, 5))
-        self.b_emp_id = ctk.CTkEntry(b_emp_row, placeholder_text="Scan ID & Press Enter...")
+        self.b_emp_id = C.field(b_emp_row, placeholder_text="Scan ID & Press Enter...")
         self.b_emp_id.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.b_emp_id.bind("<Return>", lambda e: self.verify_borrower())
-        ctk.CTkButton(b_emp_row, text="📷 Scan", width=65, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: self.open_scanner(self.b_emp_id, self.verify_borrower)).pack(side="left")
+        C.button(b_emp_row, kind="primary", text="📷 Scan", width=65, command=lambda: self.open_scanner(self.b_emp_id, self.verify_borrower)).pack(side="left")
         
         self.b_user_name = ctk.CTkLabel(form_card, text="Name: Pending Scan...", font=T.font(12), text_color=T.TEXT_MUTED)
         self.b_user_name.pack(anchor="w", padx=20, pady=(0, 15))
@@ -402,20 +403,20 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(form_card, text="3. Scan Required Tools", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         b_tag_row = ctk.CTkFrame(form_card, fg_color="transparent")
         b_tag_row.pack(fill="x", padx=20, pady=(5, 5))
-        self.b_tag_id = ctk.CTkEntry(b_tag_row, placeholder_text="Scan Tool Tag & Press Enter...", state="disabled") 
+        self.b_tag_id = C.field(b_tag_row, placeholder_text="Scan Tool Tag & Press Enter...", state="disabled") 
         self.b_tag_id.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.b_tag_id.bind("<Return>", lambda e: self.add_tool_to_cart())
-        self.b_scan_btn = ctk.CTkButton(b_tag_row, text="📷 Scan", width=65, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: self.open_scanner(self.b_tag_id, self.add_tool_to_cart), state="disabled")
+        self.b_scan_btn = C.button(b_tag_row, kind="primary", text="📷 Scan", width=65, command=lambda: self.open_scanner(self.b_tag_id, self.add_tool_to_cart), state="disabled")
         self.b_scan_btn.pack(side="left")
 
         self.cart_frame = ctk.CTkScrollableFrame(form_card, fg_color=T.SURFACE_ALT, height=120, corner_radius=5)
         self.cart_frame.pack(fill="x", padx=20, pady=(10, 20))
         self.refresh_cart_ui() 
 
-        ctk.CTkButton(form_card, text="Issue Tools & Print Receipt", height=40, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(14, "bold"), command=self.execute_borrow).pack(fill="x", padx=20, pady=(0, 20))
+        C.button(form_card, kind="primary", text="Issue Tools & Print Receipt", command=self.execute_borrow).pack(fill="x", padx=20, pady=(0, 20))
         btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(0, 20))
-        ctk.CTkButton(btn_row, text="Cancel", height=40, width=80, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=self.issuance_modal.destroy).pack(side="right")
+        C.button(btn_row, kind="secondary", text="Cancel", width=80, command=self.issuance_modal.destroy).pack(side="right")
         
         self.active_borrow_user_id = None
         self.active_borrow_user_name = None
@@ -447,10 +448,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(form_card, text="1. Surrendering Employee ID", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         r_emp_row = ctk.CTkFrame(form_card, fg_color="transparent")
         r_emp_row.pack(fill="x", padx=20, pady=(5, 5))
-        self.r_emp_id = ctk.CTkEntry(r_emp_row, placeholder_text="Scan ID & Press Enter...")
+        self.r_emp_id = C.field(r_emp_row, placeholder_text="Scan ID & Press Enter...")
         self.r_emp_id.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.r_emp_id.bind("<Return>", lambda e: self.verify_return_employee())
-        ctk.CTkButton(r_emp_row, text="📷 Scan", width=65, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: self.open_scanner(self.r_emp_id, self.verify_return_employee)).pack(side="left")
+        C.button(r_emp_row, kind="primary", text="📷 Scan", width=65, command=lambda: self.open_scanner(self.r_emp_id, self.verify_return_employee)).pack(side="left")
 
         self.r_user_name = ctk.CTkLabel(form_card, text="Name: Pending Scan...", font=T.font(12), text_color=T.TEXT_MUTED)
         self.r_user_name.pack(anchor="w", padx=20, pady=(0, 15))
@@ -458,10 +459,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(form_card, text="2. Tag ID or Receipt TRN (e.g., TRN-42)", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         r_tag_row = ctk.CTkFrame(form_card, fg_color="transparent")
         r_tag_row.pack(fill="x", padx=20, pady=(5, 5))
-        self.r_tag_id = ctk.CTkEntry(r_tag_row, placeholder_text="Scan Tag or enter TRN...")
+        self.r_tag_id = C.field(r_tag_row, placeholder_text="Scan Tag or enter TRN...")
         self.r_tag_id.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.r_tag_id.bind("<Return>", lambda e: self.verify_tool_for_return())
-        ctk.CTkButton(r_tag_row, text="📷 Scan", width=65, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda: self.open_scanner(self.r_tag_id, self.verify_tool_for_return)).pack(side="left")
+        C.button(r_tag_row, kind="primary", text="📷 Scan", width=65, command=lambda: self.open_scanner(self.r_tag_id, self.verify_tool_for_return)).pack(side="left")
 
         self.r_record_info = ctk.CTkLabel(form_card, text="Record: Pending Scan...", font=T.font(12), text_color=T.TEXT_MUTED, justify="left")
         self.r_record_info.pack(anchor="w", padx=20, pady=(0, 15))
@@ -483,14 +484,14 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         q_frame = ctk.CTkFrame(cond_qty_row, fg_color="transparent")
         q_frame.grid(row=0, column=1, sticky="ew", padx=(5, 0))
         ctk.CTkLabel(q_frame, text="Qty", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
-        self.r_qty = ctk.CTkEntry(q_frame, placeholder_text="1")
+        self.r_qty = C.field(q_frame, placeholder_text="1")
         self.r_qty.pack(fill="x", pady=(5, 0))
         self.r_qty.insert(0, "1")
 
-        ctk.CTkButton(form_card, text="Confirm Retrieval & Restock", height=40, fg_color=T.ACCENT, text_color=T.TEXT, hover_color=T.ACCENT_HOVER, font=T.font(14, "bold"), command=self.execute_return).pack(fill="x", padx=20, pady=(0, 20))
+        C.button(form_card, kind="secondary", text="Confirm Retrieval & Restock", command=self.execute_return).pack(fill="x", padx=20, pady=(0, 20))
         btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(10, 20))
-        ctk.CTkButton(btn_row, text="Cancel", height=40, width=80, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=self.retrieval_modal.destroy).pack(side="right")
+        C.button(btn_row, kind="secondary", text="Cancel", width=80, command=self.retrieval_modal.destroy).pack(side="right")
         
         self.active_return_user_id = None
         self.active_return_tool_id = None
@@ -515,7 +516,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
                      font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w")
 
         self.search_var = ctk.StringVar()
-        self.search_entry = ctk.CTkEntry(top_bar, placeholder_text="Search Name or Tag...", width=200, textvariable=self.search_var)
+        self.search_entry = C.field(top_bar, placeholder_text="Search Name or Tag...", width=200, textvariable=self.search_var)
         self.search_entry.pack(side="right", padx=(10, 0))
         
         self._search_timer = None
@@ -528,8 +529,8 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.history_filter = ctk.CTkOptionMenu(top_bar, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Retrieved", "Overdue", "A-Z (Item)"], width=160, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.load_transaction_history())
         self.history_filter.pack(side="right", padx=(10, 5))
 
-        ctk.CTkButton(top_bar, text="📥 Retrieve Tools", width=120, fg_color=T.ACCENT, text_color=T.TEXT, hover_color=T.ACCENT_HOVER, font=T.font(12, "bold"), command=self.open_retrieval_modal).pack(side="right", padx=(5, 10))
-        ctk.CTkButton(top_bar, text="📤 Issue Tools", width=110, fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=self.open_issuance_modal).pack(side="right", padx=(10, 0))
+        C.button(top_bar, kind="secondary", text="📥 Retrieve Tools", width=120, command=self.open_retrieval_modal).pack(side="right", padx=(5, 10))
+        C.button(top_bar, kind="primary", text="📤 Issue Tools", width=110, command=self.open_issuance_modal).pack(side="right", padx=(10, 0))
 
         self.data_scroll = ctk.CTkScrollableFrame(table_card, fg_color="transparent")
         self.data_scroll.pack(fill="both", expand=True, padx=20, pady=(10, 20))
@@ -684,14 +685,14 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         btn_frame = ctk.CTkFrame(modal, fg_color="transparent")
         btn_frame.pack(side="bottom", fill="x", padx=24, pady=(0, 20))
 
-        ctk.CTkButton(btn_frame, text="🖨  Reprint Receipt", height=38,
-                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                      font=T.font(12, "bold"),
+        C.button(btn_frame, kind="primary", text="🖨  Reprint Receipt", 
+                      
+                      
                       command=lambda: self._reprint_from_history(row, modal)).pack(
             side="left", fill="x", expand=True, padx=(0, 8))
-        ctk.CTkButton(btn_frame, text="Close", height=38, width=80,
-                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
-                      font=T.font(12, "bold"),
+        C.button(btn_frame, kind="secondary", text="Close", width=80,
+                      
+                      
                       command=modal.destroy).pack(side="right")
 
         # Items section
@@ -963,9 +964,9 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             row.pack_propagate(False)
             ctk.CTkLabel(row, text=f"✓ {item['name']}  |  Tag: {item['tag']}", font=T.font(12, "bold"), text_color=T.PRIMARY).pack(side="left", padx=10, pady=5)
             ctk.CTkButton(row, text="✕", width=25, height=25, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda idx=i: self.remove_from_cart(idx)).pack(side="right", padx=(5, 10))
-            ctk.CTkButton(row, text="+", width=25, height=25, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=lambda idx=i: self.update_cart_qty(idx, 1)).pack(side="right", padx=2)
+            C.button(row, compact=True, kind="secondary", text="+", width=25, command=lambda idx=i: self.update_cart_qty(idx, 1)).pack(side="right", padx=2)
             ctk.CTkLabel(row, text=f"Qty: {item['qty_borrowed']}", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="right", padx=8)
-            ctk.CTkButton(row, text="-", width=25, height=25, fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=lambda idx=i: self.update_cart_qty(idx, -1)).pack(side="right", padx=2)
+            C.button(row, compact=True, kind="secondary", text="-", width=25, command=lambda idx=i: self.update_cart_qty(idx, -1)).pack(side="right", padx=2)
 
     def execute_borrow(self):
         if not self.active_borrow_user_id:
@@ -1108,13 +1109,13 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
                 img.save(path, "JPEG", quality=95)
                 os.startfile(path)
 
-            ctk.CTkButton(btn_bar, text="🖨  Export & Open JPG", height=38,
-                          fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                          font=T.font(12, "bold"),
+            C.button(btn_bar, kind="primary", text="🖨  Export & Open JPG", 
+                          
+                          
                           command=export_jpg).pack(side="left", padx=20, pady=11)
-            ctk.CTkButton(btn_bar, text="Close", height=38, width=90,
-                          fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
-                          font=T.font(12, "bold"),
+            C.button(btn_bar, kind="secondary", text="Close", width=90,
+                          
+                          
                           command=preview.destroy).pack(side="right", padx=20, pady=11)
 
         except Exception as e:

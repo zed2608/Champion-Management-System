@@ -13,6 +13,7 @@ from services.paging import PageInfo, clamp_page, fetch_page
 from services.validators import like_pattern
 from views.paged_table import PagedTable, list_table
 from services import maintenance_service as mnt, inventory_service as inv_svc, project_service as proj_svc, user_service
+from ui import components as C
 from ui import theme as T
 
 
@@ -41,10 +42,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(
-            top_bar, text="Maintenance & Archive",
-            font=T.font(16, "bold"), text_color=T.PRIMARY
-        ).pack(side="left")
+        C.PageHeader(top_bar, "Maintenance & Archive", "Repairs, archives, service forecasts and backups").pack(side="top", anchor="w")
 
         tab_labels = [
             "🔧 Issues & Repairs",
@@ -61,7 +59,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY,
             selected_hover_color=T.PRIMARY_HOVER
         )
-        self.seg_btn.pack(side="right")
+        self.seg_btn.pack(side="top", anchor="w", pady=(10, 0))
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
         self.tab_content.grid(
@@ -143,11 +141,11 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(form_grid, text="Issue / Condition Type", font=T.font(12, "bold"),
                      text_color=T.TEXT).grid(row=0, column=2, sticky="w", padx=5)
 
-        self.flag_tool_id = ctk.CTkEntry(
+        self.flag_tool_id = C.field(
             form_grid, placeholder_text="e.g., TAG-003 or PID 42")
         self.flag_tool_id.grid(
             row=1, column=0, sticky="ew", padx=5, pady=(3, 8))
-        self.flag_reported_by = ctk.CTkEntry(
+        self.flag_reported_by = C.field(
             form_grid, placeholder_text="e.g., EMP-001")
         self.flag_reported_by.grid(
             row=1, column=1, sticky="ew", padx=5, pady=(3, 8))
@@ -161,7 +159,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             row=1, column=2, sticky="ew", padx=5, pady=(3, 8))
         ctk.CTkLabel(form_grid, text="Units (qty)", font=T.font(12, "bold"),
                      text_color=T.TEXT).grid(row=0, column=3, sticky="w", padx=5)
-        self.flag_qty = ctk.CTkEntry(form_grid, placeholder_text="1")
+        self.flag_qty = C.field(form_grid, placeholder_text="1")
         self.flag_qty.grid(row=1, column=3, sticky="ew", padx=5, pady=(3, 8))
         self.flag_qty.insert(0, "1")
 
@@ -172,13 +170,13 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(notes_row, text="Issue Description / Notes",
                      font=T.font(12, "bold"), text_color=T.TEXT).grid(
             row=0, column=0, sticky="w", pady=(0, 3))
-        self.flag_notes = ctk.CTkEntry(
+        self.flag_notes = C.field(
             notes_row, placeholder_text="Describe the issue in detail...")
         self.flag_notes.grid(row=1, column=0, sticky="ew", padx=(0, 10))
 
-        ctk.CTkButton(notes_row, text="Submit Flag", width=130,
-                      fg_color=T.DANGER, hover_color=T.DANGER_DARK,
-                      text_color=T.WHITE, font=T.font(12, "bold"),
+        C.button(notes_row, kind="danger", text="Submit Flag", width=130,
+                      
+                      
                       command=self.submit_flag).grid(row=1, column=1, padx=(0, 0))
 
         filter_row = ctk.CTkFrame(frame, fg_color="transparent")
@@ -194,7 +192,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         self.issues_filter.set("Open (Pending)")
 
         self.issues_search_var = ctk.StringVar()
-        self.issues_search = ctk.CTkEntry(filter_row, placeholder_text="Search tool or reporter...",
+        self.issues_search = C.field(filter_row, placeholder_text="Search tool or reporter...",
                                           width=200, textvariable=self.issues_search_var)
         self.issues_search.pack(side="left", padx=(0, 5))
 
@@ -349,13 +347,13 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
 
         ctk.CTkLabel(form, text="New units to add (replacement bought / found):", font=T.font(12, "bold"),
                      text_color=T.TEXT).pack(anchor="w")
-        restock_entry = ctk.CTkEntry(
+        restock_entry = C.field(
             form, placeholder_text="0 (Leave 0 if already in stock)")
         restock_entry.pack(fill="x", pady=(5, 10))
 
         ctk.CTkLabel(form, text="Resolution Notes:", font=T.font(12, "bold"),
                      text_color=T.TEXT).pack(anchor="w")
-        notes_entry = ctk.CTkEntry(
+        notes_entry = C.field(
             form, placeholder_text="e.g., Sent to repair, replaced, etc.")
         notes_entry.pack(fill="x", pady=(5, 10))
 
@@ -377,11 +375,11 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=25, pady=(5, 20))
-        ctk.CTkButton(btn_row, text="✓ Mark Resolved & Update Inventory",
-                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+        C.button(btn_row, kind="primary", text="✓ Mark Resolved & Update Inventory",
+                      
                       command=resolve_issue).pack(side="left", padx=(0, 10), fill="x", expand=True)
-        ctk.CTkButton(btn_row, text="Close", fg_color=T.BORDER,
-                      text_color=T.TEXT, hover_color=T.BORDER_STRONG, width=80,
+        C.button(btn_row, kind="secondary", text="Close", 
+                      width=80,
                       command=modal.destroy).pack(side="right")
 
     # ------------------------------------------
@@ -400,11 +398,11 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         row = ctk.CTkFrame(frame, fg_color=T.SURFACE_ALT, corner_radius=8)
         row.pack(fill="x", padx=20, pady=(0, 8))
         ctk.CTkLabel(row, text="Default interval - category:", font=T.font(12, "bold")).pack(side="left", padx=(12, 6), pady=10)
-        self.wear_cat = ctk.CTkEntry(row, placeholder_text="e.g. Drills (or * for all others)", width=220)
+        self.wear_cat = C.field(row, placeholder_text="e.g. Drills (or * for all others)", width=220)
         self.wear_cat.pack(side="left", padx=4)
-        self.wear_hours = ctk.CTkEntry(row, placeholder_text="hours", width=90)
+        self.wear_hours = C.field(row, placeholder_text="hours", width=90)
         self.wear_hours.pack(side="left", padx=4)
-        ctk.CTkButton(row, text="Save default", width=110, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, command=self.save_wear_default).pack(side="left", padx=8)
+        C.button(row, kind="primary", text="Save default", width=110, command=self.save_wear_default).pack(side="left", padx=8)
         self.wear_defaults_lbl = ctk.CTkLabel(row, text="", font=T.font(12), text_color=T.TEXT_MUTED)
         self.wear_defaults_lbl.pack(side="left", padx=8)
         self._wear_scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent")
@@ -471,7 +469,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(modal, text=row["name"], font=T.font(16, "bold")).pack(pady=(18, 4))
         ctk.CTkLabel(modal, text=wear_forecast.summary_line(row), font=T.font(12), text_color=T.TEXT_SECONDARY, wraplength=400, justify="left").pack(padx=24, pady=(0, 10))
         ctk.CTkLabel(modal, text="Own service interval in hours (empty = category default):", font=T.font(12, "bold")).pack(anchor="w", padx=24)
-        entry = ctk.CTkEntry(modal)
+        entry = C.field(modal)
         entry.pack(fill="x", padx=24, pady=(4, 10))
 
         def save():
@@ -493,9 +491,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                 return
             modal.destroy()
             self.load_wear()
-        ctk.CTkButton(modal, text="Save interval", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, command=save).pack(fill="x", padx=24, pady=4)
-        ctk.CTkButton(modal, text="Mark serviced now", fg_color=T.INFO_HOVER, hover_color=T.INFO_DARK, command=serviced).pack(fill="x", padx=24, pady=4)
-        ctk.CTkButton(modal, text="Close", fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG, command=modal.destroy).pack(fill="x", padx=24, pady=4)
+        C.button(modal, kind="primary", text="Save interval", command=save).pack(fill="x", padx=24, pady=4)
+        C.button(modal, kind="primary", text="Mark serviced now", command=serviced).pack(fill="x", padx=24, pady=4)
+        C.button(modal, kind="secondary", text="Close", command=modal.destroy).pack(fill="x", padx=24, pady=4)
 
     # ------------------------------------------
     # TAB 2: Archived Tools
@@ -733,20 +731,20 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                      text_color=T.TEXT).pack(side="left", padx=(0, 8))
         self._backup_dest_var = ctk.StringVar(
             value="(click Browse to choose folder)")
-        dest_entry = ctk.CTkEntry(dest_row, textvariable=self._backup_dest_var,
-                                  state="readonly", fg_color=T.WHITE,
-                                  text_color=T.TEXT_SECONDARY, width=180)
+        dest_entry = C.field(dest_row, textvariable=self._backup_dest_var,
+                                  state="readonly", 
+                                  width=180)
         dest_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
-        ctk.CTkButton(dest_row, text="Browse", width=70, height=28,
-                      fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                      font=T.font(12, "bold"),
+        C.button(dest_row, compact=True, kind="primary", text="Browse", width=70, 
+                      
+                      
                       command=self._browse_backup_dest).pack(side="right")
 
         fname_row = ctk.CTkFrame(backup_card, fg_color="transparent")
         fname_row.pack(fill="x", padx=15, pady=(0, 4))
         ctk.CTkLabel(fname_row, text="File name (optional):", font=T.font(12, "bold"),
                      text_color=T.TEXT).pack(side="left", padx=(0, 6))
-        self._backup_fname_entry = ctk.CTkEntry(fname_row,
+        self._backup_fname_entry = C.field(fname_row,
                                                 placeholder_text="e.g., before_payroll_update  (no spaces/.sql needed)")
         self._backup_fname_entry.pack(side="left", fill="x", expand=True)
 
@@ -754,13 +752,13 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         note_row.pack(fill="x", padx=15, pady=(0, 4))
         ctk.CTkLabel(note_row, text="Note (optional):", font=T.font(12, "bold"),
                      text_color=T.TEXT).pack(side="left", padx=(0, 6))
-        self._backup_note_entry = ctk.CTkEntry(note_row,
+        self._backup_note_entry = C.field(note_row,
                                                placeholder_text="e.g., Before major update")
         self._backup_note_entry.pack(side="left", fill="x", expand=True)
 
-        self._backup_btn = ctk.CTkButton(backup_card, text="⬇  Run Backup Now",
-                                         fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                                         font=T.font(12, "bold"),
+        self._backup_btn = C.button(backup_card, kind="primary", text="⬇  Run Backup Now",
+                                         
+                                         
                                          command=self._run_backup)
         self._backup_btn.pack(fill="x", padx=15, pady=(8, 14))
 
@@ -782,9 +780,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(src_row, text="File:", font=T.font(12, "bold"),
                      text_color=T.TEXT).pack(side="left", padx=(0, 8))
         self._restore_src_var = ctk.StringVar(value="(no file selected)")
-        src_entry = ctk.CTkEntry(src_row, textvariable=self._restore_src_var,
-                                 state="readonly", fg_color=T.WHITE,
-                                 text_color=T.TEXT_SECONDARY, width=180)
+        src_entry = C.field(src_row, textvariable=self._restore_src_var,
+                                 state="readonly", 
+                                 width=180)
         src_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
         ctk.CTkButton(src_row, text="Browse", width=70, height=28,
                       fg_color=T.WARNING_TEXT, hover_color=T.WARNING_TEXT,
@@ -800,7 +798,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         restore_note_row.pack(fill="x", padx=15, pady=(0, 4))
         ctk.CTkLabel(restore_note_row, text="Note (optional):", font=T.font(12, "bold"),
                      text_color=T.TEXT).pack(side="left", padx=(0, 6))
-        self._restore_note_entry = ctk.CTkEntry(restore_note_row,
+        self._restore_note_entry = C.field(restore_note_row,
                                                 placeholder_text="e.g., Rolling back after failed update")
         self._restore_note_entry.pack(side="left", fill="x", expand=True)
 
@@ -821,9 +819,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         hist_hdr.pack(fill="x", padx=20, pady=(4, 0))
         ctk.CTkLabel(hist_hdr, text="Backup History",
                      font=T.font(14, "bold"), text_color=T.TEXT).pack(side="left")
-        ctk.CTkButton(hist_hdr, text="↻ Refresh", width=80, height=28,
-                      fg_color=T.BORDER, text_color=T.TEXT, hover_color=T.BORDER_STRONG,
-                      font=T.font(12, "bold"),
+        C.button(hist_hdr, compact=True, kind="secondary", text="↻ Refresh", width=80, 
+                      
+                      
                       command=self.load_backup_history).pack(side="right")
 
         self._backup_hist_scroll = ctk.CTkScrollableFrame(

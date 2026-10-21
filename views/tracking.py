@@ -12,6 +12,7 @@ from utils.pdf_table import render_pdf
 from services.paging import fetch_page
 from services.validators import like_pattern
 from views.paged_table import PagedTable
+from ui import components as C
 from ui import theme as T
 
 
@@ -110,7 +111,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Tracking & Accountability", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        C.PageHeader(top_bar, "Tracking & Accountability", "Who had what, when, and the tamper-evident record of it").pack(side="left")
 
         tabs = ["📋 Issuance & Retrieval Logs", "🔎 Audit Records", "⚙️ Activity Log"]
         self.tab_var = ctk.StringVar(value=tabs[0])
@@ -170,7 +171,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         self.log_search_var = ctk.StringVar()
-        self.log_search = ctk.CTkEntry(
+        self.log_search = C.field(
             top, placeholder_text="Search employee or tool...", width=220, textvariable=self.log_search_var)
         self.log_search.pack(side="right", padx=(5, 0))
 
@@ -265,7 +266,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.audit_filter.pack(side="left", padx=8)
 
         self.audit_search_var = ctk.StringVar()
-        self.audit_search = ctk.CTkEntry(
+        self.audit_search = C.field(
             filter_row, placeholder_text="Search name / tool...", width=200, textvariable=self.audit_search_var)
         self.audit_search.pack(side="left", padx=(0, 5))
 
@@ -353,7 +354,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
 
         ctk.CTkLabel(frame,
                      text="Records every login, logout, module visit, edit, search, and transaction. "
-                          "Auto-pruned to the latest 10,000 entries to protect the database.",
+                          "Older entries are archived, never deleted.",
                      font=T.font(12), text_color=T.TEXT_MUTED,
                      wraplength=900, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
 
@@ -372,7 +373,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.act_module_filter.configure(command=lambda e: self.do_act_search())
 
         self.act_search_var = ctk.StringVar()
-        self.act_search = ctk.CTkEntry(
+        self.act_search = C.field(
             filter_row, placeholder_text="Search user or details...", width=200, textvariable=self.act_search_var)
         self.act_search.pack(side="left", padx=(0, 5))
 
@@ -384,11 +385,11 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.act_search_var.trace_add("write", on_act_search)
 
         # [PANEL-AWE] tamper-evidence: recompute the hash chain on demand and print it
-        self.verify_btn = ctk.CTkButton(filter_row, text="🔐 Verify Audit Chain", width=150, fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
-                                        font=T.font(12, "bold"), command=self.verify_audit_chain)
+        self.verify_btn = C.button(filter_row, kind="primary", text="🔐 Verify Audit Chain", width=150, 
+                                        command=self.verify_audit_chain)
         self.verify_btn.pack(side="left", padx=(10, 5))
-        self.audit_pdf_btn = ctk.CTkButton(filter_row, text="⎙ Audit Report PDF", width=140, fg_color=T.BORDER, text_color=T.TEXT,
-                                           hover_color=T.BORDER_STRONG, font=T.font(12, "bold"), command=self.export_audit_pdf)
+        self.audit_pdf_btn = C.button(filter_row, kind="secondary", text="⎙ Audit Report PDF", width=140, 
+                                           command=self.export_audit_pdf)
         self.audit_pdf_btn.pack(side="left", padx=5)
         self.chain_lbl = ctk.CTkLabel(frame, text="", font=T.font(12, "bold"), text_color=T.TEXT_MUTED, wraplength=900, justify="left")
         self.chain_lbl.pack(anchor="w", padx=20, pady=(0, 4))
@@ -521,7 +522,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        ctk.CTkLabel(top_bar, text="Tracking & Accountability", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
+        C.PageHeader(top_bar, "Tracking & Accountability", "Your own deployment history").pack(side="left")
 
         tabs = ["👤 My History"]
         self.tab_var = ctk.StringVar(value=tabs[0])

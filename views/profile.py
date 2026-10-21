@@ -11,6 +11,7 @@ import re
 import bcrypt
 import qrcode
 from services.errors import friendly_message
+from ui import components as C
 from ui import theme as T
 
 class ProfileView(UiMixin, ctk.CTkFrame):
@@ -26,8 +27,8 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         self.grid_columnconfigure(1, weight=2)
         self.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(self, text="PROFILE", font=T.font(20, "bold"), text_color=T.TEXT).grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
+        C.PageHeader(self, "Profile", "Your account, picture and password").grid(
+            row=0, column=0, columnspan=2, sticky="ew", pady=(0, 20))
 
         self.build_left_card()
         self.build_right_cards()
@@ -49,7 +50,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(self.left_card, text=self.user_info['full_name'], font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 0))
         ctk.CTkLabel(self.left_card, text=self.user_info['role'], font=T.font(12), text_color=T.SUCCESS_TEXT).pack()
 
-        ctk.CTkButton(self.left_card, text="⎙ Print My ID QR Badge", fg_color=T.INFO, hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=self.print_id_badge).pack(pady=(15, 0))
+        C.button(self.left_card, kind="primary", text="⎙ Print My ID QR Badge", command=self.print_id_badge).pack(pady=(15, 0))
 
         ctk.CTkFrame(self.left_card, height=1, fg_color=T.BORDER).pack(
             fill="x", padx=30, pady=20)
@@ -114,9 +115,9 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         btn_frame = ctk.CTkFrame(edit_card, fg_color="transparent")
         btn_frame.pack(fill="x", padx=30, pady=20)
 
-        ctk.CTkButton(btn_frame, text="Save Profile", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, font=T.font(12, "bold"), command=self.confirm_save).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="Change Password", fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER,
-                      text_color=T.TEXT, font=T.font(12, "bold"), command=self.open_password_modal).pack(side="left")
+        C.button(btn_frame, kind="primary", text="Save Profile", command=self.confirm_save).pack(side="left", padx=(0, 10))
+        C.button(btn_frame, kind="secondary", text="Change Password", 
+                      command=self.open_password_modal).pack(side="left")
 
         history_card = ctk.CTkFrame(
             right_container, fg_color=T.SURFACE, corner_radius=10)
@@ -231,7 +232,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         frame.grid(row=row, column=col, sticky="ew", padx=10, pady=10)
         ctk.CTkLabel(frame, text=label_text, font=T.font(12),
                      text_color=T.TEXT_MUTED).pack(anchor="w")
-        entry = ctk.CTkEntry(frame, height=35)
+        entry = C.field(frame)
         # [UNHAPPY-PATH] DB columns can be NULL (e.g. seeded admin has no email); Tk rejects None.
         entry.insert(0, default_val or "")
         entry.pack(fill="x", pady=(5, 0))
@@ -311,11 +312,11 @@ class ProfileView(UiMixin, ctk.CTkFrame):
 
         ctk.CTkLabel(dialog, text="CHANGE PASSWORD", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=30, pady=(20, 10))
 
-        curr_entry = ctk.CTkEntry(
-            dialog, placeholder_text="Current Password", width=340, height=35, show="*")
+        curr_entry = C.field(
+            dialog, placeholder_text="Current Password", width=340, show="*")
         curr_entry.pack(padx=30, pady=(0, 10))
-        new_entry = ctk.CTkEntry(
-            dialog, placeholder_text="New Password", width=340, height=35, show="*")
+        new_entry = C.field(
+            dialog, placeholder_text="New Password", width=340, show="*")
         new_entry.pack(padx=30, pady=(0, 10))
         
         strength_frame = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -341,8 +342,8 @@ class ProfileView(UiMixin, ctk.CTkFrame):
 
         new_entry.bind("<KeyRelease>", _check_profile_strength)
 
-        conf_entry = ctk.CTkEntry(
-            dialog, placeholder_text="Confirm New Password", width=340, height=35, show="*")
+        conf_entry = C.field(
+            dialog, placeholder_text="Confirm New Password", width=340, show="*")
         conf_entry.pack(padx=30, pady=(0, 20))
 
         btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -375,7 +376,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
                 messagebox.showinfo("Success", "Password updated successfully!", parent=dialog)
                 dialog.destroy()
 
-        ctk.CTkButton(btn_frame, text="Change Password", fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER,
+        C.button(btn_frame, kind="primary", text="Change Password", 
                       command=process_pwd_change).pack(side="left", expand=True, fill="x", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="Cancel", width=80, fg_color=T.BORDER, text_color=T.TEXT,
-                      hover_color=T.BORDER_STRONG, command=dialog.destroy).pack(side="right")
+        C.button(btn_frame, kind="secondary", text="Cancel", width=80, 
+                      command=dialog.destroy).pack(side="right")

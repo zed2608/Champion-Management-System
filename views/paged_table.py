@@ -14,6 +14,7 @@ import customtkinter as ctk
 
 from services.errors import friendly_message
 from services.paging import DEFAULT_PAGE_SIZE, PAGE_SIZES, PageInfo
+from ui import components as C
 from ui import theme as T
 
 HEADER_BG=T.PRIMARY
@@ -46,11 +47,11 @@ class PagedTable(ctk.CTkFrame):
         bar.pack(fill="x", pady=(0, 4))
         self.info_lbl = ctk.CTkLabel(bar, text="", font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.info_lbl.pack(side="left")
-        self.next_btn = ctk.CTkButton(bar, text="Next ▶", width=70, height=26, command=lambda: self.goto(self.page + 1), font=T.font(12, "bold"))
-        self.last_btn = ctk.CTkButton(bar, text="Last ⏭", width=60, height=26, command=lambda: self.goto(10 ** 9), font=T.font(12, "bold"))
+        self.next_btn = C.button(bar, "Next ▶", lambda: self.goto(self.page + 1), "secondary", compact=True, width=70)
+        self.last_btn = C.button(bar, "Last ⏭", lambda: self.goto(10 ** 9), "secondary", compact=True, width=60)
         self.page_lbl = ctk.CTkLabel(bar, text="Page 1 of 1", font=T.font(12, "bold"), width=90)
-        self.prev_btn = ctk.CTkButton(bar, text="◀ Prev", width=70, height=26, command=lambda: self.goto(self.page - 1), font=T.font(12, "bold"))
-        self.first_btn = ctk.CTkButton(bar, text="⏮ First", width=60, height=26, command=lambda: self.goto(0), font=T.font(12, "bold"))
+        self.prev_btn = C.button(bar, "◀ Prev", lambda: self.goto(self.page - 1), "secondary", compact=True, width=70)
+        self.first_btn = C.button(bar, "⏮ First", lambda: self.goto(0), "secondary", compact=True, width=60)
         self.size_menu = ctk.CTkOptionMenu(bar, values=[str(s) for s in PAGE_SIZES], width=70, height=26, command=self._size_changed)
         self.size_menu.set(str(self.page_size))
         for w in (self.last_btn, self.next_btn, self.page_lbl, self.prev_btn, self.first_btn):
@@ -78,7 +79,7 @@ class PagedTable(ctk.CTkFrame):
                 spec = self._actions[col]
                 holder = ctk.CTkFrame(cell, fg_color="transparent")
                 holder.pack(expand=True)
-                btn = ctk.CTkButton(holder, text=spec["text"], width=spec.get("width", 60), height=28, fg_color=spec.get("fg", T.INFO_HOVER),
+                btn = ctk.CTkButton(holder, text=spec["text"], width=spec.get("width", 60), height=28, fg_color=spec.get("fg", T.INFO),
                                     hover_color=spec.get("hover", T.INFO_DARK), font=T.font(12, "bold"),
                                     command=lambda s=slot, sp=spec: sp["command"](s["row"]) if s["row"] is not None else None)
                 btn.pack(expand=True, pady=self._cell_pady)
