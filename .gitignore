@@ -19,3 +19,11 @@ logs/
 
 # per-computer remembered webcam
 scanner_config.json
+
+# --- overnight additions ---
+__pycache__/
+*.py[cod]
+build/
+dist/
+.env
+remember_config.json
