@@ -66,3 +66,11 @@ Numbers are what the seeder produced on 21 Oct 2026; yours will differ slightly 
 | 11:45 | **Help > About**. | Replay the intro any time; team list. |
 
 Tips: rehearse once with a throwaway reset; keep the Angle Grinder refusal and the Damaged-return-without-details for live moments (they are the most convincing); do not run **Restore** in front of the panel unless you rehearsed it on `champion_demo` first.
+
+## `ui/tour-dashboard` defense UI checks (23 October 2026)
+
+Inventory now has **Select all on this page**, a live selected count, and **Batch Print Tags** enables only after a tagged tool is selected. Untagged rows have disabled checkboxes; assign a tag before printing. Check this with a real mouse on a tagged row, after paging and searching, then on an untagged row. The automated Tk event check can be repeated with `.venv\Scripts\python.exe scripts/check_tour_inventory.py`; it forces the local `champion_demo` database and does not print.
+
+Reports keep their data charts, but empty chart and summary regions collapse and populated charts are shorter. Open all nine tabs at 1366×768 and 1920×1080. `.venv\Scripts\python.exe scripts/capture_tour_reports.py --check-only` opens each tab at both sizes without writing screenshots. With an unlocked 1920×1080 desktop, omit `--check-only` to save captures under `docs/screenshots/tour_dashboard_after/`. Capture was blocked in the automated session (`OSError: screen grab failed`), so inspect the screen directly.
+
+The dashboard remains the existing five-card Admin / four-card Staff design, and no guided tour was added. See `docs/TOUR_DASHBOARD_SUMMARY.md` for what was deferred and `docs/HAND_TEST_CHECKLIST.md` section T for the remaining manual checks.
