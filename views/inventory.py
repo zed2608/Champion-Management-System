@@ -215,9 +215,20 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         
         self.batch_print_btn = C.button(search_frame, kind="secondary", text="⎙ Batch Print Tags", width=140, command=self.execute_batch_print)
         self.batch_print_btn.pack(side="right", padx=(10, 0))
+        self.batch_print_btn.configure(state="disabled")
 
-        hint_text = ("💡 Click a row to View  ·  tick ☑ tagged items, then Batch Print Tags" if is_staff
-                     else "💡 Click a row to View/Edit  ·  tick ☑ tagged items, then Batch Print Tags")
+        selection_frame = ctk.CTkFrame(table_card, fg_color="transparent")
+        selection_frame.pack(fill="x", padx=22)
+        self.selected_count_label = ctk.CTkLabel(selection_frame, text="0 selected", font=T.font(12), text_color=T.TEXT_SECONDARY)
+        self.selected_count_label.pack(side="left", padx=(8, 0))
+        self.select_page_var = ctk.StringVar(value="off")
+        self.select_page_check = ctk.CTkCheckBox(selection_frame, text="Select all on this page", variable=self.select_page_var,
+                                                 onvalue="on", offvalue="off", font=T.font(12),
+                                                 command=self._toggle_page_selection)
+        self.select_page_check.pack(side="left")
+
+        hint_text = ("💡 Click a row to View  ·  tick tagged items, then Batch Print Tags" if is_staff
+                     else "💡 Click a row to View/Edit  ·  tick tagged items, then Batch Print Tags") + "  ·  Disabled checkbox: assign a tag first"
         ctk.CTkLabel(table_card, text=hint_text,
                      font=T.font(12, "italic"), text_color=T.TEXT_MUTED).pack(anchor="w", padx=22)
 
@@ -230,6 +241,26 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             self.selected_for_print.add(pid)
         else:
             self.selected_for_print.discard(pid)
+        self._update_print_selection_ui()
+
+    def _toggle_page_selection(self):
+        eligible = [str(row['tool_id']) for row in self._inv_table.rows if row.get('tag_id')]
+        if self.select_page_var.get() == "on":
+            self.selected_for_print.update(eligible)
+        else:
+            self.selected_for_print.difference_update(eligible)
+        self._inv_table._paint()
+        self._update_print_selection_ui()
+
+    def _update_print_selection_ui(self):
+        count = len(self.selected_for_print)
+        self.selected_count_label.configure(text=f"{count} selected")
+        self.batch_print_btn.configure(state="normal" if count else "disabled")
+        table = getattr(self, "_inv_table", None)
+        if table is not None and table.winfo_exists():
+            eligible = [str(row['tool_id']) for row in table.rows if row.get('tag_id')]
+            self.select_page_var.set("on" if eligible and all(pid in self.selected_for_print for pid in eligible) else "off")
+            self.select_page_check.configure(state="normal" if eligible else "disabled")
 
     def execute_batch_print(self):
         if not hasattr(self, 'selected_for_print') or not self.selected_for_print:
@@ -333,6 +364,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             os.startfile(file_path)
 
             self.selected_for_print.clear()
+            self._update_print_selection_ui()
             self.load_inventory_data(self.search_entry.get().strip(), self.sort_menu.get(), keep_page=True)
 
         except Exception as e:
@@ -458,6 +490,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         for row in rows:
             row['location'] = row['base_location']
             self.tool_hash_table[str(row['tool_id'])] = row
+        self._update_print_selection_ui()
         if getattr(self, 'highlight_tool_id', None):
             self.after(100, lambda t=self.highlight_tool_id: self.open_tool_modal(str(t)))
             self.highlight_tool_id = None

@@ -313,6 +313,10 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             page_data = self._abc_raw_data[start_idx:end_idx]
 
             for w in self.abc_table_inner.winfo_children(): w.destroy()
+            if not page_data:
+                ctk.CTkLabel(self.abc_table_inner, text="No data for this period", font=T.font(12),
+                             text_color=T.TEXT_MUTED).pack(anchor="w", padx=8, pady=8)
+                return
 
             headers = [("Rank", "rank_raw"), ("Tool ID", "tool_id"), ("Tool Name", "name"),
                        ("Qty Issued", "usage"), ("Cumulative %", "cum_pct_raw"), ("ABC Category", "category")]
@@ -505,8 +509,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             self.usage_table_inner.grid_columnconfigure(col, weight=w, minsize=min_w, uniform="usage_cols")
 
         if not page_data:
-            ctk.CTkLabel(self.usage_table_inner, text="No tool usage data found for the selected period.",
-                         text_color=T.TEXT_MUTED, font=T.font(12)).grid(row=0, column=0, columnspan=len(headers), pady=30)
+            ctk.CTkLabel(self.usage_table_inner, text="No data for this period",
+                         text_color=T.TEXT_MUTED, font=T.font(12)).grid(row=0, column=0, columnspan=len(headers), pady=8)
             return
 
         # Header row
@@ -601,10 +605,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
 
         self.activity_chart_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self.activity_chart_frame.pack(fill="x", pady=(0, 15))
 
         self.activity_table_inner = ctk.CTkFrame(scroll, fg_color="transparent")
-        self.activity_table_inner.pack(fill="x", pady=(10, 0))
+        self.activity_table_inner.pack(fill="x")
 
         self.activity_pag_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         self.activity_pag_frame.pack(fill="x", pady=10)
@@ -635,7 +638,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 w.destroy()
             top_users = rows[:5]
             if self.activity_chart_frame.winfo_exists() and sum(r['total_borrows'] for r in top_users) > 0:
-                fig = self._new_fig(figsize=(7, 2.5), dpi=90)
+                fig = self._new_fig(figsize=(7, 1.6), dpi=90)
                 fig.patch.set_facecolor(T.WHITE)
                 ax = fig.add_subplot(111)
                 names = [str(r['full_name'] or 'Unknown').split()[0] for r in top_users]
@@ -646,7 +649,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 fig.tight_layout()
                 canvas = FigureCanvasTkAgg(fig, master=self.activity_chart_frame)
                 canvas.draw()
-                canvas.get_tk_widget().pack(pady=10)
+                canvas.get_tk_widget().pack(pady=3)
+                self.activity_chart_frame.pack(fill="x", before=self.activity_table_inner, pady=(0, 4))
                 
             self.activity_current_page = 1
             self.activity_sort_col = "total_borrows"
@@ -670,6 +674,10 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             page_data = self._activity_raw_data[start_idx:end_idx]
 
             for w in self.activity_table_inner.winfo_children(): w.destroy()
+            if not page_data:
+                ctk.CTkLabel(self.activity_table_inner, text="No data for this period", font=T.font(12),
+                             text_color=T.TEXT_MUTED).pack(anchor="w", padx=8, pady=8)
+                return
 
             headers = [("Employee ID", "employee_id"), ("Full Name", "full_name"), ("Role", "role"),
                        ("Total Issuances", "total_borrows"), ("Active Issuances", "active_borrows"),
@@ -752,10 +760,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
 
         self._alloc_chart_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._alloc_chart_frame.pack(fill="x", pady=(0, 15))
 
         self._alloc_table = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._alloc_table.pack(fill="x", pady=(10, 0))
+        self._alloc_table.pack(fill="x")
 
         sd, ed, valid = self.get_and_validate_dates()
         if not valid: return
@@ -791,7 +798,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                     req = [p[1]["requested"] for p in top_projs]
                     iss = [p[1]["issued"] for p in top_projs]
                     ret = [p[1]["retrieved"] for p in top_projs]
-                    fig = self._new_fig(figsize=(8, 2.8), dpi=90)
+                    fig = self._new_fig(figsize=(8, 1.8), dpi=90)
                     fig.patch.set_facecolor(T.WHITE)
                     ax = fig.add_subplot(111)
                     x = range(len(labels))
@@ -807,7 +814,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                     fig.tight_layout()
                     chart_canvas = FigureCanvasTkAgg(fig, master=self._alloc_chart_frame)
                     chart_canvas.draw()
-                    chart_canvas.get_tk_widget().pack(pady=10)
+                    chart_canvas.get_tk_widget().pack(pady=3)
+                    self._alloc_chart_frame.pack(fill="x", before=self._alloc_table, pady=(0, 4))
             # ────────────────────────────────────────────────────
 
             STATUS_COLORS = {"Ongoing": T.SUCCESS_BRIGHT, "Approved": T.INFO, "Pending": T.WARNING_ALT, "Completed": T.TEXT_MUTED}
@@ -847,11 +855,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
 
         self._dmg_summary_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._dmg_summary_frame.pack(fill="x", pady=(0, 5))
         self._dmg_chart_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._dmg_chart_frame.pack(fill="x", pady=(0, 15))
         self._dmg_table = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._dmg_table.pack(fill="x", pady=(10, 0))
+        self._dmg_table.pack(fill="x")
 
         sd, ed, valid = self.get_and_validate_dates()
         if not valid: return
@@ -877,11 +883,13 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 ("⚠ Items Damaged", _fmt(summary['count_damaged']), T.WARNING),
                 ("🔧 Needs Repair", _fmt(summary['count_repair']), T.WARNING_ALT),
             ]
-            for label, val, color in kpis:
+            for label, val, color in kpis if rows else []:
                 card = ctk.CTkFrame(self._dmg_summary_frame, fg_color=T.SURFACE_ALT, corner_radius=8)
                 card.pack(side="left", expand=True, fill="x", padx=5, pady=5)
                 ctk.CTkLabel(card, text=label, font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=(10, 2))
                 ctk.CTkLabel(card, text=val, font=T.font(16, "bold"), text_color=color).pack(pady=(0, 10))
+            if rows:
+                self._dmg_summary_frame.pack(fill="x", before=self._dmg_table, pady=(0, 4))
 
             # ── Damage/Loss Pie Chart ───────────────────────────
             for w in self._dmg_chart_frame.winfo_children(): w.destroy()
@@ -889,7 +897,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             c_dmg = summary['count_damaged']
             c_rep = summary['count_repair']
             if c_lost + c_dmg + c_rep > 0:
-                fig = self._new_fig(figsize=(5, 2.5), dpi=90)
+                fig = self._new_fig(figsize=(5, 1.7), dpi=90)
                 fig.patch.set_facecolor(T.WHITE)
                 ax = fig.add_subplot(111)
                 sizes, lbls, colors = [], [], []
@@ -901,7 +909,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 fig.tight_layout()
                 chart_canvas = FigureCanvasTkAgg(fig, master=self._dmg_chart_frame)
                 chart_canvas.draw()
-                chart_canvas.get_tk_widget().pack(pady=10)
+                chart_canvas.get_tk_widget().pack(pady=3)
+                self._dmg_chart_frame.pack(fill="x", before=self._dmg_table, pady=(0, 4))
             # ────────────────────────────────────────────────────
 
             for w in self._dmg_table.winfo_children(): w.destroy()
@@ -999,11 +1008,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         scroll.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
 
         self._ov_summary_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._ov_summary_frame.pack(fill="x", pady=(0, 5))
         self._ov_chart_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._ov_chart_frame.pack(fill="x", pady=(0, 5))
         self._ov_table = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._ov_table.pack(fill="x", pady=(5, 0))
+        self._ov_table.pack(fill="x")
         
         loading_lbl = ctk.CTkLabel(self._ov_table, text="Loading Overdue Transactions...", font=T.font(12, "italic"), text_color=T.TEXT_MUTED)
         loading_lbl.pack(pady=20)
@@ -1036,11 +1043,13 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 ("📅 Longest Overdue", f"{max_days} days", T.DANGER),
                 ("💰 At-Risk Value", f"₱{total_value:,.2f}", T.WARNING),
             ]
-            for label, val, color in kpis:
+            for label, val, color in kpis if rows else []:
                 card = ctk.CTkFrame(self._ov_summary_frame, fg_color=T.SURFACE_ALT, corner_radius=8)
                 card.pack(side="left", expand=True, fill="x", padx=5, pady=5)
                 ctk.CTkLabel(card, text=label, font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=(10, 2))
                 ctk.CTkLabel(card, text=val, font=T.font(16, "bold"), text_color=color).pack(pady=(0, 10))
+            if rows:
+                self._ov_summary_frame.pack(fill="x", before=self._ov_table, pady=(0, 4))
 
             # ── Overdue Bar Chart (days per worker) ─────────────
             for w in self._ov_chart_frame.winfo_children(): w.destroy()
@@ -1052,7 +1061,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 top_workers = sorted(worker_max.items(), key=lambda x: x[1], reverse=True)[:8]
                 names = [w[0] for w in top_workers][::-1]
                 days_vals = [w[1] for w in top_workers][::-1]
-                fig = self._new_fig(figsize=(7, 2.5), dpi=90)
+                fig = self._new_fig(figsize=(7, 1.7), dpi=90)
                 fig.patch.set_facecolor(T.WHITE)
                 ax = fig.add_subplot(111)
                 ax.barh(names, days_vals, color=T.DANGER_SOFT)
@@ -1062,7 +1071,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                 fig.tight_layout()
                 chart_canvas = FigureCanvasTkAgg(fig, master=self._ov_chart_frame)
                 chart_canvas.draw()
-                chart_canvas.get_tk_widget().pack(pady=10)
+                chart_canvas.get_tk_widget().pack(pady=3)
+                self._ov_chart_frame.pack(fill="x", before=self._ov_table, pady=(0, 4))
             # ────────────────────────────────────────────────────
 
             for w in self._ov_table.winfo_children(): w.destroy()

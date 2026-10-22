@@ -90,9 +90,10 @@ class PagedTable(ctk.CTkFrame):
                 continue
             if self._checkbox and col == self._checkbox["col"]:
                 var = ctk.StringVar(value="off")
-                chk = ctk.CTkCheckBox(cell, text="", variable=var, onvalue="on", offvalue="off", width=20, height=20,
+                chk = ctk.CTkCheckBox(cell, text="", variable=var, onvalue="on", offvalue="off", width=36, height=30,
                                       command=lambda s=slot: self._toggled(s))
                 chk.pack(expand=True, pady=self._cell_pady)
+                cell.bind("<Button-1>", lambda e, s=slot: self._cell_check_clicked(s))
                 slot["check"], slot["check_var"] = chk, var
                 slot["cells"].append(cell)
                 slot["labels"].append(None)
@@ -221,6 +222,8 @@ class PagedTable(ctk.CTkFrame):
                     if lbl is None:                                    # the checkbox column
                         enabled, checked = self._checkbox["state"](row)
                         slot["check"].configure(state="normal" if enabled else "disabled")
+                        cell.configure(cursor="hand2" if enabled else "arrow")
+                        slot["check"].configure(cursor="hand2" if enabled else "arrow")
                         slot["check_var"].set("on" if (enabled and checked) else "off")
                         continue
                     val = "" if values[col] is None else str(values[col])
@@ -265,6 +268,10 @@ class PagedTable(ctk.CTkFrame):
     def _toggled(self, slot):
         if slot["row"] is not None and self._checkbox:
             self._checkbox["toggle"](slot["row"], slot["check_var"].get() == "on")
+
+    def _cell_check_clicked(self, slot):
+        if slot["row"] is not None and self._checkbox and self._checkbox["state"](slot["row"])[0]:
+            slot["check"].toggle()
 
     def destroy(self):
         self._dead = True

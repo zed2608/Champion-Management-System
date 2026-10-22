@@ -180,19 +180,29 @@ def test_batch_print_checkbox_is_disabled_for_untagged_tools_and_works_for_tagge
         view.pack(fill="both", expand=True)
         root.after(2500, root.quit)
         root.mainloop()                                           # lets the background loader render the table
-        boxes = [w for w in walk(view) if isinstance(w, ctk.CTkCheckBox)]
+        boxes = [slot["check"] for slot in view._inv_table._slots[:2]]
         assert len(boxes) == 2, boxes
+        assert view.select_page_check.cget("state") == "normal"
         states = sorted(b._state for b in boxes)
         assert states == ["disabled", "normal"], states            # the untagged tool's box is deliberately inactive
         enabled = next(b for b in boxes if b._state == "normal")
+        assert view.batch_print_btn.cget("state") == "disabled"
         button_in(view, "⎙ Batch Print Tags").invoke()
-        assert shown and shown[-1][0] == "showwarning" and "No Items Selected" in shown[-1][1]    # nothing ticked yet
+        assert not shown                                           # disabled button cannot start an empty print
         enabled.toggle()                                           # tick it
         assert {str(x) for x in view.selected_for_print} == {str(tagged)}     # the screen keeps the ids as text
+        assert view.selected_count_label.cget("text") == "1 selected"
+        assert view.batch_print_btn.cget("state") == "normal"
+        view.select_page_check.toggle()                           # all eligible rows on this page become unselected
+        assert view.selected_for_print == set()
+        assert view.batch_print_btn.cget("state") == "disabled"
+        view.select_page_check.toggle()
+        assert {str(x) for x in view.selected_for_print} == {str(tagged)}
         shown.clear()
         button_in(view, "⎙ Batch Print Tags").invoke()
         assert not [s for s in shown if s[0] == "showerror"], shown
         assert opened and opened[-1].endswith(".pdf")              # a PDF of the ticked tag was produced and opened
         assert view.selected_for_print == set()                    # the selection is cleared after printing (the table then reloads)
+        assert view.batch_print_btn.cget("state") == "disabled"
     finally:
         root.destroy()
