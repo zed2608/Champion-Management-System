@@ -26,7 +26,7 @@ MAX_PROJECT_TEXT = 255
 
 def find_similar_names(name, exclude_project_id=None):
     """Read-only helper for the "Similar name detected" prompt: (exact_match, similar_names[:3]) among active projects."""
-    name = v.clean_text(name, max_len=MAX_PROJECT_TEXT, field="Project Name")
+    name = v.clean_named_label(name, max_len=MAX_PROJECT_TEXT, field="Project Name")
     with db.read() as cur:
         cur.execute("SELECT name FROM projects WHERE archived_at IS NULL AND project_id <> %s", (exclude_project_id or 0,))
         existing = [r["name"] for r in cur.fetchall() if r["name"]]
@@ -39,9 +39,10 @@ def find_similar_names(name, exclude_project_id=None):
 def _normalise(cur, data, exclude_project_id=None):
     """Validate and normalise the form. Returns a dict with cleaned scalars, worker rows and requirement lines."""
     f = {
-        "name": v.clean_text(data.get("name"), max_len=MAX_PROJECT_TEXT, field="Project Name"),
-        "client": v.clean_text(data.get("client"), max_len=MAX_PROJECT_TEXT, field="Client"),
-        "project_head": v.clean_text(data.get("project_head"), max_len=MAX_PROJECT_TEXT, field="Project Head", required=False) or None,
+        "name": v.clean_named_label(data.get("name"), max_len=MAX_PROJECT_TEXT, field="Project Name"),
+        "client": v.clean_named_label(data.get("client"), max_len=MAX_PROJECT_TEXT, field="Client"),
+        "project_head": v.clean_person_name(data.get("project_head"), max_len=MAX_PROJECT_TEXT,
+                                              field="Project Head", required=False) or None,
         "location": v.clean_text(data.get("location"), max_len=MAX_PROJECT_TEXT, field="Location", required=False) or None,
         "description": v.clean_text(data.get("description"), max_len=2000, field="Description", required=False, multiline=True) or None,
         "start_date": v.parse_iso_date(data.get("start_date"), field="Start Date", required=False),

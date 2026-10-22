@@ -24,7 +24,7 @@ def _whole_only(item_type) -> bool:
 
 def find_similar_names(name, exclude_tool_id=None):
     """Read-only helper for the "Similar name detected" prompt: (exact_match: bool, similar: list[str])."""
-    name = v.clean_text(name, max_len=v.MAX_NAME, field="Product Name")
+    name = v.clean_named_label(name, max_len=v.MAX_NAME, field="Product Name")
     with db.read() as cur:
         cur.execute("SELECT name FROM tool WHERE is_archived = 0 AND tool_id <> %s", (exclude_tool_id or 0,))
         existing = [r["name"] for r in cur.fetchall() if r["name"]]
@@ -42,10 +42,10 @@ def _clean_fields(item_type, category, name, description, supplier, location, un
     if item_type not in ITEM_TYPES:
         raise v.ValidationError("Item type must be Equipment or Consumable.")
     return {
-        "name": v.clean_text(name, max_len=v.MAX_NAME, field="Product Name"),
-        "category": v.clean_text(category, max_len=100, field="Category"),
+        "name": v.clean_named_label(name, max_len=v.MAX_NAME, field="Product Name"),
+        "category": v.clean_named_label(category, max_len=100, field="Category"),
         # the item panel DISPLAYS a missing supplier/location as 'N/A'; saving it back must not turn the display text into data
-        "supplier": _blank_if_placeholder(v.clean_text(supplier, max_len=100, field="Supplier", required=False)),
+        "supplier": _blank_if_placeholder(v.clean_named_label(supplier, max_len=100, field="Supplier", required=False)),
         "description": v.clean_text(description, max_len=v.MAX_NOTES, field="Description", required=False, multiline=True) or None,
         "location": _blank_if_placeholder(v.clean_text(location, max_len=100, field="Location", required=False)),
         "unit_of_measure": v.clean_text(unit_of_measure, max_len=20, field="Unit of measure"),

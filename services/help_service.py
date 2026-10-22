@@ -3,6 +3,8 @@
 [RBAC] Everyone who can log in (Admin, Staff) may READ help content and open a support ticket; only an Admin may edit the content
 or answer a ticket. A Staff member sees only their own tickets. Every function re-checks the role in MySQL (see services/security.py).
 """
+import hashlib
+
 from db import db
 from services.errors import NotFound, ServiceError
 from services.security import require_role
@@ -23,20 +25,55 @@ def _int(value, field, low=0, high=10_000):
 
 
 # ---- seeding -------------------------------------------------------------------------------------------------------------------
+def _untouched_default(row, label, digest, label_key, text_key):
+    """Only refresh an exact previous built-in; leave all custom and edited content alone."""
+    return (row[label_key] == label and
+            hashlib.sha256(row[text_key].encode("utf-8")).hexdigest() == digest)
+
+
 @require_role("Admin", "Staff")
-def seed_defaults(actor, guides, faqs, hardware, software):
-    """Fill EMPTY help tables from the built-in text (never overwrites anything). guides: [(admin_only, title, [points])],
-    faqs: [(admin_only, question, answer)], hardware/software: [(component, specification)]."""
+def seed_defaults(actor, guides, faqs, hardware, software, legacy_guides=(), legacy_faqs=()):
+    """Seed empty tables and refresh untouched built-ins on existing installs."""
     with db.transaction() as cur:
         cur.execute("SELECT COUNT(*) AS n FROM help_guides")
         if cur.fetchone()["n"] == 0:
             for i, (admin_only, title, points) in enumerate(guides):
                 cur.execute("INSERT INTO help_guides (title, steps, is_admin_only, display_order) VALUES (%s,%s,%s,%s)",
                             (title, STEP_SEPARATOR.join(points), int(bool(admin_only)), i))
+        else:
+            cur.execute("SELECT id, title, steps FROM help_guides")
+            rows = cur.fetchall()
+            for i, (old_label, digest) in enumerate(legacy_guides):
+                if i >= len(guides):
+                    break
+                for row in rows:
+                    if _untouched_default(row, old_label, digest, "title", "steps"):
+                        _admin_only, title, points = guides[i]
+                        cur.execute("UPDATE help_guides SET title=%s, steps=%s WHERE id=%s",
+                                    (title, STEP_SEPARATOR.join(points), row["id"]))
+                        break
         cur.execute("SELECT COUNT(*) AS n FROM help_faqs")
         if cur.fetchone()["n"] == 0:
             for i, (admin_only, q, a) in enumerate(faqs):
                 cur.execute("INSERT INTO help_faqs (question, answer, is_admin_only, display_order) VALUES (%s,%s,%s,%s)", (q, a, int(bool(admin_only)), i))
+        else:
+            cur.execute("SELECT id, question, answer FROM help_faqs")
+            rows = cur.fetchall()
+            for i, (old_label, digest) in enumerate(legacy_faqs):
+                if i >= len(faqs):
+                    break
+                for row in rows:
+                    if _untouched_default(row, old_label, digest, "question", "answer"):
+                        _admin_only, question, answer = faqs[i]
+                        cur.execute("UPDATE help_faqs SET question=%s, answer=%s WHERE id=%s",
+                                    (question, answer, row["id"]))
+                        break
+            # The two new FAQs are safe to add to an existing collection once.
+            questions = {r["question"] for r in rows}
+            for i, (admin_only, question, answer) in enumerate(faqs[len(legacy_faqs):], len(legacy_faqs)):
+                if question not in questions:
+                    cur.execute("INSERT INTO help_faqs (question, answer, is_admin_only, display_order) VALUES (%s,%s,%s,%s)",
+                                (question, answer, int(bool(admin_only)), i))
         cur.execute("SELECT COUNT(*) AS n FROM system_requirements")
         if cur.fetchone()["n"] == 0:
             for kind, specs in (("Hardware", hardware), ("Software", software)):

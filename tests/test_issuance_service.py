@@ -97,6 +97,18 @@ def test_partial_issue_keeps_project_approved_and_requirement_open(w):
     assert {r["name"]: (r["req_qty"], r["issued_qty"]) for r in pr["reqs"]}["Caliper"] == (3, 1)
 
 
+def test_return_reopens_quota_and_worker_can_issue_replacement(issued):
+    d, u, staff, cal, grs, pid = issued
+    assert iss.verify_borrower(staff, "WKR-2026-001")["projects"] == []
+    iss.retrieve(staff, u["w1"], cal, 1, "Good", "")
+    projects = iss.verify_borrower(staff, "WKR-2026-001")["projects"]
+    assert [p["project_id"] for p in projects] == [pid]
+    assert rows(d, "SELECT status FROM project_requirements WHERE project_id=%s AND tool_id=%s", (pid, cal))[0]["status"] == "Clear"
+    iss.issue(staff, u["w1"], pid, [{"tool_id": cal, "qty": 1}], "Replacement")
+    assert rows(d, "SELECT status FROM project_requirements WHERE project_id=%s AND tool_id=%s", (pid, cal))[0]["status"] == "Fulfilled"
+    assert avail(d, cal) == 7
+
+
 # ---- issue: rules ----------------------------------------------------------------------------------------------
 def test_cannot_exceed_approved_quantity(w):
     d, u, staff, cal, grs, pid = w

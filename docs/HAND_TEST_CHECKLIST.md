@@ -29,12 +29,12 @@ Legend: **Do** = exact clicks. **Expect** = what you must see. Write PASS or FAI
    *Expect:* refused with a plain message (Workers have no login).
 4. **Staff login.** Log in as Staff.
    *Expect:* the sidebar shows exactly: Dashboard, Project Management, Inventory, Issuance & Retrieval, Tracking & Accountability, Help.
-   It does **not** show Reports, Maintenance, Role Management. The Dashboard has **no** "ADMIN INSIGHTS" panel.
+   It does **not** show Reports, Maintenance, Role Management, or the Admin-only System status panel.
 5. **Staff screens open** (click each sidebar item once): Dashboard, Project Management, Inventory, Issuance & Retrieval, Tracking & Accountability, Help.
    *Expect:* each opens, shows data (or a plain "No ... found"), no error box. Project Management has **no** "+ Add Project" button.
    Tracking shows only "My Deployment History" (no Audit / Activity tabs, no Verify button).
 6. **Log out, then log in as Admin.**
-   *Expect:* the sidebar also shows Reports, Maintenance, Role Management. The Dashboard shows **ADMIN INSIGHTS** (it may say "Loading…" for a second).
+   *Expect:* the sidebar also shows Reports, Maintenance, Role Management. The Dashboard shows a short **System status** line (it may say "Checking…" briefly); **Show details** opens the extra status cards.
 7. **Admin screens open** (click each once, and click through every tab inside Reports, Maintenance, Tracking).
    *Expect:* no error box on any tab; tables show pages (25/50/100 per page) with Prev / Next.
 
@@ -119,8 +119,17 @@ Legend: **Do** = exact clicks. **Expect** = what you must see. Write PASS or FAI
     *Expect:* a PDF whose first table says Result: INTACT and prints the same head hash as step 35, followed by the newest entries.
 37. **Anomalies tab** (Reports > Anomalies).
     *Expect:* with little data it says there is not enough data (no false alarms); recommendations, if any, each show the numbers behind them in pesos.
-38. **Dashboard cards.** Dashboard (Admin) > **↻ Refresh** on ADMIN INSIGHTS.
+38. **Dashboard cards.** Dashboard (Admin) > **Show details** > **↻ Refresh** on System status.
     *Expect:* last backup (red if none or older than 7 days), audit chain status, top 5 wear forecasts, top 5 recommendations, and the monthly savings card. The page never freezes while they load.
+
+## L. Defense UI and workflow checks
+
+49. **Print controls with no tag.** Inventory > **Needs Tag**. *Expect:* rows say **Tag first** in the Print column; the page's **Select all** checkbox is absent and **Batch Print Tags** is disabled. Assign one Tag ID, switch to **Already Tagged**, click both its small checkbox and the surrounding Print cell on separate tries. *Expect:* each click changes selection, the count follows it, and Batch Print enables only while something is selected. Change page size and repeat.
+50. **Sidebar hover.** Move the pointer quickly across Dashboard, Inventory and Help without clicking. *Expect:* only the item under the pointer and the currently open section are highlighted. Move outside the window and back; no old hover remains.
+51. **Dashboard overview.** Log in as Admin and Staff. *Expect:* four short cards for each role. Click each card; it opens the corresponding section. With no recent tool activity, the chart says so rather than showing a false trend. Admin details stay collapsed until requested.
+52. **Field rules.** Try a name `Worker 123` in Role Management and `123` as a project or tool name. *Expect:* refused in plain language. Try `10 mm drill` as a tool and `Phase 2` as a project. *Expect:* accepted. Enter only one project date, then an end date before the start date. *Expect:* both refused; equal dates are accepted.
+53. **Replacement after return.** On a test project whose full tool quantity is currently issued, verify that it no longer offers further issuance. Return one Good unit, verify the assigned worker can select the project again, and issue that unit once. *Expect:* no more than the approved active quantity is deployed, and stock decreases by one. A damaged return opens a maintenance issue and does not increase available stock.
+54. **Help content.** Open Help Guide and FAQs after updating an existing database. *Expect:* the printing, project dates, issuance and return instructions match these screens. If an Admin edited a built-in guide or FAQ earlier, that custom text remains.
 
 ## H. People (Admin)
 

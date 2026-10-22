@@ -90,6 +90,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         # Reset inactivity timer on any user interaction
         self.bind_all("<Motion>", self._on_activity, add="+")
+        self.bind_all("<Motion>", self._sync_nav_hover, add="+")
+        self.bind("<Leave>", self._sync_nav_hover, add="+")
         self.bind_all("<Key>", self._on_activity, add="+")
         self.bind_all("<Button>", self._on_activity, add="+")
 
@@ -399,6 +401,22 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             return
         self._last_activity = time.monotonic()
 
+    def _sync_nav_hover(self, event=None):
+        """Restore buttons that missed a Leave event as the pointer crossed CTk child widgets.
+
+        A selected page keeps its highlight; other pages only stay highlighted while
+        the pointer is physically over their button.
+        """
+        if not self.winfo_exists():
+            return
+        for name, btn in self.nav_buttons.items():
+            if not btn.winfo_exists() or motion._pointer_inside(btn):
+                continue
+            expected = T.SIDEBAR_ACTIVE if name == self.current_page_name else "transparent"
+            if btn.cget("fg_color") != expected:
+                motion.cancel(btn, "fg_color")
+                btn.configure(fg_color=expected)
+
     def _idle_check(self):
         self._idle_job = None
         if not self.winfo_exists():
@@ -518,6 +536,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         self.current_page_name = page_name
 
         for name, btn in self.nav_buttons.items():
+            motion.cancel(btn, "fg_color")
             if name == page_name:
                 btn.configure(fg_color=T.SIDEBAR_ACTIVE, text_color=T.ACCENT)
             else:
@@ -612,11 +631,17 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         panel.pack(fill="x", pady=(0, 10))
         head = ctk.CTkFrame(panel, fg_color="transparent")
         head.pack(fill="x", padx=15, pady=(10, 0))
-        ctk.CTkLabel(head, text="ADMIN INSIGHTS", font=T.font(14, "bold"), text_color=T.PRIMARY).pack(side="left")
+        ctk.CTkLabel(head, text="System status", font=T.font(14, "bold"), text_color=T.PRIMARY).pack(side="left")
         C.button(head, compact=True, kind="secondary", text="↻ Refresh", width=80, 
                       command=self._load_insights).pack(side="right")
+        self.ins_details_button = C.button(head, compact=True, kind="ghost", text="Show details", width=110,
+                                            command=self._toggle_insight_details)
+        self.ins_details_button.pack(side="right", padx=5)
+        self.ins_summary = ctk.CTkLabel(panel, text="Checking backup and records...", font=T.font(12),
+                                        text_color=T.TEXT_SECONDARY, anchor="w")
+        self.ins_summary.pack(fill="x", padx=15, pady=(2, 10))
         grid = ctk.CTkFrame(panel, fg_color="transparent")
-        grid.pack(fill="x", padx=10, pady=(4, 10))
+        self.ins_details_grid = grid
         grid.grid_columnconfigure((0, 1), weight=1, uniform="ins")
         self.ins_labels = {}
         for key, title, row, col, go, span in (("backup", "Last backup", 0, 0, "Maintenance", 1), ("audit", "Audit chain", 0, 1, "Tracking", 1),
@@ -634,6 +659,43 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             lbl.pack(fill="x", padx=12, pady=(0, 10))
             self.ins_labels[key] = lbl
         self._load_insights()
+
+    def _toggle_insight_details(self):
+        if self.ins_details_grid.winfo_manager():
+            self.ins_details_grid.pack_forget()
+            self.ins_details_button.configure(text="Show details")
+        else:
+            self.ins_details_grid.pack(fill="x", padx=10, pady=(4, 10))
+            self.ins_details_button.configure(text="Hide details")
+
+    @staticmethod
+    def _insight_summary(result):
+        backup = result.get("backup", {})
+        audit = result.get("audit", {})
+        wear = result.get("wear", {})
+        if "error" in backup:
+            b = "Backup: check needed"
+        elif backup.get("data"):
+            data = backup["data"]
+            b = "Backup: missing" if data["last"] is None else f"Backup: {data['age_days']:g} days ago"
+        else:
+            b = "Backup: loading"
+        if "error" in audit:
+            a = "Records: check needed"
+        elif audit.get("data"):
+            data = audit["data"]
+            a = "Records: OK" if data["verified"] and data["intact"] else (
+                "Records: check needed" if data["verified"] else "Records: verify in Tracking")
+        else:
+            a = "Records: loading"
+        if "error" in wear:
+            w = "Tool service: check needed"
+        elif "data" in wear:
+            due = sum(1 for row in wear["data"] if row.get("flags"))
+            w = f"Tool service: {due} flagged"
+        else:
+            w = "Tool service: loading"
+        return f"{b}   •   {a}   •   {w}"
 
     def _load_insights(self):
         for lbl in getattr(self, "ins_labels", {}).values():
@@ -719,6 +781,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
     def _apply_insights(self, result):
         if not self.winfo_exists():
             return
+        if hasattr(self, "ins_summary") and self.ins_summary.winfo_exists():
+            self.ins_summary.configure(text=self._insight_summary(result))
         for key, (text, color) in self.insight_texts(result).items():
             lbl = getattr(self, "ins_labels", {}).get(key)
             if lbl is not None and lbl.winfo_exists():
@@ -732,10 +796,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         inner_frame = ctk.CTkFrame(frame, fg_color="transparent")
         inner_frame.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(inner_frame, text="EXECUTIVE DASHBOARD", font=T.font(20, "bold"),
-                     text_color=T.TEXT).pack(anchor="w", pady=(0, 5))
-        ctk.CTkLabel(inner_frame, text="High-level overview of system health and asset utilization. Auto-updates live.",
-                     font=T.font(14), text_color=T.TEXT_MUTED).pack(anchor="w", pady=(0, 20))
+        ctk.CTkLabel(inner_frame, text="Dashboard", font=T.font(20, "bold"),
+                     text_color=T.TEXT).pack(anchor="w", pady=(0, 12))
 
         metrics = {
             "total_employees": 0, "active_workforce": 0, "available_qty": 0,
@@ -747,41 +809,37 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         activities, chart_data, deployed_rows, my_issuances = [], [], [], []
 
         # ── Row 1: Summary Cards ──────────────────────────────────────────────
-        num_cards = 5 if is_admin else 4
+        num_cards = 4
         cards_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
         cards_frame.pack(fill="x", pady=(0, 10))
         for i in range(num_cards):
             cards_frame.grid_columnconfigure(i, weight=1)
 
-        # Five (admin) or four (staff) cards of the SAME size and type: number on top, label below, a status line under it.
-        c1 = C.KpiCard(cards_frame, "Asset Utilization", "Deployed vs warehouse", T.PRIMARY, "0%")
+        # Four concise numbers; each opens the screen where the user can act.
+        c1 = C.KpiCard(cards_frame, "Tools out", "View tool history", T.PRIMARY, "0")
         c1.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
         self.dash_util_lbl, self.dash_util_note = c1.value_label, c1.note_label
+        self._bind_widget_tree(c1, lambda *_: self.show_frame("Tracking & Accountability"), hover=True)
 
-        c2 = C.KpiCard(cards_frame, "Active Workforce", "Active in the last 30 days", T.INFO, "0 / 0")
+        c2 = C.KpiCard(cards_frame, "Overdue projects" if is_admin else "Tools in stock",
+                       "View projects" if is_admin else "View inventory", T.INFO, "0")
         c2.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
         self.dash_wf_lbl = c2.value_label
+        self._bind_widget_tree(c2, lambda *_: self.show_frame("Project Management" if is_admin else "Inventory"), hover=True)
 
-        c3 = C.KpiCard(cards_frame, "Total Inventory", "Total physical items", T.ACCENT, "0")
+        c3 = C.KpiCard(cards_frame, "Open tool issues" if is_admin else "Active projects",
+                       "View maintenance" if is_admin else "View projects", T.ACCENT, "0")
         c3.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
         self.dash_inv_lbl = c3.value_label
+        self._bind_widget_tree(c3, lambda *_: self.show_frame("Maintenance" if is_admin else "Project Management"), hover=True)
 
         # Low stock (admin + staff): a click opens Inventory filtered to the low items
-        c_ls = C.KpiCard(cards_frame, "Low Stock Items", "Near reorder level →", T.DANGER, "0")
+        c_ls = C.KpiCard(cards_frame, "Low stock", "View inventory", T.DANGER, "0")
         c_ls.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
         self.dash_lowstock_card, self.dash_lowstock_top, self.dash_lowstock_val = c_ls, c_ls.top, c_ls.value_label
         self.dash_lowstock_note = c_ls.note_label
         self._bind_widget_tree(
             c_ls, lambda *_: self.show_frame("Inventory", highlight_low_stock=True), hover=True)
-
-        if is_admin:
-            # Action Items: the number and its badges are drawn by _render_action_badges
-            card5 = C.KpiCard(cards_frame, "Action Items", "Maintenance →", T.WARNING, with_value=False)
-            card5.grid(row=0, column=4, padx=5, pady=5, sticky="ew")
-            self.dash_action_card, self.dash_action_top = card5, card5.top
-            self._render_action_badges(metrics)
-            self._bind_widget_tree(self.dash_action_card,
-                                   lambda *_: self.show_frame("Maintenance"), hover=True)
 
         # ── Row 2: Project Status Strip (admin only) ─────────────────────────
         if is_admin:
@@ -837,7 +895,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             bottom_frame, fg_color=T.SURFACE, corner_radius=10)
         activity_card.grid(row=0, column=0, sticky="nsew",
                            padx=(0, 10), pady=10)
-        ctk.CTkLabel(activity_card, text="Recent Operations (Deployments & Projects)",
+        ctk.CTkLabel(activity_card, text="Recent activity",
                      font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 10))
         self.dash_activity_frame = ctk.CTkFrame(
             activity_card, fg_color="transparent")
@@ -851,7 +909,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         right_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0), pady=10)
 
         if is_admin:
-            ctk.CTkLabel(right_card, text="7-Day Deployment Trend",
+            ctk.CTkLabel(right_card, text="Tools issued and returned this week",
                          font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 5))
             self.dash_chart_frame = ctk.CTkFrame(
                 right_card, fg_color="transparent")
@@ -860,7 +918,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                 self.dash_chart_frame, chart_data)
 
             # Currently Deployed mini-table below chart
-            ctk.CTkLabel(right_card, text="Currently Deployed by Project",
+            ctk.CTkLabel(right_card, text="Tools out by project",
                          font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(10, 4))
             self.dash_deployed_frame = ctk.CTkFrame(
                 right_card, fg_color="transparent")
@@ -868,7 +926,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             self._render_deployed_table(deployed_rows)
         else:
             # Staff: My Active Issuances
-            ctk.CTkLabel(right_card, text="My Active Issuances",
+            ctk.CTkLabel(right_card, text="My tools out",
                          font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20, pady=(20, 5))
             self.dash_myissue_frame = ctk.CTkFrame(
                 right_card, fg_color="transparent")
@@ -902,8 +960,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
     def _draw_trend(self, ax, chart_data):
         ax.clear()
-        if not chart_data:
-            ax.text(0.5, 0.5, "No data available", ha="center", va="center", 
+        if not chart_data or not any(row[1] or row[2] for row in chart_data):
+            ax.text(0.5, 0.5, "No tool activity this week", ha="center", va="center",
                     transform=ax.transAxes, color=T.TEXT_MUTED, fontsize=11)
             ax.axis("off")
             return
@@ -1133,23 +1191,21 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         if not hasattr(self, 'dash_util_lbl') or not self.dash_util_lbl.winfo_exists():
             return
 
-        motion.count_up(self.dash_util_lbl, metrics['utilization_pct'], lambda v: f"{v:g}%")
-        self.dash_util_note.configure(text=f"{float(metrics['borrowed_qty']):g} of {float(metrics['total_physical']):g} units out")
-        total_staff = metrics['total_employees']
-        motion.count_up(self.dash_wf_lbl, metrics['active_workforce'], lambda v: f"{v:g} / {total_staff}")
-        motion.count_up(self.dash_inv_lbl, metrics['total_physical'], lambda v: f"{v:g}")
+        motion.count_up(self.dash_util_lbl, metrics['borrowed_qty'], lambda v: f"{v:g}")
+        self.dash_util_note.configure(text="View tool history")
+        is_admin = self.user_info.get("role", "Staff") == "Admin"
+        motion.count_up(self.dash_wf_lbl, metrics['overdue_projects'] if is_admin else metrics['available_qty'], lambda v: f"{v:g}")
+        motion.count_up(self.dash_inv_lbl, metrics['pending_issues'] if is_admin else metrics['proj_active'], lambda v: f"{v:g}")
 
         # Low stock card
         ls = metrics.get("low_stock", 0)
         motion.count_up(self.dash_lowstock_val, ls, lambda v: f"{v:g}")
         self.dash_lowstock_val.configure(text_color=T.DANGER_TEXT if ls > 0 else T.TEXT)
-        self.dash_lowstock_note.configure(text="Near reorder level →" if ls > 0 else "Everything above its minimum")
+        self.dash_lowstock_note.configure(text="View inventory" if ls > 0 else "Stock is OK")
         if hasattr(self, "dash_lowstock_card"):
             self.dash_lowstock_card.set_state(T.DANGER_BG if ls > 0 else T.SURFACE, T.DANGER if ls > 0 else T.BORDER)
 
-        is_admin = self.user_info.get("role", "Staff") == "Admin"
         if is_admin:
-            self._render_action_badges(metrics)
             # Project status strip
             if hasattr(self, "dash_proj_active_lbl"):
                 self.dash_proj_active_lbl.configure(
