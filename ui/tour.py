@@ -90,10 +90,10 @@ class GuidedTour:
         self.panel.place(relx=1, rely=1, x=-18, y=-18, anchor="se", width=440, height=240)
         ctk.CTkLabel(self.panel, text="GUIDED TOUR", font=T.font(12, "bold"),
                      text_color=T.PRIMARY).pack(anchor="w", padx=18, pady=(15, 0))
-        self.title = ctk.CTkLabel(self.panel, text="", font=T.font(18, "bold"),
+        self.title = ctk.CTkLabel(self.panel, text="", font=T.font(20, "bold"),
                                   text_color=T.TEXT, anchor="w")
         self.title.pack(fill="x", padx=18, pady=(4, 2))
-        self.detail = ctk.CTkLabel(self.panel, text="", font=T.font(13),
+        self.detail = ctk.CTkLabel(self.panel, text="", font=T.font(14),
                                    text_color=T.TEXT, justify="left", anchor="w", wraplength=400)
         self.detail.pack(fill="x", padx=18, pady=(0, 8))
         self.progress = ctk.CTkLabel(self.panel, text="", font=T.font(12), text_color=T.TEXT_SECONDARY)

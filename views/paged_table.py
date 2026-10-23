@@ -94,7 +94,7 @@ class PagedTable(ctk.CTkFrame):
                 # binds its canvas and text label, not its surrounding frame.
                 chk = ctk.CTkCheckBox(cell, text=self._checkbox.get("label", "Select"), variable=var,
                                       onvalue="on", offvalue="off", width=76, height=30,
-                                      checkbox_width=20, checkbox_height=20, font=T.font(11),
+                                      checkbox_width=20, checkbox_height=20, font=T.font(12),
                                       command=lambda s=slot: self._toggled(s))
                 chk.pack(expand=True, pady=self._cell_pady)
                 if self._checkbox.get("disabled_text"):

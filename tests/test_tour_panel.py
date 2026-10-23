@@ -1,7 +1,23 @@
 """The tour must expose its instructions and buttons at normal desktop size."""
+import ast
+from pathlib import Path
+
 import customtkinter as ctk
 
 from ui import tour
+from ui import theme as T
+
+
+def test_tour_and_table_use_supported_font_sizes():
+    root = Path(__file__).resolve().parents[1]
+    for name in ("ui/tour.py", "views/paged_table.py"):
+        tree = ast.parse((root / name).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name) and node.func.value.id == "T"
+                    and node.func.attr == "font" and node.args and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, int)):
+                assert node.args[0].value in T.SIZES, f"{name}:{node.lineno} uses an unsupported font size"
 
 
 def test_guided_tour_panel_shows_full_content(monkeypatch):
