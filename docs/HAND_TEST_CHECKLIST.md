@@ -29,12 +29,12 @@ Legend: **Do** = exact clicks. **Expect** = what you must see. Write PASS or FAI
    *Expect:* refused with a plain message (Workers have no login).
 4. **Staff login.** Log in as Staff.
    *Expect:* the sidebar shows exactly: Dashboard, Project Management, Inventory, Issuance & Retrieval, Tracking & Accountability, Help.
-   It does **not** show Reports, Maintenance, Role Management. The Dashboard has **no** "ADMIN INSIGHTS" panel.
+   It does **not** show Reports, Maintenance, Role Management, or the Admin-only System status panel.
 5. **Staff screens open** (click each sidebar item once): Dashboard, Project Management, Inventory, Issuance & Retrieval, Tracking & Accountability, Help.
    *Expect:* each opens, shows data (or a plain "No ... found"), no error box. Project Management has **no** "+ Add Project" button.
    Tracking shows only "My Deployment History" (no Audit / Activity tabs, no Verify button).
 6. **Log out, then log in as Admin.**
-   *Expect:* the sidebar also shows Reports, Maintenance, Role Management. The Dashboard shows **ADMIN INSIGHTS** (it may say "Loading…" for a second).
+   *Expect:* the sidebar also shows Reports, Maintenance, Role Management. The Dashboard shows a short **System status** line (it may say "Checking…" briefly); **Show details** opens the extra status cards.
 7. **Admin screens open** (click each once, and click through every tab inside Reports, Maintenance, Tracking).
    *Expect:* no error box on any tab; tables show pages (25/50/100 per page) with Prev / Next.
 
@@ -119,8 +119,18 @@ Legend: **Do** = exact clicks. **Expect** = what you must see. Write PASS or FAI
     *Expect:* a PDF whose first table says Result: INTACT and prints the same head hash as step 35, followed by the newest entries.
 37. **Anomalies tab** (Reports > Anomalies).
     *Expect:* with little data it says there is not enough data (no false alarms); recommendations, if any, each show the numbers behind them in pesos.
-38. **Dashboard cards.** Dashboard (Admin) > **↻ Refresh** on ADMIN INSIGHTS.
+38. **Dashboard cards.** Dashboard (Admin) > **Show details** > **↻ Refresh** on System status.
     *Expect:* last backup (red if none or older than 7 days), audit chain status, top 5 wear forecasts, top 5 recommendations, and the monthly savings card. The page never freezes while they load.
+
+## L. Defense UI and workflow checks
+
+49. **Print controls with no tag.** Inventory > **Needs Tag**. *Expect:* rows say **Tag first** in the Print column; the page's **Select all** checkbox is absent and **Batch Print Tags** is disabled. Assign one Tag ID, switch to **Already Tagged**, click both its small checkbox and the surrounding Print cell on separate tries. *Expect:* each click changes selection, the count follows it, and Batch Print enables only while something is selected. Change page size and repeat.
+50. **Sidebar hover.** Move the pointer quickly across Dashboard, Inventory and Help without clicking. *Expect:* only the item under the pointer and the currently open section are highlighted. Move outside the window and back; no old hover remains.
+51. **Dashboard overview.** Log in as Admin and Staff. *Expect:* four short cards for each role. Click each card; it opens the corresponding section. With no recent tool activity, the chart says so rather than showing a false trend. Admin details stay collapsed until requested.
+52. **Field rules.** Try a name `Worker 123` in Role Management and `123` as a project or tool name. *Expect:* refused in plain language. Try `10 mm drill` as a tool and `Phase 2` as a project. *Expect:* accepted. Enter only one project date, then an end date before the start date. *Expect:* both refused; equal dates are accepted.
+53. **Replacement after return.** On a test project whose full tool quantity is currently issued, verify that it no longer offers further issuance. Return one Good unit, verify the assigned worker can select the project again, and issue that unit once. *Expect:* no more than the approved active quantity is deployed, and stock decreases by one. A damaged return opens a maintenance issue and does not increase available stock.
+54. **Help content.** Open Help Guide and FAQs after updating an existing database. *Expect:* the printing, project dates, issuance and return instructions match these screens. If an Admin edited a built-in guide or FAQ earlier, that custom text remains.
+55. **Sample data (only if wanted).** From PowerShell, preview with `python scripts/add_mock_data.py` and confirm it names the database you intend to use. Then run `python scripts/add_mock_data.py --apply`, restart the app and look for Demo tools, three projects and two Workers. Rerun the command; it should add zero records the second time. Existing records must be unchanged.
 
 ## H. People (Admin)
 
@@ -201,7 +211,7 @@ P13. **Dark/light switch.** Not built (see `docs/POLISH_SUMMARY.md`): there is n
 Use `champion_demo` from `docs/DEMO_SETUP.md`. These checks still need a person at an unlocked screen; automated Tk event checks do not judge visual appearance.
 
 T1. **Tagged print selection.** Inventory: click the checkbox and the surrounding Print cell for a tagged tool such as Masking Tape. *Expect:* one click ticks it, the count becomes `1 selected`, and **Batch Print Tags** enables. Untick it: count returns to zero and the button disables. Change page, set Rows per page to 50, search another tagged tool, then clear the search and click a row that was reused. *Expect:* the visible tick matches the selected tool IDs, not whichever tool used that row before.
-T2. **Untagged print selection.** Search `Hard Hat` or `Bolt Cutter 24in`. *Expect:* its checkbox is visibly disabled, clicking the Print cell does nothing, and the nearby hint says to assign a tag first. Clear the search, tick **Select all on this page**. *Expect:* only tagged rows on the current page are selected; the live count and Batch Print state update. Untick it to clear that page's tagged rows.
+T2. **Untagged print selection.** Search `Hard Hat` or `Bolt Cutter 24in`. *Expect:* its Print cell says **Tag first** and clicking it does nothing. Clear the search, click the **Select** label or checkbox on a tagged row. *Expect:* the count and Batch Print state update. Tick **Select tagged tools on this page**. *Expect:* only tagged rows on the current page are selected. Untick it to clear that page's tagged rows.
 T3. **All nine Reports tabs.** At 1366×768 and 1920×1080, open ABC, Usage, Employee Activity, Project Allocation, Damage and Loss, Low Stock, Overdue, Wear, and Anomalies. *Expect:* headers, filters and scrolling work; the table or result starts promptly below the description and any chart with data. Empty chart/summary areas take no space. With a period containing no rows, expect a compact `No data for this period` message where supported. Check that real charts still draw and one PDF export opens if a viewer is installed.
 T4. **Existing dashboard roles.** Log in as Admin, then Staff. *Expect:* the existing Admin dashboard still shows its five KPI cards and Admin Insights; Staff sees only permitted pages and no Admin Insights. This branch did not redesign the dashboard.
 T5. **Issue and return.** On demo data, issue one tagged tool to a demo Worker on a valid project, then return it. *Expect:* one receipt, correct Inventory quantity, and a completed history row. If returning Damaged, empty details are refused and filled details create a ticket. This branch did not change the service workflow.

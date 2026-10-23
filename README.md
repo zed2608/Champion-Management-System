@@ -72,7 +72,21 @@ looks in `C:\Program Files\MySQL\MySQL Server 8.0\bin`. Restoring replaces the w
 
 The 15-minute inactivity logout, the audit chain (Tracking > Activity Log > Verify Audit Chain) and the Admin insight cards (wear forecast, anomalies, backup age) are described in `docs/DOC_SYNC.md`.
 
-## 4. Tests
+## 4. Sample records
+
+### Add sample records to your current database
+
+If you already run the app through `.env` (including an Aiven connection), preview the target and then add 12 sample inventory items, 3 approved projects and 2 non-login Workers:
+
+```powershell
+python scripts/add_mock_data.py
+python scripts/add_mock_data.py --apply
+python main.py
+```
+
+The command only adds missing records with `Demo` in their names, keeps existing records, and can be run again without duplicating the sample. It uses the same database as `python main.py`, so check the target shown in the preview first. Its projects have assigned Workers and tool requirements; ten of the items have tags for printing. The full local defense dataset and its separate database remain described in `docs/DEMO_SETUP.md`.
+
+## 5. Tests
 
 ```
 set TEST_DB_HOST=localhost
@@ -83,13 +97,13 @@ python -m pytest -q
 Database tests create and drop their own **throwaway databases named `test_*`** and never touch `champion_db`. Without `TEST_DB_USER` they are skipped.
 Some tests open real (hidden) windows and need a Windows desktop session.
 
-## 5. Building the .exe (UNTESTED)
+## 6. Building the .exe (UNTESTED)
 
 `ChampionManagement.spec` is a PyInstaller recipe (`pip install pyinstaller`, then `pyinstaller ChampionManagement.spec`; output in `dist\ChampionManagement\`).
 **It has never been run.** Expect to adjust hidden imports or data files on the first build, then test every screen, the camera and PDF export from the built folder.
 It builds a folder, not a single file, because the program writes next to itself (`logs\`, `backups\`, `.env`, `scanner_config.json`, `assets\profiles\`).
 
-## 6. Where to look
+## 7. Where to look
 
 | | |
 |---|---|

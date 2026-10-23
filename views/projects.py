@@ -83,7 +83,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             form_card, height=80, fg_color=T.SURFACE_ALT, border_width=1, border_color=T.BORDER)
         self.p_desc.pack(fill="x", padx=20, pady=(5, 10))
 
-        self.p_head = field("Project Head / Manager *",
+        self.p_head = field("Project Manager (optional)",
                             "e.g., Engr. Juan Santos")
         self.p_client = field("Client / Company *", "e.g., Makati Dev Corp")
         self.p_location = field("Site Location", "e.g., Block 4, Alabang")
@@ -125,7 +125,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
         start_f = ctk.CTkFrame(row_dates, fg_color="transparent")
         start_f.grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ctk.CTkLabel(start_f, text="Start Date", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
+        ctk.CTkLabel(start_f, text="Start Date (enter both dates)", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
         start_input_row = ctk.CTkFrame(start_f, fg_color="transparent")
         start_input_row.pack(fill="x", pady=(5, 0))
         self.p_start = C.field(
@@ -630,6 +630,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             return
         if not self._validate_date(end_date, "End Date", self.draft_modal):
             return
+
+        if bool(start_date) != bool(end_date):
+            return messagebox.showerror("Missing Date", "Enter both Start Date and End Date, or leave both blank.", parent=self.draft_modal)
 
         if start_date and end_date:
             if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(start_date, "%Y-%m-%d"):

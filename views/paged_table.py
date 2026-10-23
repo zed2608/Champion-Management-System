@@ -73,7 +73,7 @@ class PagedTable(ctk.CTkFrame):
         self.message = ctk.CTkLabel(self.grid_frame, text="", text_color=T.TEXT_MUTED, font=T.font(12, "italic"))
 
     def _make_slot(self, index):
-        slot = {"row": None, "cells": [], "labels": [], "check": None, "check_var": None}
+        slot = {"row": None, "cells": [], "labels": [], "check": None, "check_var": None, "check_hint": None}
         for col, (_title, _w, minsize) in enumerate(self.columns):
             cell = ctk.CTkFrame(self.grid_frame, corner_radius=0, cursor="hand2" if self._on_click else "")
             cell.grid(row=index + 1, column=col, sticky="nsew")
@@ -90,9 +90,16 @@ class PagedTable(ctk.CTkFrame):
                 continue
             if self._checkbox and col == self._checkbox["col"]:
                 var = ctk.StringVar(value="off")
-                chk = ctk.CTkCheckBox(cell, text="", variable=var, onvalue="on", offvalue="off", width=36, height=30,
+                # Keep a readable click target alongside the square. CTk only
+                # binds its canvas and text label, not its surrounding frame.
+                chk = ctk.CTkCheckBox(cell, text=self._checkbox.get("label", "Select"), variable=var,
+                                      onvalue="on", offvalue="off", width=76, height=30,
+                                      checkbox_width=20, checkbox_height=20, font=T.font(12),
                                       command=lambda s=slot: self._toggled(s))
                 chk.pack(expand=True, pady=self._cell_pady)
+                if self._checkbox.get("disabled_text"):
+                    slot["check_hint"] = ctk.CTkLabel(cell, text=self._checkbox["disabled_text"],
+                                                      font=T.font(12), text_color=T.TEXT_SECONDARY)
                 cell.bind("<Button-1>", lambda e, s=slot: self._cell_check_clicked(s))
                 slot["check"], slot["check_var"] = chk, var
                 slot["cells"].append(cell)
@@ -225,6 +232,16 @@ class PagedTable(ctk.CTkFrame):
                         cell.configure(cursor="hand2" if enabled else "arrow")
                         slot["check"].configure(cursor="hand2" if enabled else "arrow")
                         slot["check_var"].set("on" if (enabled and checked) else "off")
+                        hint = slot["check_hint"]
+                        if hint is not None:
+                            if enabled:
+                                hint.pack_forget()
+                                if not slot["check"].winfo_manager():
+                                    slot["check"].pack(expand=True, pady=self._cell_pady)
+                            else:
+                                slot["check"].pack_forget()
+                                if not hint.winfo_manager():
+                                    hint.pack(expand=True, pady=self._cell_pady)
                         continue
                     val = "" if values[col] is None else str(values[col])
                     color, bold = (T.TEXT, False)

@@ -88,6 +88,17 @@ def test_multiline_keeps_newlines():
     assert v.clean_text("a\nb", max_len=1000, multiline=True) == "a\nb"
 
 
+def test_names_reject_numbers_but_tool_and_project_names_keep_sizes_and_phases():
+    assert v.clean_person_name("María D. Reyes-Jr.") == "María D. Reyes-Jr."
+    for value in ("123", "John 2", "Jane; DROP TABLE user"):
+        with pytest.raises(v.ValidationError):
+            v.clean_person_name(value)
+    assert v.clean_named_label("10 mm drill", field="Product Name") == "10 mm drill"
+    assert v.clean_named_label("Phase 2", field="Project Name") == "Phase 2"
+    with pytest.raises(v.ValidationError):
+        v.clean_named_label("123", field="Project Name")
+
+
 def test_search_is_capped_and_escaped():
     assert len(v.clean_search("a" * 500)) == 64
     assert v.escape_like("50%_off\\") == "50\\%\\_off\\\\"
@@ -126,6 +137,8 @@ def test_date_helpers():
         v.parse_iso_date("28/02/2026")
     with pytest.raises(v.ValidationError):
         v.validate_date_range(date(2026, 3, 1), date(2026, 2, 1))
+    with pytest.raises(v.ValidationError, match="both"):
+        v.validate_date_range(date(2026, 3, 1), None)
     v.validate_date_range(date(2026, 2, 1), date(2026, 2, 1))   # equal is fine
 
 

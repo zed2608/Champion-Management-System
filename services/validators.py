@@ -49,6 +49,23 @@ def clean_text(value, *, max_len: int = MAX_NAME, field: str = "Value", required
     return value
 
 
+def clean_person_name(value, *, field="Full Name", required=True, max_len=MAX_NAME):
+    """Names may contain spaces and common punctuation, but never digits or control text."""
+    name = clean_text(value, max_len=max_len, field=field, required=required)
+    if name and (not any(ch.isalpha() for ch in name) or
+                 any(not (ch.isalpha() or ch.isspace() or ch in "-'.’,") for ch in name)):
+        raise ValidationError(f"{field} must use letters, spaces, apostrophes, commas, periods or hyphens; no numbers.")
+    return name
+
+
+def clean_named_label(value, *, field, max_len=MAX_NAME, required=True):
+    """A project/tool name needs a word; digits are allowed for phases and sizes."""
+    name = clean_text(value, max_len=max_len, field=field, required=required)
+    if name and not any(ch.isalpha() for ch in name):
+        raise ValidationError(f"{field} must include a name, not just numbers or symbols.")
+    return name
+
+
 def clean_search(query) -> str:
     """Search box text: control chars removed, trimmed, capped at 64 characters (never raises)."""
     try:
@@ -200,6 +217,8 @@ def parse_iso_date(value, *, field: str = "Date", required: bool = True):
 
 def validate_date_range(start, end, *, field_start="Start date", field_end="End date"):
     """[4-DATE] start <= end (hard rule, mirrored by CHECK constraint chk_projects_dates)."""
+    if (start is None) != (end is None):
+        raise ValidationError(f"Enter both {field_start.lower()} and {field_end.lower()}, or leave both blank.")
     if isinstance(start, date) and isinstance(end, date) and start > end:
         raise ValidationError(f"{field_start} must be on or before {field_end.lower()}.")
 

@@ -61,7 +61,14 @@ def verify_borrower(actor, employee_id) -> dict:
         # exact membership through the project_workers junction (the old LIKE '%WKR-2026-001%' also matched WKR-2026-0011)
         cur.execute("""
             SELECT p.project_id, p.name, p.client, p.status, p.end_date, CURDATE() AS today,
-                   EXISTS (SELECT 1 FROM project_requirements pr WHERE pr.project_id = p.project_id AND pr.status <> 'Fulfilled') AS needs_tools
+                   EXISTS (
+                     SELECT 1 FROM project_requirements pr
+                     WHERE pr.project_id = p.project_id
+                       AND pr.quantity > COALESCE((
+                         SELECT SUM(tr.quantity) FROM `transaction` tr
+                         WHERE tr.project_id = pr.project_id AND tr.tool_id = pr.tool_id
+                           AND tr.type = 'Issue' AND tr.status = 'Active'), 0)
+                   ) AS needs_tools
             FROM projects p JOIN project_workers pw ON pw.project_id = p.project_id AND pw.user_id = %s
             WHERE p.archived_at IS NULL AND p.status IN ('Pending', 'Approved', 'Ongoing')
             ORDER BY p.project_id""", (u["user_id"],))
@@ -344,10 +351,12 @@ def retrieve(actor, user_id, tool_id, qty, condition, notes) -> RetrieveResult:
             raise Conflict(f"Cannot retrieve {v.fmt_qty(want)}: only {v.fmt_qty(held)} deployed to this employee.")
 
         remaining = want
+        affected_projects = set()
         for r in rows:
             if remaining <= 0:
                 break
             take = min(_num(r["quantity"]), remaining)
+            affected_projects.add(r["project_id"])
             if take == _num(r["quantity"]):                    # whole line comes back
                 cur.execute("""UPDATE `transaction` SET status = 'Returned', type = 'Retrieval', return_date = NOW(),
                                       condition_at_return = %s, condition_return_notes = %s, received_by = %s
@@ -366,6 +375,17 @@ def retrieve(actor, user_id, tool_id, qty, condition, notes) -> RetrieveResult:
                 res.closed_ids.append(cur.lastrowid)
             remaining -= take
         res.quantity = want
+
+        # A return frees project quota. Reopen its requirement so the same assigned
+        # worker can check out a replacement while the project is still active.
+        for project_id in sorted(p for p in affected_projects if p is not None):
+            cur.execute("""UPDATE project_requirements pr SET status = 'Clear'
+                           WHERE pr.project_id = %s AND pr.tool_id = %s
+                             AND pr.quantity > COALESCE((
+                               SELECT SUM(tr.quantity) FROM `transaction` tr
+                               WHERE tr.project_id = pr.project_id AND tr.tool_id = pr.tool_id
+                                 AND tr.type = 'Issue' AND tr.status = 'Active'), 0)""",
+                        (project_id, tool_id))
 
         if condition == "Good":
             return_units(cur, tool_id, good=want)

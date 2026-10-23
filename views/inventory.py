@@ -219,16 +219,20 @@ class InventoryView(UiMixin, ctk.CTkFrame):
 
         selection_frame = ctk.CTkFrame(table_card, fg_color="transparent")
         selection_frame.pack(fill="x", padx=22)
-        self.selected_count_label = ctk.CTkLabel(selection_frame, text="0 selected", font=T.font(12), text_color=T.TEXT_SECONDARY)
-        self.selected_count_label.pack(side="left", padx=(8, 0))
         self.select_page_var = ctk.StringVar(value="off")
-        self.select_page_check = ctk.CTkCheckBox(selection_frame, text="Select all on this page", variable=self.select_page_var,
+        self.select_page_check = ctk.CTkCheckBox(selection_frame, text="Select tagged tools on this page", variable=self.select_page_var,
                                                  onvalue="on", offvalue="off", font=T.font(12),
                                                  command=self._toggle_page_selection)
-        self.select_page_check.pack(side="left")
+        self.select_page_check.pack(side="left", padx=(8, 14))
+        self.select_page_check.pack_forget()  # the loaded page decides whether selection is possible
+        self.selected_count_label = ctk.CTkLabel(selection_frame, text="0 selected", font=T.font(12), text_color=T.TEXT_SECONDARY)
+        self.selected_count_label.pack(side="left")
+        self.no_tag_hint = ctk.CTkLabel(selection_frame, text="No tagged tools on this page. Assign a tag to print labels.",
+                                        font=T.font(12), text_color=T.TEXT_SECONDARY)
+        self.no_tag_hint.pack(side="left")
 
-        hint_text = ("💡 Click a row to View  ·  tick tagged items, then Batch Print Tags" if is_staff
-                     else "💡 Click a row to View/Edit  ·  tick tagged items, then Batch Print Tags") + "  ·  Disabled checkbox: assign a tag first"
+        hint_text = ("Click a tool to view it. Select tagged tools to print labels." if is_staff
+                     else "Click a tool to view or edit it. Select tagged tools to print labels.")
         ctk.CTkLabel(table_card, text=hint_text,
                      font=T.font(12, "italic"), text_color=T.TEXT_MUTED).pack(anchor="w", padx=22)
 
@@ -260,7 +264,14 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         if table is not None and table.winfo_exists():
             eligible = [str(row['tool_id']) for row in table.rows if row.get('tag_id')]
             self.select_page_var.set("on" if eligible and all(pid in self.selected_for_print for pid in eligible) else "off")
-            self.select_page_check.configure(state="normal" if eligible else "disabled")
+            if eligible:
+                self.no_tag_hint.pack_forget()
+                if not self.select_page_check.winfo_manager():
+                    self.select_page_check.pack(side="left", before=self.selected_count_label, padx=(8, 14))
+            else:
+                self.select_page_check.pack_forget()
+                if not self.no_tag_hint.winfo_manager():
+                    self.no_tag_hint.pack(side="left")
 
     def execute_batch_print(self):
         if not hasattr(self, 'selected_for_print') or not self.selected_for_print:
@@ -417,7 +428,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                 cursor.close()
                 conn.close()
 
-    INV_COLUMNS = [("Print", 1, 40), ("PID", 1, 50), ("Type", 2, 80), ("Name", 4, 150), ("Tag ID", 3, 120),
+    INV_COLUMNS = [("Print", 1, 80), ("PID", 1, 50), ("Type", 2, 80), ("Name", 4, 150), ("Tag ID", 3, 120),
                    ("Qty Avail.", 2, 80), ("UoM", 1, 50), ("Location", 4, 150), ("Status", 2, 80)]
 
     def load_inventory_data(self, query=None, sort_type=None, keep_page=False):
@@ -436,7 +447,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                 self.data_scroll, self.INV_COLUMNS, fetch=self._fetch_inventory_page, cells=self._inventory_cells,
                 row_bg=self._inventory_row_bg, cell_style=self._inventory_cell_style, on_row_click=lambda r: self.open_tool_modal(str(r['tool_id'])),
                 on_loaded=self._inventory_loaded, empty_text="No inventory found.", font_size=12, cell_pady=8, uniform="inv_cols",
-                checkbox={"col": 0, "state": self._inventory_check_state, "toggle": lambda r, on: self.toggle_print_selection(str(r['tool_id']), "on" if on else "off")})
+                checkbox={"col": 0, "state": self._inventory_check_state, "disabled_text": "Tag first",
+                          "toggle": lambda r, on: self.toggle_print_selection(str(r['tool_id']), "on" if on else "off")})
             self._inv_table.pack(fill="x", expand=True)
         self._inv_table.reload(self._inv_table.page if keep_page else 0)
 
