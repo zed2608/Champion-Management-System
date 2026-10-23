@@ -28,6 +28,7 @@ from views.help import HelpView
 from ui import charts          # noqa: F401  (applies the one shared Matplotlib style)
 from ui import components as C
 from ui import motion
+from ui.tour import GuidedTour
 from ui.toast import ToastHost
 from ui import theme as T
 
@@ -72,6 +73,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         self.current_frame = None
         self.current_page_name = None
+        self.guided_tour = None
         self.dashboard_refresh_job = None
         self._warning_dialog = None
 
@@ -184,6 +186,9 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                 font=T.font(14, "bold"), text_color=T.SIDEBAR
             )
             self.header_logo.pack(side="left", padx=30)
+
+        C.button(self.topbar_frame, text="Guided tour", command=self.start_tour,
+                 kind="secondary", compact=True).pack(side="left", padx=(0, 14))
 
         self.time_label = ctk.CTkLabel(
             self.topbar_frame, text="", font=T.font(12), text_color=T.TEXT_SECONDARY)
@@ -372,6 +377,8 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         self._return_to_login()
 
     def _return_to_login(self):
+        if self.guided_tour is not None:
+            self.guided_tour.close()
         end_session()
         self.destroy()
         self.master.deiconify()
@@ -524,7 +531,14 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         _spin()
         return overlay
 
-    def show_frame(self, page_name, highlight_low_stock=False, highlight_tool_id=None):
+    def start_tour(self):
+        if self.guided_tour is not None:
+            self.guided_tour.close()
+        self.guided_tour = GuidedTour(self)
+
+    def show_frame(self, page_name, highlight_low_stock=False, highlight_tool_id=None, tour_navigation=False):
+        if not tour_navigation and getattr(self, "guided_tour", None) is not None:
+            self.guided_tour.close()
         is_admin = self.user_info.get("role", "Staff") == "Admin"
         restricted_modules = ["Reports", "Maintenance", "Role Management"]   # [RBAC] UI hint only: services re-check the role in MySQL
 
@@ -811,6 +825,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         # ── Row 1: Summary Cards ──────────────────────────────────────────────
         num_cards = 4
         cards_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
+        self.dash_cards_frame = cards_frame
         cards_frame.pack(fill="x", pady=(0, 10))
         for i in range(num_cards):
             cards_frame.grid_columnconfigure(i, weight=1)

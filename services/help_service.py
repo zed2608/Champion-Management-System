@@ -52,6 +52,11 @@ def seed_defaults(actor, guides, faqs, hardware, software, legacy_guides=(), leg
                         cur.execute("UPDATE help_guides SET title=%s, steps=%s WHERE id=%s",
                                     (title, STEP_SEPARATOR.join(points), row["id"]))
                         break
+            titles = {r["title"] for r in rows}
+            for i, (admin_only, title, points) in enumerate(guides[len(legacy_guides):], len(legacy_guides)):
+                if title not in titles:
+                    cur.execute("INSERT INTO help_guides (title, steps, is_admin_only, display_order) VALUES (%s,%s,%s,%s)",
+                                (title, STEP_SEPARATOR.join(points), int(bool(admin_only)), i))
         cur.execute("SELECT COUNT(*) AS n FROM help_faqs")
         if cur.fetchone()["n"] == 0:
             for i, (admin_only, q, a) in enumerate(faqs):
