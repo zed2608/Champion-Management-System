@@ -33,18 +33,33 @@ COMMON = (
     Step("Issuance & Retrieval", "Deployment schedule", "This calendar shows which projects are planned for each day. Move between months to see future work.", "tabs", "📅 Deployment Schedule"),
     Step("Issuance & Retrieval", "Connected records", "Each issue and return updates inventory and the movement history. A return frees the project's quantity for a replacement.", "tabs", "📋 Deployment History"),
     Step("Tracking & Accountability", "Tool history", "Use this section to check who received a tool, when it was issued and whether it was returned.", "tabs", "📋 Issuance & Retrieval Logs"),
-    Step("Help", "Help and questions", "The Help Guide explains each task. FAQs give quick answers; Support Tickets let you ask an Admin for help.", "tabs"),
+    Step("Help", "Help Guide", "The guide explains sign-in, projects, inventory, tool movement and other sections step by step.", "tabs", "    ▤ Help Guide    "),
+    Step("Help", "Common questions", "FAQs answer frequent questions about tags, dates, returns and reports.", "tabs", "         💬 FAQs         "),
+    Step("Help", "Ask for help", "Use Support Tickets to send a question to an Admin and read the answer later.", "tabs", "   ✉ Support Tickets   "),
     Step("Profile", "Your profile", "Choose your name at the top to update your details, change your password or print your badge.", "profile"),
 )
 
 ADMIN_ONLY = (
     Step("Dashboard", "System status", "Admins see a short backup, records and tool service summary. Choose Show details for more.", "status"),
     Step("Project Management", "Manage projects", "Add a project, assign workers and request tools. Once tools have been issued, its dates and requirements are locked.", "button:Add Project"),
-    Step("Tracking & Accountability", "Review records", "Admins can inspect all movements, activity and the audit check.", "tabs", "⚙️ Activity Log"),
-    Step("Reports", "Reports", "The nine tabs cover stock, tool use, workers, projects, damage, low stock, overdue tools, wear and unusual activity.", "tabs"),
-    Step("Reports", "Dates and PDF", "Choose a date range when needed, then export a report to PDF. Empty dates include all records.", "button:Export PDF"),
-    Step("Maintenance", "Tool issues", "Review repairs, damage and lost tools here. Resolving an issue updates stock and tool condition.", "tabs", "🔧 Issues & Repairs"),
-    Step("Maintenance", "Archive and backups", "Archived records remain in history. Backup and restore tools are here for Admins; restore replaces the selected database.", "tabs", "💾 Backup & Restore"),
+    Step("Tracking & Accountability", "Audit records", "Compare tools that are out with those that were returned and review differences.", "tabs", "🔎 Audit Records"),
+    Step("Tracking & Accountability", "Activity Log", "See actions taken in the system and verify that the audit record is intact.", "tabs", "⚙️ Activity Log"),
+    Step("Reports", "Inventory ABC", "See which tools are used most often and which need closer stock attention.", "tabs", "▤ Inventory ABC Analysis"),
+    Step("Reports", "Tool use", "See how often each tool was borrowed and how much stock remains.", "tabs", "⛭ Tool Usage Report"),
+    Step("Reports", "Worker activity", "Review issues and returns by employee.", "tabs", "🖹 Employee Activity"),
+    Step("Reports", "Project allocation", "See which tools have been assigned or issued to each project.", "tabs", "📋 Project Allocation"),
+    Step("Reports", "Damage and loss", "See damaged and lost units and their costs.", "tabs", "⚠ Damage & Loss"),
+    Step("Reports", "Low stock", "Find items near or below their minimum stock level.", "tabs", "⭣ Low Stock"),
+    Step("Reports", "Overdue tools", "See tools still out after their project due date.", "tabs", "⧖ Overdue Transactions"),
+    Step("Reports", "Tool wear", "See equipment that may be due for service.", "tabs", "🔧 Wear"),
+    Step("Reports", "Unusual activity", "See repeated stock shortages or patterns that need a closer look.", "tabs", "🔎 Anomalies"),
+    Step("Reports", "Export a PDF", "Choose a date range if needed, then choose Export PDF. Empty dates include all records.", "button:Export PDF"),
+    Step("Maintenance", "Tool issues", "Review repairs, damage and lost tools. Resolving an issue updates stock and condition.", "tabs", "🔧 Issues & Repairs"),
+    Step("Maintenance", "Archived tools", "Restore a tool that was archived after all of its units were returned or resolved.", "tabs", "📦 Archived Tools"),
+    Step("Maintenance", "Archived people", "Admins can review and restore accounts that were deactivated.", "tabs", "👥 Archived Employees"),
+    Step("Maintenance", "Archived projects", "Completed or cancelled projects can be archived while keeping their history.", "tabs", "📋 Archived Projects"),
+    Step("Maintenance", "Service forecast", "Review hours used and which equipment is due for attention.", "tabs", "📈 Wear Forecast"),
+    Step("Maintenance", "Backup and restore", "Backups protect the database. Restore replaces its data, so use the correct file and database.", "tabs", "💾 Backup & Restore"),
     Step("Role Management", "People and roles", "Admins register Staff and Workers, update accounts and print Worker badges. Workers do not sign in.", "button:Register New User"),
 )
 
@@ -82,6 +97,7 @@ class GuidedTour:
         controls = ctk.CTkFrame(self.panel, fg_color="transparent")
         controls.pack(fill="x", padx=14, pady=(5, 14))
         C.button(controls, text="Exit tour", command=self.close, kind="ghost", compact=True).pack(side="left")
+        C.button(controls, text="Next section", command=self.next_section, kind="ghost", compact=True).pack(side="left", padx=(3, 0))
         self.next_button = C.button(controls, text="Next", command=self.next, kind="primary", compact=True, width=90)
         self.next_button.pack(side="right")
         self.back_button = C.button(controls, text="Back", command=self.back, kind="secondary", compact=True, width=75)
@@ -169,6 +185,16 @@ class GuidedTour:
     def back(self):
         if self.index:
             self.index -= 1
+            self.show()
+
+    def next_section(self):
+        page = self.steps[self.index].page
+        following = next((i for i in range(self.index + 1, len(self.steps))
+                          if self.steps[i].page != page), None)
+        if following is None:
+            self.close()
+        else:
+            self.index = following
             self.show()
 
     def close(self):

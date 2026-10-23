@@ -10,6 +10,8 @@ def test_tour_covers_every_visible_section_without_admin_pages_for_staff():
     assert {s.page for s in staff} == {"Dashboard", "Project Management", "Inventory",
                                         "Issuance & Retrieval", "Tracking & Accountability", "Help", "Profile"}
     assert {"Reports", "Maintenance", "Role Management"} <= {s.page for s in admin}
+    assert len({s.tab for s in admin if s.page == "Reports" and s.tab}) == 9
+    assert len({s.tab for s in admin if s.page == "Maintenance" and s.tab}) == 6
     assert [s.page for s in staff] == sorted((s.page for s in staff),
                                             key=lambda page: ["Dashboard", "Project Management", "Inventory",
                                                               "Issuance & Retrieval", "Tracking & Accountability",

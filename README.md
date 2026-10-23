@@ -86,7 +86,7 @@ python main.py
 
 The command only adds missing records with `Demo` in their names, keeps existing records, and can be run again without duplicating the sample. It uses the same database as `python main.py`, so check the target shown in the preview first. Its projects have assigned Workers and tool requirements; ten of the items have tags for printing. The full local defense dataset and its separate database remain described in `docs/DEMO_SETUP.md`.
 
-After login, choose **Guided tour** in the top bar or **Help > About > Start guided tour**. Use Next and Back to see the actual modules and the outlined controls. Admin sees all sections; Staff sees only sections they may open. Exit tour at any point. It does not change projects, stock or tool movements; normal page visits still appear in the activity log.
+After login, choose **Guided tour** in the top bar or **Help > About > Start guided tour**. Use Next and Back to see the actual modules and the outlined controls, or Next section to move through it faster. Admin sees all sections; Staff sees only sections they may open. Exit tour at any point. It does not change projects, stock or tool movements; normal page visits still appear in the activity log.
 
 ## 5. Tests
 
