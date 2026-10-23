@@ -82,8 +82,12 @@ class GuidedTour:
         self.steps = steps_for(app.user_info.get("role", "Staff"))
         self.index = 0
         self._job = None
-        self.panel = C.card(app, width=440)
-        self.panel.place(relx=1, rely=1, x=-18, y=-18, anchor="se")
+        # A placed frame does not reliably grow to fit packed children on every
+        # Tk/CustomTkinter scaling setting. Give the dock a real viewport so the
+        # description and navigation buttons cannot be clipped to the heading.
+        self.panel = C.card(app, width=440, height=240)
+        self.panel.pack_propagate(False)
+        self.panel.place(relx=1, rely=1, x=-18, y=-18, anchor="se", width=440, height=240)
         ctk.CTkLabel(self.panel, text="GUIDED TOUR", font=T.font(12, "bold"),
                      text_color=T.PRIMARY).pack(anchor="w", padx=18, pady=(15, 0))
         self.title = ctk.CTkLabel(self.panel, text="", font=T.font(18, "bold"),

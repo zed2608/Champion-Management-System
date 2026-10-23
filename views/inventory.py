@@ -219,14 +219,14 @@ class InventoryView(UiMixin, ctk.CTkFrame):
 
         selection_frame = ctk.CTkFrame(table_card, fg_color="transparent")
         selection_frame.pack(fill="x", padx=22)
-        self.selected_count_label = ctk.CTkLabel(selection_frame, text="0 selected", font=T.font(12), text_color=T.TEXT_SECONDARY)
-        self.selected_count_label.pack(side="left", padx=(8, 0))
         self.select_page_var = ctk.StringVar(value="off")
-        self.select_page_check = ctk.CTkCheckBox(selection_frame, text="Select all on this page", variable=self.select_page_var,
+        self.select_page_check = ctk.CTkCheckBox(selection_frame, text="Select tagged tools on this page", variable=self.select_page_var,
                                                  onvalue="on", offvalue="off", font=T.font(12),
                                                  command=self._toggle_page_selection)
-        self.select_page_check.pack(side="left")
+        self.select_page_check.pack(side="left", padx=(8, 14))
         self.select_page_check.pack_forget()  # the loaded page decides whether selection is possible
+        self.selected_count_label = ctk.CTkLabel(selection_frame, text="0 selected", font=T.font(12), text_color=T.TEXT_SECONDARY)
+        self.selected_count_label.pack(side="left")
         self.no_tag_hint = ctk.CTkLabel(selection_frame, text="No tagged tools on this page. Assign a tag to print labels.",
                                         font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.no_tag_hint.pack(side="left")
@@ -267,7 +267,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             if eligible:
                 self.no_tag_hint.pack_forget()
                 if not self.select_page_check.winfo_manager():
-                    self.select_page_check.pack(side="left")
+                    self.select_page_check.pack(side="left", before=self.selected_count_label, padx=(8, 14))
             else:
                 self.select_page_check.pack_forget()
                 if not self.no_tag_hint.winfo_manager():

@@ -69,7 +69,7 @@ Tips: rehearse once with a throwaway reset; keep the Angle Grinder refusal and t
 
 ## `ui/tour-dashboard` defense UI checks (23 October 2026)
 
-Inventory now has **Select all on this page**, a live selected count, and **Batch Print Tags** enables only after a tagged tool is selected. Untagged rows have disabled checkboxes; assign a tag before printing. Check this with a real mouse on a tagged row, after paging and searching, then on an untagged row. The automated Tk event check can be repeated with `.venv\Scripts\python.exe scripts/check_tour_inventory.py`; it forces the local `champion_demo` database and does not print.
+Inventory now has **Select tagged tools on this page**, a live selected count, and **Batch Print Tags** enables only after a tagged tool is selected. Tagged rows have a clickable **Select** label; untagged rows say **Tag first**. Check this with a real mouse on a tagged row, after paging and searching, then on an untagged row. The automated Tk event check can be repeated with `.venv\Scripts\python.exe scripts/check_tour_inventory.py`; it forces the local `champion_demo` database and does not print.
 
 Reports keep their data charts, but empty chart and summary regions collapse and populated charts are shorter. Open all nine tabs at 1366×768 and 1920×1080. `.venv\Scripts\python.exe scripts/capture_tour_reports.py --check-only` opens each tab at both sizes without writing screenshots. With an unlocked 1920×1080 desktop, omit `--check-only` to save captures under `docs/screenshots/tour_dashboard_after/`. Capture was blocked in the automated session (`OSError: screen grab failed`), so inspect the screen directly.
 
