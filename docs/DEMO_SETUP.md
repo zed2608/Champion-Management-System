@@ -73,4 +73,4 @@ Inventory now has **Select tagged tools on this page**, a live selected count, a
 
 Reports keep their data charts, but empty chart and summary regions collapse and populated charts are shorter. Open all nine tabs at 1366×768 and 1920×1080. `.venv\Scripts\python.exe scripts/capture_tour_reports.py --check-only` opens each tab at both sizes without writing screenshots. With an unlocked 1920×1080 desktop, omit `--check-only` to save captures under `docs/screenshots/tour_dashboard_after/`. Capture was blocked in the automated session (`OSError: screen grab failed`), so inspect the screen directly.
 
-The current `fix/defense-ux` branch has a four-card dashboard for each role and a guided tour available from the top bar and Help > About. See `docs/HAND_TEST_CHECKLIST.md` for the current manual checks. The older `docs/TOUR_DASHBOARD_SUMMARY.md` records the previous branch's state.
+The current `fix/defense-ux` branch has a four-card dashboard for each role. See `docs/HAND_TEST_CHECKLIST.md` for the current manual checks. The older `docs/TOUR_DASHBOARD_SUMMARY.md` records the previous branch's state.

@@ -72,7 +72,7 @@ looks in `C:\Program Files\MySQL\MySQL Server 8.0\bin`. Restoring replaces the w
 
 The 15-minute inactivity logout, the audit chain (Tracking > Activity Log > Verify Audit Chain) and the Admin insight cards (wear forecast, anomalies, backup age) are described in `docs/DOC_SYNC.md`.
 
-## 4. Sample records and guided tour
+## 4. Sample records
 
 ### Add sample records to your current database
 
@@ -85,8 +85,6 @@ python main.py
 ```
 
 The command only adds missing records with `Demo` in their names, keeps existing records, and can be run again without duplicating the sample. It uses the same database as `python main.py`, so check the target shown in the preview first. Its projects have assigned Workers and tool requirements; ten of the items have tags for printing. The full local defense dataset and its separate database remain described in `docs/DEMO_SETUP.md`.
-
-After login, choose **Guided tour** in the top bar or **Help > About > Start guided tour**. Use Next and Back to see the actual modules and the outlined controls, or Next section to move through it faster. Admin sees all sections; Staff sees only sections they may open. Exit tour at any point. It does not change projects, stock or tool movements; normal page visits still appear in the activity log.
 
 ## 5. Tests
 

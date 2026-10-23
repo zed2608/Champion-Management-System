@@ -12,6 +12,7 @@ from services.validators import ValidationError, clean_text
 
 STEP_SEPARATOR = "|||"
 REQ_TYPES = ("Hardware", "Software")
+RETIRED_GUIDE_TITLES = ("15. Guided Tour",)
 
 
 def _int(value, field, low=0, high=10_000):
@@ -57,6 +58,11 @@ def seed_defaults(actor, guides, faqs, hardware, software, legacy_guides=(), leg
                 if title not in titles:
                     cur.execute("INSERT INTO help_guides (title, steps, is_admin_only, display_order) VALUES (%s,%s,%s,%s)",
                                 (title, STEP_SEPARATOR.join(points), int(bool(admin_only)), i))
+        # Older installations stored this built-in guide in MySQL. Staff only
+        # have read access to guides; an Admin removes it when Help next opens.
+        if actor.get("role") == "Admin":
+            for title in RETIRED_GUIDE_TITLES:
+                cur.execute("DELETE FROM help_guides WHERE title=%s", (title,))
         cur.execute("SELECT COUNT(*) AS n FROM help_faqs")
         if cur.fetchone()["n"] == 0:
             for i, (admin_only, q, a) in enumerate(faqs):
@@ -93,7 +99,8 @@ def list_guides(actor):
     with db.read() as cur:
         cur.execute("SELECT * FROM help_guides ORDER BY display_order ASC, id ASC")
         rows = cur.fetchall()
-    return rows if actor["role"] == "Admin" else [r for r in rows if not r["is_admin_only"]]
+    visible = [r for r in rows if r["title"] not in RETIRED_GUIDE_TITLES]
+    return visible if actor["role"] == "Admin" else [r for r in visible if not r["is_admin_only"]]
 
 
 @require_role("Admin", "Staff")

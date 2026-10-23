@@ -124,12 +124,6 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "Print your Employee ID QR badge for site verification workflows.",
             "Borrowing history table shows your recent transactions and statuses.",
         ]),
-        (False, "15. Guided Tour", [
-            "Choose Guided tour at the top of the main window, or Start guided tour on Help > About.",
-            "Use Next and Back to move through the live screens, or Next section for a quicker overview. The yellow outline points to the current area.",
-            "The tour shows the sections your role can access. It does not change projects, stock or tool movements.",
-            "Choose Exit tour at any time. You can start it again whenever you need help.",
-        ]),
     ]
 
     FAQS = [
@@ -639,8 +633,6 @@ class HelpView(UiMixin, ctk.CTkFrame):
         row.pack(anchor="w", padx=20, pady=(16, 4))
         C.button(row, kind="primary", text="▶ Replay the intro", width=160,
                  command=lambda: intro_module.IntroWindow(self.winfo_toplevel(), first_run=False)).pack(side="left")
-        C.button(row, kind="primary", text="Start guided tour", width=160,
-                 command=lambda: getattr(self.winfo_toplevel(), "start_tour", lambda: None)()).pack(side="left", padx=(10, 0))
         self.about_status = ctk.CTkLabel(outer, text="", font=T.font(12), text_color=T.TEXT_MUTED)
 
         def reset_intro():
