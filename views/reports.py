@@ -40,8 +40,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=0)
-        self.grid_rowconfigure(2, weight=0)
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(2, weight=1)
 
         self.build_ui()
 
@@ -51,26 +50,14 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 5))
         C.PageHeader(top_bar, "Reports", "Find records and export a report").pack(fill="x")
 
-        # Date Filters
-        filter_f = ctk.CTkFrame(self, fg_color="transparent")
-        self.date_filter_frame = filter_f
-        filter_f.grid(row=1, column=0, sticky="e", padx=15, pady=(0, 8))
-        ctk.CTkLabel(filter_f, text="From:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 5))
-        self.start_date = C.field(filter_f, placeholder_text="YYYY-MM-DD", width=100)
-        self.start_date.pack(side="left", padx=(0, 2))
-        self.start_date.configure(state="readonly")
-        C.button(filter_f, compact=True, kind="secondary", text="📅", width=32, command=lambda: self.open_date_picker(self.start_date)).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(filter_f, text="To:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 5))
-        self.end_date = C.field(filter_f, placeholder_text="YYYY-MM-DD", width=100)
-        self.end_date.pack(side="left", padx=(0, 2))
-        self.end_date.configure(state="readonly")
-        C.button(filter_f, compact=True, kind="secondary", text="📅", width=32, command=lambda: self.open_date_picker(self.end_date)).pack(side="left", padx=(0, 10))
-        C.button(filter_f, compact=True, kind="primary", text="Apply", width=60, command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(0, 5))
-        C.button(filter_f, compact=True, kind="secondary", text="Clear", width=60, command=self.clear_date_filter).pack(side="left")
-
-        # Report choice and search share a short row; all choices remain in the menu.
-        tab_bar = ctk.CTkFrame(self, fg_color="transparent")
-        tab_bar.grid(row=2, column=0, sticky="ew", pady=(0, 8), padx=15)
+        # The common task (choose and search a report) comes first. Optional
+        # date limits sit in a quieter row; export stays with the report data.
+        toolbar = C.card(self)
+        toolbar.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+        tab_bar = ctk.CTkFrame(toolbar, fg_color="transparent")
+        tab_bar.pack(fill="x", padx=16, pady=(12, 8))
+        ctk.CTkLabel(tab_bar, text="View report", font=T.font(12, "bold"),
+                     text_color=T.TEXT).pack(side="left")
         controls = ctk.CTkFrame(tab_bar, fg_color="transparent")
         controls.pack(side="right")
         self.tab_var = ctk.StringVar(value="⛭ Tool Usage Report")
@@ -88,11 +75,35 @@ class ReportsView(UiMixin, ctk.CTkFrame):
                                      textvariable=self.report_search_var)
         self.report_search.bind("<Return>", lambda e: self.switch_tab(self.tab_var.get()))
         self.report_search.pack(side="left")
-        C.button(controls, compact=True, kind="secondary", text="Search", width=65,
+        C.button(controls, compact=True, kind="primary", text="Search", width=65,
                  command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(5, 0))
 
+        filter_f = ctk.CTkFrame(toolbar, fg_color=T.SURFACE_ALT, corner_radius=T.RADIUS_SM)
+        self.date_filter_frame = filter_f
+        filter_f.pack(fill="x", padx=16, pady=(0, 12))
+        ctk.CTkLabel(filter_f, text="Dates (optional)", font=T.font(12, "bold"),
+                     text_color=T.TEXT_SECONDARY).pack(side="left", padx=(10, 0), pady=8)
+        dates = ctk.CTkFrame(filter_f, fg_color="transparent")
+        dates.pack(side="right", padx=8, pady=6)
+        ctk.CTkLabel(dates, text="From", font=T.font(12), text_color=T.TEXT_SECONDARY).pack(side="left", padx=(0, 5))
+        self.start_date = C.field(dates, placeholder_text="YYYY-MM-DD", width=100)
+        self.start_date.pack(side="left", padx=(0, 2))
+        self.start_date.configure(state="readonly")
+        C.button(dates, compact=True, kind="secondary", text="📅", width=32,
+                 command=lambda: self.open_date_picker(self.start_date)).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(dates, text="To", font=T.font(12), text_color=T.TEXT_SECONDARY).pack(side="left", padx=(0, 5))
+        self.end_date = C.field(dates, placeholder_text="YYYY-MM-DD", width=100)
+        self.end_date.pack(side="left", padx=(0, 2))
+        self.end_date.configure(state="readonly")
+        C.button(dates, compact=True, kind="secondary", text="📅", width=32,
+                 command=lambda: self.open_date_picker(self.end_date)).pack(side="left", padx=(0, 10))
+        C.button(dates, compact=True, kind="primary", text="Apply", width=60,
+                 command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(0, 5))
+        C.button(dates, compact=True, kind="secondary", text="Clear", width=60,
+                 command=self.clear_date_filter).pack(side="left")
+
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
-        self.tab_content.grid(row=3, column=0, sticky="nsew", pady=(10, 0))
+        self.tab_content.grid(row=2, column=0, sticky="nsew")
         self.tab_content.grid_columnconfigure(0, weight=1)
         self.tab_content.grid_rowconfigure(0, weight=1)
 
@@ -224,9 +235,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         if not valid: return
         self._report_search_text = self.report_search_var.get().strip()
         if selected == "⭣ Low Stock":
-            self.date_filter_frame.grid_remove()
+            self.date_filter_frame.pack_forget()
         elif not self.date_filter_frame.winfo_manager():
-            self.date_filter_frame.grid()
+            self.date_filter_frame.pack(fill="x", padx=16, pady=(0, 12))
         
         self._release_figures()
         for widget in self.tab_content.winfo_children():

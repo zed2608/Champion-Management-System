@@ -105,8 +105,9 @@ class HelpView(UiMixin, ctk.CTkFrame):
         ]),
         (False, "11. Reports", [
             "The six reports cover tool use, employee activity, project allocation, damage and loss, low stock, and overdue transactions. Wear forecasts are under Maintenance.",
-            "Search within a report by name, ID or status and press Search or Enter. The PDF uses the same search and dates as the screen. The Tool Usage tab also has a tool search.",
-            "Dates are optional for historical reports; Low Stock shows current stock and has no date filter. Notes in the export dialog appear on the PDF but do not filter results.",
+            "Choose a report and search by name, ID or status in the first control row. Press Search or Enter. The Tool Usage report also has a tool search.",
+            "Dates are optional and appear in the second row. Choose From and To, then Apply; Clear removes both dates. Low Stock shows current stock and has no date filter.",
+            "Export PDF is beside the report title. It uses the search and dates shown on screen. Notes in the export dialog appear on the PDF but do not filter results.",
         ]),
         (True, "12. Maintenance & Centralized Archive (Admin Only)", [
             "Issues & Repairs: Submit flags (Damaged, Lost, Needs Repair, etc.) and investigate active issues.",

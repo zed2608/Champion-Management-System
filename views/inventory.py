@@ -432,7 +432,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                 cursor.close()
                 conn.close()
 
-    INV_COLUMNS = [("Print", 1, 72), ("PID", 1, 45), ("Type", 2, 65), ("Name", 4, 120), ("Tag ID", 3, 95),
+    INV_COLUMNS = [("Print", 1, 72), ("PID", 1, 45), ("Type", 2, 110), ("Name", 4, 120), ("Tag ID", 3, 95),
                    ("In stock", 2, 65), ("Unit", 1, 42), ("Location", 4, 110), ("Status", 2, 65)]
 
     def load_inventory_data(self, query=None, sort_type=None, keep_page=False):
