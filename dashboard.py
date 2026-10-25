@@ -49,12 +49,12 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
-        w = int(sw * 0.85)
-        h = int(sh * 0.85)
+        w = min(sw, max(940, int(sw * 0.9)))
+        h = min(sh, max(680, int(sh * 0.9)))
         x = (sw - w) // 2
         y = (sh - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(1350, 750)
+        self.minsize(min(sw, 940), min(sh, 680))
 
         self.protocol("WM_DELETE_WINDOW", self.confirm_logout)
 
@@ -66,7 +66,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
         self.main_container.grid(
-            row=1, column=1, sticky="nsew", padx=30, pady=30)
+            row=1, column=1, sticky="nsew", padx=12, pady=16)
         self.main_container.grid_rowconfigure(0, weight=1)
         self.main_container.grid_columnconfigure(0, weight=1)
 
@@ -97,7 +97,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
 
     def build_sidebar(self):
         self.sidebar_frame = ctk.CTkFrame(
-            self, width=250, corner_radius=0, fg_color=T.SIDEBAR)
+            self, width=200, corner_radius=0, fg_color=T.SIDEBAR)
         self.sidebar_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
         self.sidebar_frame.grid_propagate(False)
 

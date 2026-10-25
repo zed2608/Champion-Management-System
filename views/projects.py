@@ -55,15 +55,10 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.draft_modal = ctk.CTkToplevel(self)
         self.draft_modal.title(
             "Edit Project" if edit_row else "Draft Project Plan")
-        self.draft_modal.geometry("500x750")
+        C.fit_window(self.draft_modal, 500, 750)
         self.draft_modal.configure(fg_color=T.SURFACE)
         self.draft_modal.attributes("-topmost", True)
         self.draft_modal.grab_set()
-
-        self.draft_modal.update_idletasks()
-        x = (self.draft_modal.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.draft_modal.winfo_screenheight() // 2) - (750 // 2)
-        self.draft_modal.geometry(f"500x750+{x}+{y}")
 
         form_card = ctk.CTkScrollableFrame(
             self.draft_modal, fg_color=T.SURFACE, corner_radius=0)
@@ -160,8 +155,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.p_start.bind("<Return>", lambda e: self.p_end.focus_set())
         self.p_end.bind("<Return>", lambda e: self.save_project())
 
-        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(20, 20))
+        btn_row = ctk.CTkFrame(self.draft_modal, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 16))
         btn_text = "Update Project" if edit_row else ("Save & Approve (Ready for Deployment)" if self.is_admin else "Save as Draft")
         self.btn_save = C.button(btn_row, kind="primary", text=btn_text, command=self.save_project)
         self.btn_save.pack(side="left", fill="x", expand=True, padx=(0, 5))
@@ -347,21 +342,14 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
     def open_tool_picker(self):
         modal = ctk.CTkToplevel(self)
         modal.title("Inventory Requisition Catalog")
-        modal.geometry("900x600")
+        C.fit_window(modal, 900, 600)
         modal.configure(fg_color=T.SURFACE)
         modal.attributes("-topmost", True)
-        # Must be false or it will hide message boxes
-        modal.attributes("-topmost", False)
         modal.grab_set()
         # Keep the draft modal on top but this modal above it
         modal.transient(self.draft_modal)
-        modal.update_idletasks()
-        x = (modal.winfo_screenwidth() // 2) - (900 // 2)
-        y = (modal.winfo_screenheight() // 2) - (600 // 2)
-        modal.geometry(f"900x600+{x}+{y}")
-
         ctk.CTkLabel(modal, text="Select Items for Project Requisition", font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 5))
-        ctk.CTkLabel(modal, text="Search by Name or PID, then set quantity and click + Add.",
+        ctk.CTkLabel(modal, text="Choose a quantity and click + Add. This plans items for the project; stock changes when items are issued.",
                      font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=(0, 10))
 
         search_frame = ctk.CTkFrame(modal, fg_color="transparent")
@@ -406,7 +394,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             cat_inner.pack(fill="x", expand=True)
 
             cols = ["PID", "Type", "Item Name", "UoM",
-                    "Avail/Tot", "Req Qty", "Action"]
+                    "In stock / Total", "Needed", "Action"]
             weights = [1, 1, 3, 1, 1, 1, 1]
 
             for col, w in enumerate(weights):
@@ -503,6 +491,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                     cursor.close()
                     conn.close()
 
+        modal.catalog_status = ctk.CTkLabel(modal, text="In stock stays the same until an item is issued.",
+                                               font=T.font(12), text_color=T.TEXT_SECONDARY)
+        modal.catalog_status.pack(side="bottom", pady=(0, 8))
         load_catalog()
         C.button(modal, kind="secondary", text="Done / Close Catalog", 
                       command=modal.destroy).pack(pady=(5, 15))
@@ -518,19 +509,22 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         if new_qty > v.parse_quantity(row_data['total'], allow_zero=True):
             return messagebox.showerror("Quantity too high", f"The company owns {fmt_qty(row_data['total'])} {row_data['uom']} in total.", parent=modal)
 
-        needs_retrieval = False
-        if new_qty > v.parse_quantity(row_data['avail'], allow_zero=True):
-            warn_msg = (
-                f"⚠️ TIMELINE CONFLICT RISK\n\nYou requested {req_qty}, but only {fmt_qty(row_data['avail'])} are in the warehouse.\n\nMissing items are deployed elsewhere. If not returned before your Start Date, the project may be delayed.\n\nAdd anyway?")
-            if not C.confirm("Stock Conflict", warn_msg, parent=modal):
-                return
-            needs_retrieval = True
+        needs_retrieval = new_qty > v.parse_quantity(row_data['avail'], allow_zero=True)
+        action = "Update" if existing else "Add"
+        message = (f"{action} {fmt_qty(req_qty)} {row_data['uom']} of {row_data['name']} to this project?\n\n"
+                   "This is a planned requirement. The stock count changes when the item is issued.")
+        if needs_retrieval:
+            message += (f"\n\nOnly {fmt_qty(row_data['avail'])} {row_data['uom']} are currently in stock. "
+                        "The remaining items must be returned before they can be issued.")
+        if not C.confirm("Confirm project requirement", message, parent=modal):
+            return
 
         if existing:
             existing['qty'] = new_qty
             existing['needs_retrieval'] = existing['needs_retrieval'] or needs_retrieval
             self.refresh_req_cart()
             qty_entry.delete(0, 'end')
+            self._catalog_added(modal, row_data, new_qty)
             return
 
         self.req_cart.append({
@@ -539,6 +533,13 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         })
         self.refresh_req_cart()
         qty_entry.delete(0, 'end')
+        self._catalog_added(modal, row_data, new_qty)
+
+    @staticmethod
+    def _catalog_added(modal, row_data, total_qty):
+        modal.catalog_status.configure(
+            text=f"Added to project: {row_data['name']} ({fmt_qty(total_qty)} {row_data['uom']}). Stock is unchanged.",
+            text_color=T.SUCCESS_TEXT)
 
     def refresh_req_cart(self):
         for w in self.cart_scroll.winfo_children():

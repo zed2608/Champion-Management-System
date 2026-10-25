@@ -366,15 +366,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
     def open_issuance_modal(self):
         self.issuance_modal = ctk.CTkToplevel(self)
         self.issuance_modal.title("Issue Tools")
-        self.issuance_modal.geometry("500x700")
+        C.fit_window(self.issuance_modal, 500, 700)
         self.issuance_modal.configure(fg_color=T.SURFACE)
         self.issuance_modal.attributes("-topmost", True)
         self.issuance_modal.grab_set()
-        
-        self.issuance_modal.update_idletasks()
-        x = (self.issuance_modal.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.issuance_modal.winfo_screenheight() // 2) - (700 // 2)
-        self.issuance_modal.geometry(f"+{x}+{y}")
         
         form_card = ctk.CTkScrollableFrame(self.issuance_modal, fg_color=T.SURFACE, corner_radius=0)
         form_card.pack(fill="both", expand=True)
@@ -414,9 +409,9 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.cart_frame.pack(fill="x", padx=20, pady=(10, 20))
         self.refresh_cart_ui() 
 
-        C.button(form_card, kind="primary", text="Issue Tools & Print Receipt", command=self.execute_borrow).pack(fill="x", padx=20, pady=(0, 20))
-        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(0, 20))
+        btn_row = ctk.CTkFrame(self.issuance_modal, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 16))
+        C.button(btn_row, kind="primary", text="Issue & Print Receipt", command=self.execute_borrow).pack(side="left", fill="x", expand=True, padx=(0, 8))
         C.button(btn_row, kind="secondary", text="Cancel", width=80, command=self.issuance_modal.destroy).pack(side="right")
         
         self.active_borrow_user_id = None
@@ -430,15 +425,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
     def open_retrieval_modal(self):
         self.retrieval_modal = ctk.CTkToplevel(self)
         self.retrieval_modal.title("Retrieve Tools")
-        self.retrieval_modal.geometry("500x650")
+        C.fit_window(self.retrieval_modal, 500, 650)
         self.retrieval_modal.configure(fg_color=T.SURFACE)
         self.retrieval_modal.attributes("-topmost", True)
         self.retrieval_modal.grab_set()
-        
-        self.retrieval_modal.update_idletasks()
-        x = (self.retrieval_modal.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.retrieval_modal.winfo_screenheight() // 2) - (650 // 2)
-        self.retrieval_modal.geometry(f"+{x}+{y}")
         
         form_card = ctk.CTkScrollableFrame(self.retrieval_modal, fg_color=T.SURFACE, corner_radius=0)
         form_card.pack(fill="both", expand=True)
@@ -489,9 +479,9 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.r_qty.pack(fill="x", pady=(5, 0))
         self.r_qty.insert(0, "1")
 
-        C.button(form_card, kind="secondary", text="Confirm Retrieval & Restock", command=self.execute_return).pack(fill="x", padx=20, pady=(0, 20))
-        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(10, 20))
+        btn_row = ctk.CTkFrame(self.retrieval_modal, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 16))
+        C.button(btn_row, kind="primary", text="Confirm Retrieval & Restock", command=self.execute_return).pack(side="left", fill="x", expand=True, padx=(0, 8))
         C.button(btn_row, kind="secondary", text="Cancel", width=80, command=self.retrieval_modal.destroy).pack(side="right")
         
         self.active_return_user_id = None

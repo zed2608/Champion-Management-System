@@ -55,15 +55,10 @@ class InventoryView(UiMixin, ctk.CTkFrame):
     def open_add_item_modal(self):
         self.add_modal = ctk.CTkToplevel(self)
         self.add_modal.title("Add New Item")
-        self.add_modal.geometry("500x700")
+        C.fit_window(self.add_modal, 500, 700)
         self.add_modal.configure(fg_color=T.SURFACE)
         self.add_modal.attributes("-topmost", True)
         self.add_modal.grab_set()
-
-        self.add_modal.update_idletasks()
-        x = (self.add_modal.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.add_modal.winfo_screenheight() // 2) - (700 // 2)
-        self.add_modal.geometry(f"500x700+{x}+{y}")
 
         form_card = ctk.CTkScrollableFrame(
             self.add_modal, fg_color=T.SURFACE, corner_radius=0)
@@ -142,8 +137,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         self.qty_entry.bind("<Return>", lambda e: self.loc_entry.focus_set())
         self.loc_entry.bind("<Return>", lambda e: self.validate_and_save())
 
-        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(10, 20))
+        btn_row = ctk.CTkFrame(self.add_modal, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 16))
         btn_row.grid_columnconfigure((0, 1), weight=1)
 
         C.button(btn_row, kind="primary", text="Save Item", command=self.validate_and_save).grid(row=0, column=0, padx=(0, 5), sticky="ew")
@@ -195,8 +190,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
 
         self.search_var = ctk.StringVar()
         self.search_entry = C.field(
-            search_frame, placeholder_text="Search name, tag, supplier, location...", width=350, textvariable=self.search_var)
-        self.search_entry.pack(side="left", padx=(0, 10))
+            search_frame, placeholder_text="Search name, tag, supplier, location...", width=260, textvariable=self.search_var)
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
         self._search_timer = None
         def on_search_change(*args):
@@ -206,12 +201,12 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         self.search_var.trace_add("write", on_search_change)
 
         self.sort_menu = ctk.CTkOptionMenu(search_frame, values=["Most Recent", "Oldest", "A-Z (Name)", "Z-A (Name)", "PID (Low-High)", "Needs Tag", "Already Tagged"],
-                                           width=140, height=38, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.perform_search())
+                                           width=125, height=38, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.perform_search())
         self.sort_menu.pack(side="left", padx=(0, 10))
 
         is_staff = self.user_info.get("role", "").lower() == "staff"
 
-        C.button(search_frame, kind="secondary", text="📷 Scan & Test QR", width=140, 
+        C.button(search_frame, kind="secondary", text="📷 Scan QR", width=105,
                       command=self.open_test_scanner).pack(side="right", padx=(10, 0))
         
         selection_frame = ctk.CTkFrame(table_card, fg_color=T.SURFACE_ALT, corner_radius=T.RADIUS_MD)
@@ -430,8 +425,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                 cursor.close()
                 conn.close()
 
-    INV_COLUMNS = [("Print", 1, 80), ("PID", 1, 50), ("Type", 2, 80), ("Name", 4, 150), ("Tag ID", 3, 120),
-                   ("Qty Avail.", 2, 80), ("UoM", 1, 50), ("Location", 4, 150), ("Status", 2, 80)]
+    INV_COLUMNS = [("Print", 1, 72), ("PID", 1, 45), ("Type", 2, 65), ("Name", 4, 120), ("Tag ID", 3, 95),
+                   ("In stock", 2, 65), ("Unit", 1, 42), ("Location", 4, 110), ("Status", 2, 65)]
 
     def load_inventory_data(self, query=None, sort_type=None, keep_page=False):
         """(Re)load the table from page 1. The table is built once and its rows are recycled (views/paged_table.py)."""
@@ -662,13 +657,9 @@ class InventoryView(UiMixin, ctk.CTkFrame):
 
         modal = ctk.CTkToplevel(self)
         modal.title(f"Manage Item: {lookup_id}")
-        modal.geometry("550x750")
+        C.fit_window(modal, 550, 750)
         modal.configure(fg_color=T.SURFACE)
         modal.attributes("-topmost", True)
-        modal.update_idletasks()
-        x = (modal.winfo_screenwidth() // 2) - (550 // 2)
-        y = (modal.winfo_screenheight() // 2) - (750 // 2)
-        modal.geometry(f"550x750+{x}+{y}")
         modal.grab_set()
 
         ctk.CTkLabel(modal, text=f"Item Details — PID: {lookup_id}", font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 3))

@@ -44,16 +44,11 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
     def open_register_modal(self):
         self.reg_modal = ctk.CTkToplevel(self)
         self.reg_modal.title("Register New User")
-        self.reg_modal.geometry("450x650")
+        C.fit_window(self.reg_modal, 450, 650)
         self.reg_modal.configure(fg_color=T.SURFACE)
         self.reg_modal.attributes("-topmost", True)
         self.reg_modal.grab_set()
         
-        self.reg_modal.update_idletasks()
-        x = (self.reg_modal.winfo_screenwidth() // 2) - (450 // 2)
-        y = (self.reg_modal.winfo_screenheight() // 2) - (650 // 2)
-        self.reg_modal.geometry(f"450x650+{x}+{y}")
-
         self._form_card = ctk.CTkScrollableFrame(
             self.reg_modal, fg_color=T.SURFACE, corner_radius=0)
         self._form_card.pack(fill="both", expand=True)
@@ -93,6 +88,13 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         self._reg_bottom = ctk.CTkFrame(form_card, fg_color="transparent")
         self._reg_bottom.pack(fill="x")
         self._build_reg_bottom("Staff")
+        btn_row = ctk.CTkFrame(self.reg_modal, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 16))
+        btn_row.grid_columnconfigure((0, 1), weight=1)
+        C.button(btn_row, kind="primary", text="Register",
+                 command=self.execute_register).grid(row=0, column=0, padx=(0, 5), sticky="ew")
+        C.button(btn_row, kind="secondary", text="Cancel",
+                 command=self.reg_modal.destroy).grid(row=0, column=1, padx=(5, 0), sticky="ew")
 
     def _build_reg_bottom(self, role):
         for w in self._reg_bottom.winfo_children():
@@ -166,18 +168,6 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 self.reg_confirm.configure(show="" if self._show_confirm else "•")
                 eye_confirm.configure(text="✕" if self._show_confirm else "👁")
             eye_confirm.configure(command=_toggle_confirm)
-
-        btn_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(15, 20))
-        btn_row.grid_columnconfigure((0, 1), weight=1)
-        C.button(btn_row, kind="primary", text="Register", 
-                      
-                      
-                      command=self.execute_register).grid(row=0, column=0, padx=(0, 5), sticky="ew")
-        C.button(btn_row, kind="secondary", text="Cancel", 
-                      
-                      
-                      command=self.reg_modal.destroy).grid(row=0, column=1, padx=(5, 0), sticky="ew")
 
     def _on_reg_role_change(self, role):
         self._build_reg_bottom(role)

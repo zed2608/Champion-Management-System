@@ -46,6 +46,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "Admins create and approve projects. Enter a project name and client, then assign workers by their Employee IDs.",
             "Enter both dates in YYYY-MM-DD format, or leave both blank. End Date must be on or after Start Date.",
             "Add at least one item and its required quantity. Equipment and consumables measured in pcs use whole numbers. Divisible consumables can use up to 2 decimal places.",
+            "In the item catalog, In stock / Total shows current warehouse stock and company stock. Click + Add and confirm to put an amount in the project plan. This does not remove stock; stock changes when an item is issued or returned.",
             "A request can exceed stock currently available, but issuance waits for stock to return. It cannot exceed the company's total stock.",
             "Admin projects start Approved. The project becomes Ongoing when all required tool quantities are issued. Admins can complete and archive it later.",
             "A worker must be assigned to the project. Only approved or ongoing projects can issue tools, within their tool requirements.",
@@ -62,7 +63,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
         (False, "6. Tool Tags in Inventory", [
             "In Inventory, choose Needs Tag or Already Tagged to find tools.",
             "Open a tool to assign, change, or remove its Tag ID. A Tag ID identifies one tool record.",
-            "Use Scan & Test QR in Inventory to check a printed tag.",
+            "Use Scan QR in Inventory to check a printed tag.",
             "For labels, select tagged rows in the Print column and choose Batch Print Tags.",
         ]),
         (False, "7. Tool Issuance (Deployment)", [

@@ -56,6 +56,13 @@ BUTTON_HEIGHT_COMPACT = 28               # buttons inside table rows
 FIELD_HEIGHT = T.FIELD_HEIGHT
 
 
+def fit_window(window, width, height, margin=60):
+    """Center a dialog while keeping its footer inside the screen."""
+    sw, sh = window.winfo_screenwidth(), window.winfo_screenheight()
+    w, h = min(width, max(320, sw - margin)), min(height, max(320, sh - margin))
+    window.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h) // 2)}")
+
+
 def button(parent, text="", command=None, kind="primary", compact=False, **kw):
     """One of four buttons: primary (filled green), secondary (grey), ghost (text only) or danger (red). Fixed height, pointer cursor."""
     style = BUTTON_KINDS[kind]
@@ -116,29 +123,36 @@ def notify(widget, message, kind="success"):
 
 
 def confirm(title, message, *, parent=None):
-    """Ask before an action. Keep the dialog in front of a topmost item panel.
+    """Ask before an action. Keep the dialog in front of topmost panels.
 
     Windows can place a native message box behind a topmost CTkToplevel even
     when it has a parent, making the button appear to do nothing. Temporarily
-    remove that flag while the modal question is open, then restore it.
+    lower the panel and any topmost ancestor, then restore them in parent to
+    child order so a nested catalog stays above its project form.
     """
-    was_topmost = False
+    topmost_windows = []
     if parent is not None:
+        window = parent
+        while window is not None:
+            try:
+                if window.attributes("-topmost"):
+                    topmost_windows.append(window)
+                    window.attributes("-topmost", False)
+            except Exception:
+                pass
+            window = getattr(window, "master", None)
         try:
-            was_topmost = bool(parent.attributes("-topmost"))
-            if was_topmost:
-                parent.attributes("-topmost", False)
             parent.lift()
         except Exception:
             pass
     try:
         return messagebox.askyesno(title, message, parent=parent, default="no", icon="question")
     finally:
-        if was_topmost:
+        for window in reversed(topmost_windows):
             try:
-                if parent.winfo_exists():
-                    parent.attributes("-topmost", True)
-                    parent.lift()
+                if window.winfo_exists():
+                    window.attributes("-topmost", True)
+                    window.lift()
             except Exception:
                 pass
 
