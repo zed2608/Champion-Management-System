@@ -413,7 +413,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
             ctk.CTkLabel(scroll, text=f'No sections found for "{keyword}".', text_color=T.TEXT_MUTED).pack(pady=20)
             
     def delete_guide(self, guide_id):
-        if not messagebox.askyesno("Confirm Delete", "Are you sure you want to remove this guide?", parent=self.winfo_toplevel()): return
+        if not C.confirm("Confirm Delete", "Are you sure you want to remove this guide?", parent=self.winfo_toplevel()): return
         try:
             help_svc.delete_guide(self.user_info, guide_id)
             self._render_guide_sections(self._guide_search_entry.get().strip() if hasattr(self, '_guide_search_entry') else "")
@@ -479,6 +479,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
             
             if not t or not steps:
                 return messagebox.showerror("Error", "Title and at least one step are required.", parent=modal)
+            if not C.confirm("Save guide", f"{'Update' if existing_row else 'Add'} guide '{t}' with {len([e for e in step_entries if e.get().strip()])} steps?", parent=modal):
+                return
                 
             try:
                 help_svc.save_guide(self.user_info, existing_row['id'] if existing_row else None, t, [e.get() for e in step_entries], admin_var.get(), s)
@@ -559,7 +561,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
             ctk.CTkLabel(scroll, text=f'No FAQs found for "{keyword}".', text_color=T.TEXT_MUTED).pack(pady=20)
             
     def delete_faq(self, faq_id):
-        if not messagebox.askyesno("Confirm Delete", "Are you sure you want to remove this FAQ?", parent=self.winfo_toplevel()): return
+        if not C.confirm("Confirm Delete", "Are you sure you want to remove this FAQ?", parent=self.winfo_toplevel()): return
         try:
             help_svc.delete_faq(self.user_info, faq_id)
             self._render_faq_items(self._faq_search_entry.get().strip() if hasattr(self, '_faq_search_entry') else "")
@@ -607,6 +609,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
             s = seq_entry.get().strip()
             s = int(s) if s.isdigit() else 0
             if not q or not a: return messagebox.showerror("Error", "Question and Answer required.", parent=modal)
+            if not C.confirm("Save FAQ", f"{'Update' if existing_row else 'Add'} the answer to '{q}'?", parent=modal):
+                return
             
             try:
                 help_svc.save_faq(self.user_info, existing_row['id'] if existing_row else None, q, a, admin_var.get(), s)
@@ -637,6 +641,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
         self.about_status = ctk.CTkLabel(outer, text="", font=T.font(12), text_color=T.TEXT_MUTED)
 
         def reset_intro():
+            if not C.confirm("Show introduction", "Show the introduction again the next time this program starts?", parent=self.winfo_toplevel()):
+                return
             ok = prefs.set("intro_seen", False)
             self.about_status.configure(text="The intro will be shown the next time the program starts." if ok else "Could not save this setting on this computer.")
         C.button(row, kind="secondary", text="Show it again at next start", width=200, command=reset_intro).pack(side="left", padx=(10, 0))
@@ -704,7 +710,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
         ).pack(anchor="w", padx=20, pady=(0, 20))
 
     def delete_sysreq(self, req_id):
-        if not messagebox.askyesno("Confirm Delete", "Are you sure you want to remove this requirement?", parent=self.winfo_toplevel()): return
+        if not C.confirm("Confirm Delete", "Are you sure you want to remove this requirement?", parent=self.winfo_toplevel()): return
         try:
             help_svc.delete_requirement(self.user_info, req_id)
             self._render_sysreq_content()
@@ -757,6 +763,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
             seq = seq_entry.get().strip()
             seq = int(seq) if seq.isdigit() else 0
             if not c_val or not s_val: return messagebox.showerror("Error", "All fields required.", parent=dialog)
+            if not C.confirm("Save requirement", f"{'Update' if existing_row else 'Add'} the requirement for {c_val}?", parent=dialog):
+                return
             
             try:
                 help_svc.save_requirement(self.user_info, existing_row['id'] if existing_row else None, t, c_val, s_val, seq)
@@ -792,6 +800,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
                 msg = msg_entry.get("1.0", "end-1c").strip()
                 if not subj or not msg:
                     messagebox.showerror("Error", "Subject and message required.", parent=self.winfo_toplevel())
+                    return
+                if not C.confirm("Send support request", f"Send '{subj}' to the administrator?", parent=self.winfo_toplevel()):
                     return
 
                 try:

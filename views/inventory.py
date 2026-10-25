@@ -185,7 +185,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                 conn.close()
 
     def build_main_table(self):
-        table_card = ctk.CTkFrame(self, fg_color=T.SURFACE, corner_radius=10)
+        table_card = C.card(self)
         table_card.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 20))
         table_card.grid_columnconfigure(0, weight=1)
         table_card.grid_rowconfigure(1, weight=1)
@@ -214,8 +214,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         C.button(search_frame, kind="secondary", text="📷 Scan & Test QR", width=140, 
                       command=self.open_test_scanner).pack(side="right", padx=(10, 0))
         
-        selection_frame = ctk.CTkFrame(table_card, fg_color="transparent")
-        selection_frame.pack(fill="x", padx=22)
+        selection_frame = ctk.CTkFrame(table_card, fg_color=T.SURFACE_ALT, corner_radius=T.RADIUS_MD)
+        selection_frame.pack(fill="x", padx=20, pady=(2, 8))
         self.select_page_var = ctk.StringVar(value="off")
         self.select_page_check = ctk.CTkCheckBox(selection_frame, text="Select tagged tools on this page", variable=self.select_page_var,
                                                  onvalue="on", offvalue="off", font=T.font(12),
@@ -223,7 +223,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         self.select_page_check.pack(side="left", padx=(8, 14))
         self.select_page_check.pack_forget()  # the loaded page decides whether selection is possible
         self.selected_count_label = ctk.CTkLabel(selection_frame, text="0 selected", font=T.font(12), text_color=T.TEXT_SECONDARY)
-        self.selected_count_label.pack(side="left")
+        self.selected_count_label.pack(side="left", pady=8)
         self.batch_print_btn = C.button(selection_frame, kind="primary", text="⎙ Print Selected Tags", width=160, command=self.execute_batch_print)
         self.batch_print_btn.pack(side="left", padx=(14, 0))
         self.batch_print_btn.configure(state="disabled")
@@ -276,6 +276,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
     def execute_batch_print(self):
         if not hasattr(self, 'selected_for_print') or not self.selected_for_print:
             messagebox.showwarning("No Items Selected", "Please select at least one item with an assigned Tag ID by clicking its checkbox.", parent=self.winfo_toplevel())
+            return
+        if not C.confirm("Print selected tags", f"Create a print file for {len(self.selected_for_print)} selected tag(s)?", parent=self.winfo_toplevel()):
             return
             
         try:
@@ -417,7 +419,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                     f"Storage Loc:    {result[5]}\n"
                     f"Qty Available:  {result[6]}\n"
                 )
-                if messagebox.askyesno("Tool Successfully Identified", info + "\nDo you want to open this item in the Inventory?", parent=self.winfo_toplevel()):
+                if C.confirm("Tool Successfully Identified", info + "\nDo you want to open this item in the Inventory?", parent=self.winfo_toplevel()):
                     self.open_tool_modal(str(result[0]))
             else:
                 messagebox.showwarning("Unknown Tag", f"The tag '{tag_id}' was scanned, but it is not linked to any active tool in the database.", parent=self.winfo_toplevel())
@@ -549,6 +551,9 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             self.search_entry.get().strip(), self.sort_menu.get())
 
     def reset_search(self):
+        if self.search_entry.get() or self.sort_menu.get() != "Most Recent" or self.highlight_low_stock:
+            if not C.confirm("Reset inventory search", "Clear the search and show all active items?", parent=self.winfo_toplevel()):
+                return
         self.search_entry.delete(0, 'end')
         self.sort_menu.set("Most Recent")
         self.highlight_low_stock = False
@@ -586,14 +591,14 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         if similar:
             sim_list = "\n".join([f"• {sn}" for sn in similar])
             msg = f"Wait! Similar product names already exist:\n\n{sim_list}\n\nAre you sure you want to add '{name}' as a new distinct item?"
-            if not messagebox.askyesno("Similar Name Detected", msg, parent=self.add_modal):
+            if not C.confirm("Similar Name Detected", msg, parent=self.add_modal):
                 return
         try:
             qty = v.item_quantity(self.qty_entry.get(), itype, uom, allow_zero=True)
             v.parse_price(self.price_entry.get() or 0)
         except v.ValidationError as e:
             return messagebox.showwarning("Check item", str(e), parent=self.add_modal)
-        if not messagebox.askyesno("Confirm new item", f"Add {name}?\n\nType: {itype}\nQuantity: {fmt_qty(qty)} {uom}\nCategory: {cat}", parent=self.add_modal):
+        if not C.confirm("Confirm new item", f"Add {name}?\n\nType: {itype}\nQuantity: {fmt_qty(qty)} {uom}\nCategory: {cat}", parent=self.add_modal):
             return
         try:
             # [RBAC][CONCURRENCY] Admin only; validated server-side (numbers, whole units for equipment, limits); one transaction
@@ -612,13 +617,18 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         self.load_inventory_data()
 
     def open_tool_modal(self, lookup_id):
-        data = self.tool_hash_table.get(str(lookup_id))
-        if not data:
-            conn = get_connection()
-            if conn:
-                try:
-                    cursor = conn.cursor(dictionary=True)
-                    cursor.execute("""
+        # The table holds a snapshot of one page. Always fetch the current
+        # values before opening an editor, including immediately after a save
+        # while its asynchronous table reload is still in progress.
+        data = None
+        conn = get_connection()
+        if not conn:
+            messagebox.showerror("Inventory unavailable", "Could not load the current item. Check the database connection.", parent=self.winfo_toplevel())
+            return
+        cursor = None
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("""
                         SELECT t.tool_id, IFNULL(t.item_type, 'Equipment') as item_type,
                                IFNULL(t.unit_of_measure, 'pcs') as uom,
                                t.name, IFNULL(t.description, '') as description, t.price,
@@ -634,13 +644,18 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                         FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id
                         WHERE t.tool_id = %s
                     """, (lookup_id,))
-                    data = cursor.fetchone()
-                finally:
-                    if conn.is_connected():
-                        cursor.close()
-                        conn.close()
-            if not data:
-                return
+            data = cursor.fetchone()
+        except Exception as e:
+            messagebox.showerror("Could not open item", friendly_message(e), parent=self.winfo_toplevel())
+            return
+        finally:
+            if conn.is_connected():
+                if cursor is not None:
+                    cursor.close()
+                conn.close()
+        if not data:
+            messagebox.showerror("Item unavailable", "This item could not be found. Refresh Inventory and try again.", parent=self.winfo_toplevel())
+            return
 
         is_arch = data.get('is_archived', 0)
         is_staff_modal = self.user_info.get("role", "").lower() == "staff"
@@ -755,6 +770,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             new_tag = tag_entry.get().strip()
             if not new_tag:
                 return messagebox.showwarning("Tag ID", "Enter a tag ID, or use 'Unlink Current Tag'.", parent=modal)
+            if not C.confirm("Save tag", f"Link tag {new_tag} to {data['name']}?", parent=modal):
+                return
             try:
                 res = inv_svc.assign_tag(self.user_info, lookup_id, new_tag)     # [RBAC] Admin may relink; Staff only if untagged
             except Exception as e:
@@ -773,7 +790,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             self.load_inventory_data(keep_page=True)
 
         def unlink_tag():
-            if messagebox.askyesno("Remove Tag", "Unlink the tag from this tool?", parent=modal):
+            if C.confirm("Remove Tag", "Unlink the tag from this tool?", parent=modal):
                 try:
                     res = inv_svc.unlink_tag(self.user_info, lookup_id)
                 except Exception as e:
@@ -833,6 +850,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             current_val = tag_entry.get().strip()
             if not current_val:
                 return messagebox.showwarning("Warning", "No tag assigned to print.", parent=modal)
+            if not C.confirm("Print tag", f"Create a print file for {current_val}?", parent=modal):
+                return
             try:
                 modal.attributes("-topmost", False)
                 qr_payload = f"Tag ID: {current_val}\nPID: {lookup_id}\nName: {name_entry.get()}\nLocation: {loc_entry.get()}\nStatus: {status_menu.get()}"
@@ -894,15 +913,16 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                 return messagebox.showerror("Duplicate Name", f"Another product named '{new_name}' already exists.", parent=modal)
             if similar and new_name.lower() != data['name'].lower():
                 sim_list = "\n".join([f"• {sn}" for sn in similar])
-                if not messagebox.askyesno("Similar Name Detected",
+                if not C.confirm("Similar Name Detected",
                                            f"Similar product names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this to '{new_name}'?",
                                            parent=modal):
                     return
-            if not messagebox.askyesno("Confirm Update", "Save all changes to the database?", parent=modal):
+            old_qty, new_qty = fmt_qty(data['qty_tot']), qty_entry.get().strip()
+            if not C.confirm("Update item", f"Save changes to {new_name}?\n\nTotal quantity: {old_qty} → {new_qty} {uom_menu.get()}\n\nThis will also update available stock.", parent=modal):
                 return
             try:
                 # [RBAC][CONCURRENCY] Admin only; the "cannot go below deployed" rule is checked against the LOCKED row
-                inv_svc.update_item(self.user_info, lookup_id, name=name_entry.get(), category=cat_entry.get(),
+                result = inv_svc.update_item(self.user_info, lookup_id, name=name_entry.get(), category=cat_entry.get(),
                                     supplier=sup_entry.get(), description=desc_entry.get(), location=loc_entry.get(),
                                     item_type=type_menu.get(), unit_of_measure=uom_menu.get(), price=price_entry.get(),
                                     quantity=qty_entry.get(), min_stock=min_stock_entry.get(), tag_id=tag_entry.get())
@@ -910,16 +930,23 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                 return messagebox.showerror("Could not update", friendly_message(e), parent=modal)
             uid = self.user_info.get("user_id")
             if uid:
-                log_action(uid, "Edited", "Inventory", f"Edited item '{name_entry.get()}' (PID: {lookup_id})")
+                try:
+                    log_action(uid, "Edited", "Inventory", f"Edited item '{name_entry.get()}' (PID: {lookup_id})")
+                except Exception:
+                    # The stock update already committed. Never leave an open
+                    # editor that makes a successful change look unsaved.
+                    messagebox.showwarning("Item saved", "The item was updated, but its activity entry could not be recorded. Please tell an administrator.", parent=modal)
+            saved_qty, saved_uom = fmt_qty(qty_entry.get()), uom_menu.get()
             modal.destroy()
             self.load_inventory_data(keep_page=True)
+            C.notify(self, f"Saved {result['name']}: {saved_qty} {saved_uom}.")
 
         def execute_archive():
             if is_arch:
                 msg = "Restore this item to active inventory?"
             else:
                 msg = "Archive this item? It will be hidden from active inventory."
-            if not messagebox.askyesno("Confirm", msg, parent=modal):
+            if not C.confirm("Confirm", msg, parent=modal):
                 return
             try:
                 if is_arch:

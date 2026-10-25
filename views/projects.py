@@ -380,8 +380,11 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         def do_search(): load_catalog(name_q=search_name.get().strip(),
                                       pid_q=search_pid.get().strip())
 
-        def do_reset(): search_name.delete(
-            0, 'end'); search_pid.delete(0, 'end'); load_catalog()
+        def do_reset():
+            if (search_name.get() or search_pid.get()) and not C.confirm(
+                    "Reset item search", "Clear the item search and show all items?", parent=modal):
+                return
+            search_name.delete(0, 'end'); search_pid.delete(0, 'end'); load_catalog()
 
         C.button(search_frame, kind="primary", text="Search", width=80, command=do_search).pack(side="left", padx=5)
         C.button(search_frame, kind="secondary", text="↻ Reset", width=80, 
@@ -519,7 +522,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         if new_qty > v.parse_quantity(row_data['avail'], allow_zero=True):
             warn_msg = (
                 f"⚠️ TIMELINE CONFLICT RISK\n\nYou requested {req_qty}, but only {fmt_qty(row_data['avail'])} are in the warehouse.\n\nMissing items are deployed elsewhere. If not returned before your Start Date, the project may be delayed.\n\nAdd anyway?")
-            if not messagebox.askyesno("Stock Conflict", warn_msg, parent=modal):
+            if not C.confirm("Stock Conflict", warn_msg, parent=modal):
                 return
             needs_retrieval = True
 
@@ -646,7 +649,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         if similar:
             sim_list = "\n".join([f"• {sn}" for sn in similar])
             msg = f"Similar active project names already exist:\n\n{sim_list}\n\nAre you sure you want to save '{name}'?"
-            if not messagebox.askyesno("Similar Name Detected", msg, parent=self.draft_modal):
+            if not C.confirm("Similar Name Detected", msg, parent=self.draft_modal):
                 return
 
         data = {
@@ -658,7 +661,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         }
         summary = "\n".join(f"• {it['name']}: {fmt_qty(it['qty'])} {it['uom']}" for it in self.req_cart)
         verb = "Save changes to" if editing_id else "Create and approve"
-        if not messagebox.askyesno("Confirm project", f"{verb} '{name}'?\n\nClient: {client}\nDates: {start_date or 'Not set'} to {end_date or 'Not set'}\nRequired items:\n{summary}", parent=self.draft_modal):
+        if not C.confirm("Confirm project", f"{verb} '{name}'?\n\nClient: {client}\nDates: {start_date or 'Not set'} to {end_date or 'Not set'}\nRequired items:\n{summary}", parent=self.draft_modal):
             return
         try:
             # [STATE-MACHINE][RBAC] Admin only; validated server-side; edit DIFFS the requirement lines (no delete-and-reinsert);
@@ -921,7 +924,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             msg = f"Mark this project as {new_status}?"
             if new_status == 'Approved' and has_warnings:
                 msg = "⚠️ WARNING: Some required tools are deployed elsewhere and currently out of stock.\n\nMark as Ready for Deployment anyway?"
-            if not messagebox.askyesno("Confirm Status", msg, parent=modal):
+            if not C.confirm("Confirm Status", msg, parent=modal):
                 return
             try:
                 # [STATE-MACHINE] only allowed edges, and only if the project is still in the status this screen showed
@@ -961,7 +964,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         C.button(btn_frame, kind="secondary", text="Close", width=70, command=modal.destroy).pack(side="right", padx=5)
 
     def archive_project(self, project_id, project_name, modal, current_status=None):
-        if not messagebox.askyesno("Confirm Archive", f"Archive project '{project_name}' to the archive vault?\n\nIt will be moved to Maintenance > Archived Projects.", parent=modal):
+        if not C.confirm("Confirm Archive", f"Archive project '{project_name}' to the archive vault?\n\nIt will be moved to Maintenance > Archived Projects.", parent=modal):
             return
         try:
             ps.archive_project(self.user_info, project_id, (current_status or "").replace(" (OVERDUE)", ""))

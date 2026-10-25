@@ -115,6 +115,34 @@ def notify(widget, message, kind="success"):
         messagebox.showinfo("Done", message, parent=widget.winfo_toplevel())
 
 
+def confirm(title, message, *, parent=None):
+    """Ask before an action. Keep the dialog in front of a topmost item panel.
+
+    Windows can place a native message box behind a topmost CTkToplevel even
+    when it has a parent, making the button appear to do nothing. Temporarily
+    remove that flag while the modal question is open, then restore it.
+    """
+    was_topmost = False
+    if parent is not None:
+        try:
+            was_topmost = bool(parent.attributes("-topmost"))
+            if was_topmost:
+                parent.attributes("-topmost", False)
+            parent.lift()
+        except Exception:
+            pass
+    try:
+        return messagebox.askyesno(title, message, parent=parent, default="no", icon="question")
+    finally:
+        if was_topmost:
+            try:
+                if parent.winfo_exists():
+                    parent.attributes("-topmost", True)
+                    parent.lift()
+            except Exception:
+                pass
+
+
 def label(parent, text="", size=12, weight="normal", color=None, **kw):
     return ctk.CTkLabel(parent, text=text, font=T.font(size, weight), text_color=color or T.TEXT, **kw)
 
@@ -123,8 +151,9 @@ class KpiCard(ctk.CTkFrame):
     """The dashboard's number card: same size and type everywhere. Number on top, label below, a small status line under it, and a
     slim colour stripe on the left. ``with_value=False`` leaves the number row empty (the Action Items card fills it with badges)."""
 
-    def __init__(self, parent, title, note, accent, value="0", with_value=True, **kw):
-        super().__init__(parent, fg_color=T.SURFACE, corner_radius=T.RADIUS_MD, border_width=1, border_color=T.BORDER, height=130, **kw)
+    def __init__(self, parent, title, note, accent, value="0", with_value=True, background=None, **kw):
+        base = background or T.SURFACE
+        super().__init__(parent, fg_color=base, corner_radius=T.RADIUS_MD, border_width=1, border_color=T.BORDER, height=136, **kw)
         self.pack_propagate(False)
         self.stripe = ctk.CTkFrame(self, fg_color=accent, width=5, corner_radius=3)
         self.stripe.pack(side="left", fill="y", padx=(T.S3, 0), pady=T.S4)
@@ -140,7 +169,7 @@ class KpiCard(ctk.CTkFrame):
         self.title_label.pack(anchor="w", pady=(T.S1, 0))
         self.note_label = ctk.CTkLabel(body, text=note, font=T.font(12), text_color=T.TEXT_MUTED, anchor="w")
         self.note_label.pack(anchor="w")
-        self._hover_base = T.SURFACE
+        self._hover_base = base
 
     def set_state(self, fg, border):
         """Change the card colours (e.g. red when something needs attention); hover fades keep returning to THIS colour."""

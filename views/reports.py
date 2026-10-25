@@ -1349,6 +1349,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             sd, ed, valid = self.get_and_validate_dates()
             if not valid:
                 return
+            if not C.confirm("Export report", f"Create the {report_type} PDF for {sd or 'the first record'} through {ed or 'today'}?", parent=self.winfo_toplevel()):
+                return
             try:
                 title, sections, notes = self._export_document(report_type, sd, ed)
             except Exception as e:

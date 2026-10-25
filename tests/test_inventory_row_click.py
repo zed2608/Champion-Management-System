@@ -92,7 +92,7 @@ def test_update_with_nothing_edited_works_from_a_clicked_row(real_screen):
     before = rows(d, "SELECT name, category, supplier, description, location, price, tag_id FROM tool WHERE tool_id=%s", (tool,))[0]
     modal, e = open_row(view, tool, ctk)
     button(modal, "Update").invoke()
-    assert shown == [], shown                              # used to be: 'Something went wrong and nothing was saved'
+    assert [x[0] for x in shown] == ["showinfo"], shown
     after = rows(d, "SELECT name, category, supplier, description, location, price, tag_id FROM tool WHERE tool_id=%s", (tool,))[0]
     assert after == before                                 # nothing changed, and the display text 'N/A' was not stored
     inv = rows(d, "SELECT quantity_total, quantity_available FROM inventory WHERE tool_id=%s", (tool,))[0]
@@ -108,7 +108,7 @@ def test_each_edit_works_from_a_clicked_row(real_screen, field, value, column, e
     modal, e = open_row(view, tool, ctk)
     set_text(e[field], value)
     button(modal, "Update").invoke()
-    assert shown == [], shown
+    assert [x[0] for x in shown] == ["showinfo"], shown
     got = rows(d, f"SELECT `{column}` AS v FROM tool WHERE tool_id=%s", (tool,))[0]["v"]
     assert got == expected or (expected is not None and str(got) in (str(expected), f"{expected}.00"))
 
@@ -119,9 +119,23 @@ def test_quantity_edits_from_a_clicked_row(real_screen):
     set_text(e["total"], "5")
     set_text(e["min_stock"], "1")
     button(modal, "Update").invoke()
-    assert shown == [], shown
+    assert [x[0] for x in shown] == ["showinfo"], shown
     inv = rows(d, "SELECT quantity_total, quantity_available, minimum_stock FROM inventory WHERE tool_id=%s", (tool,))[0]
     assert (inv["quantity_total"], inv["quantity_available"], inv["minimum_stock"]) == (5, 5, 1)
+
+
+def test_kg_edit_shows_saved_value_even_before_page_reloads(real_screen):
+    view, d, tool, shown, ctk, root = real_screen
+    run(d, "UPDATE tool SET item_type='Consumable', unit_of_measure='kg' WHERE tool_id=%s", (tool,))
+    modal, e = open_row(view, tool, ctk)
+    set_text(e["total"], "2.75")
+    button(modal, "Update").invoke()
+    assert [x[0] for x in shown] == ["showinfo"], shown
+    record = rows(d, "SELECT quantity_total, quantity_available FROM inventory WHERE tool_id=%s", (tool,))[0]
+    assert (record["quantity_total"], record["quantity_available"]) == (2.75, 2.75)
+    next_modal, next_entries = open_row(view, tool, ctk)
+    assert next_entries["total"].get() == "2.75"
+    next_modal.destroy()
 
 
 def test_archive_restore_and_tag_buttons_also_work_from_a_clicked_row(real_screen):

@@ -14,12 +14,12 @@ Spacing / radius / motion
 
 # ---------------------------------------------------------------- colours (light mode)
 # surfaces and lines
-BG = "#F4F6F8"                  # page background
-SURFACE = "#FFFFFF"             # cards, dialogs
-SURFACE_ALT = "#F9FAFB"         # zebra rows, quiet panels
-SURFACE_MUTED = "#F0F0F0"       # disabled / chips
-BORDER = "#E0E0E0"
-BORDER_STRONG = "#CCCCCC"
+BG = "#F5F2E9"                  # warm beige canvas
+SURFACE = "#FFFEFA"             # warm white cards and dialogs
+SURFACE_ALT = "#F8F5ED"         # quiet panels and alternate rows
+SURFACE_MUTED = "#EEE9DD"       # disabled controls and chips
+BORDER = "#DDD7C9"
+BORDER_STRONG = "#B8B0A0"
 WHITE = "#FFFFFF"
 BLACK = "#000000"
 

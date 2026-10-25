@@ -98,7 +98,7 @@ def test_unchanged_panel_saves_and_does_not_turn_a_blank_location_into_the_text_
     modal, e = open_modal(view, tool, ctk)
     assert e["location"].get() == "N/A"                  # how the panel DISPLAYS a missing location
     press(modal, "Update")
-    assert shown == []
+    assert [x[0] for x in shown] == ["showinfo"]
     r = rows(d, "SELECT location, supplier FROM tool WHERE tool_id=%s", (tool,))[0]
     assert r["location"] is None, "saving an untouched panel must not store the display text 'N/A'"
     assert r["supplier"] == "petron"

@@ -197,18 +197,18 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
             return messagebox.showerror("Validation Error", friendly_message(e), parent=self.reg_modal)
         allow_dup = False
         if same:                                                       # real employees share names: WARN, then allow
-            if not messagebox.askyesno("Same Name Found",
+            if not C.confirm("Same Name Found",
                                        f"{same} active user(s) are already named '{name}'.\n\nRegister another person with the same name?",
                                        parent=self.reg_modal):
                 return
             allow_dup = True
         elif similar:
             sim_list = "\n".join([f"• {sn}" for sn in similar])
-            if not messagebox.askyesno("Similar Name Detected",
+            if not C.confirm("Similar Name Detected",
                                        f"Wait! Similar names already exist:\n\n{sim_list}\n\nAre you sure you want to register '{name}' as a new distinct user?",
                                        parent=self.reg_modal):
                 return
-        if not messagebox.askyesno("Confirm registration", f"Register {name} as {role}?", parent=self.reg_modal):
+        if not C.confirm("Confirm registration", f"Register {name} as {role}?", parent=self.reg_modal):
             return
         try:
             # [RBAC][CONCURRENCY] Admin only; Workers get NO password; ids come from a locked sequence; blank e-mail is stored as NULL
@@ -372,7 +372,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 conn.close()
 
     def delete_user(self, row):
-        if not messagebox.askyesno("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
+        if not C.confirm("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
             return
         try:
             user_service.archive_user(self.user_info, row['user_id'])     # refuses yourself and the last active Admin
@@ -538,14 +538,14 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 return messagebox.showerror("Error", friendly_message(e), parent=modal)
             if new_name.lower() != row['full_name'].lower():
                 if same:
-                    if not messagebox.askyesno("Same Name Found", f"{same} active user(s) are already named '{new_name}'.\n\nRename this user anyway?", parent=modal):
+                    if not C.confirm("Same Name Found", f"{same} active user(s) are already named '{new_name}'.\n\nRename this user anyway?", parent=modal):
                         return
                     allow_dup = True
                 elif similar:
                     sim_list = "\n".join([f"• {sn}" for sn in similar])
-                    if not messagebox.askyesno("Similar Name Detected", f"Similar user names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this user to '{new_name}'?", parent=modal):
+                    if not C.confirm("Similar Name Detected", f"Similar user names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this user to '{new_name}'?", parent=modal):
                         return
-            if not messagebox.askyesno("Confirm account changes", f"Save changes for {new_name} ({new_role})?", parent=modal):
+            if not C.confirm("Confirm account changes", f"Save changes for {new_name} ({new_role})?", parent=modal):
                 return
             try:
                 res = user_service.update_user(self.user_info, row["user_id"], name=new_name, email=new_email, role=new_role,

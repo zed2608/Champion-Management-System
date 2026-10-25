@@ -225,7 +225,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             messagebox.showerror("Error", "Tool ID/Tag and Reported By are required.",
                                  parent=self.winfo_toplevel())
             return
-        if not messagebox.askyesno("Confirm issue", f"Record {qty} unit(s) of {tool_input} as {condition}?\n\nThis may change available stock.", parent=self.winfo_toplevel()):
+        if not C.confirm("Confirm issue", f"Record {qty} unit(s) of {tool_input} as {condition}?\n\nThis may change available stock.", parent=self.winfo_toplevel()):
             return
         try:
             # [CONCURRENCY][RBAC] one transaction: locks the tool's stock, moves exactly these units, creates the ticket
@@ -360,7 +360,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         notes_entry.pack(fill="x", pady=(5, 10))
 
         def resolve_issue():
-            if not messagebox.askyesno("Confirm resolution", f"Resolve issue #{row['issue_id']} as {cond_menu.get()}?\nNew units: {restock_entry.get().strip() or '0'}", parent=modal):
+            if not C.confirm("Confirm resolution", f"Resolve issue #{row['issue_id']} as {cond_menu.get()}?\nNew units: {restock_entry.get().strip() or '0'}", parent=modal):
                 return
             try:
                 # [CONCURRENCY] one transaction: locks the ticket (a stale modal is refused) and the stock, moves the units
@@ -458,6 +458,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
 
     def save_wear_default(self):
         cat, hours = self.wear_cat.get().strip(), self.wear_hours.get().strip()
+        if not C.confirm("Save service interval", f"Set the service interval for {cat or 'this category'} to {hours or 'the entered value'} hours?", parent=self.winfo_toplevel()):
+            return
         try:
             wear_forecast.set_category_default(self.user_info, cat, hours)
         except Exception as e:
@@ -482,6 +484,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         entry.pack(fill="x", padx=24, pady=(4, 10))
 
         def save():
+            if not C.confirm("Save service interval", f"Update the service interval for {row['name']}?", parent=modal):
+                return
             try:
                 wear_forecast.set_tool_interval(self.user_info, row["tool_id"], entry.get().strip())
             except Exception as e:
@@ -491,7 +495,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             self.load_wear()
 
         def serviced():
-            if not messagebox.askyesno("Mark serviced", f"Restart the service clock of '{row['name']}' from now?", parent=modal):
+            if not C.confirm("Mark serviced", f"Restart the service clock of '{row['name']}' from now?", parent=modal):
                 return
             try:
                 wear_forecast.mark_serviced(self.user_info, row["tool_id"])
@@ -559,7 +563,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                 conn.close()
 
     def restore_tool(self, tool_id):
-        if not messagebox.askyesno("Confirm Restore", f"Are you sure you want to restore Tool PID: {tool_id}?"):
+        if not C.confirm("Confirm Restore", f"Are you sure you want to restore Tool PID: {tool_id}?"):
             return
         try:
             res = inv_svc.restore_tool(self.user_info, tool_id)
@@ -625,7 +629,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                 conn.close()
 
     def restore_employee(self, user_id):
-        if not messagebox.askyesno("Confirm Restore", "Restore this employee to Active status? They will be able to log in (Staff/Admin) or receive tools (Workers) again."):
+        if not C.confirm("Confirm Restore", "Restore this employee to Active status? They will be able to log in (Staff/Admin) or receive tools (Workers) again."):
             return
         try:
             res = user_service.restore_user(self.user_info, user_id)
@@ -696,7 +700,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                 conn.close()
 
     def restore_project(self, project_id):
-        if not messagebox.askyesno("Confirm Restore", f"Restore Project ID: {project_id}? It returns to the status it had before it was archived."):
+        if not C.confirm("Confirm Restore", f"Restore Project ID: {project_id}? It returns to the status it had before it was archived."):
             return
         try:
             res = proj_svc.restore_project(self.user_info, project_id)     # back to the status it had before archiving
@@ -880,6 +884,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         if not dest_folder or dest_folder == "(click Browse to choose folder)":
             messagebox.showerror("No Destination", "Please choose a folder to save the backup.", parent=self.winfo_toplevel())
             return
+        if not C.confirm("Create backup", f"Save a database backup in this folder?\n\n{dest_folder}", parent=self.winfo_toplevel()):
+            return
         # Tk values are read HERE, on the main thread; the worker thread never touches a widget.
         note = self._backup_note_entry.get().strip()
         custom_fname = self._backup_fname_entry.get().strip()
@@ -938,7 +944,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         if not os.path.isfile(src_file):
             messagebox.showerror("File Not Found", "The selected backup file no longer exists.", parent=self.winfo_toplevel())
             return
-        confirmed = messagebox.askyesno(
+        confirmed = C.confirm(
             "⚠ Confirm Restore",
             f"This will REPLACE all current data with the contents of:\n\n{os.path.basename(src_file)}\n\n"
             "Before anything is changed, the system saves an automatic safety backup of the current data.\n\n"

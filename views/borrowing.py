@@ -994,7 +994,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
 
         cart = [{"tool_id": it['id'], "qty": it['qty_borrowed']} for it in self.borrow_cart]
         summary = "\n".join(f"{it['name']}: {fmt_qty(it['qty_borrowed'])} {it.get('uom', '')}" for it in self.borrow_cart)
-        if not messagebox.askyesno("Confirm issue", f"Issue these items to {self.active_borrow_user_name} for {selected_proj}?\n\n{summary}", parent=self.issuance_modal):
+        if not C.confirm("Confirm issue", f"Issue these items to {self.active_borrow_user_name} for {selected_proj}?\n\n{summary}", parent=self.issuance_modal):
             return
         try:
             # [CONCURRENCY] ONE transaction: lock stock + project quota, re-validate, decrement, record, commit (or roll back all)
@@ -1190,7 +1190,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             v.item_quantity(self.r_qty.get(), self.active_return_item_type, self.active_return_uom, field="Return quantity")
         except v.ValidationError as e:
             return messagebox.showwarning("Check quantity", str(e), parent=self.retrieval_modal)
-        if not messagebox.askyesno("Confirm return", f"Return {self.r_qty.get()} {self.active_return_uom} as {new_cond}?\n\nThis will update stock and the project record.", parent=self.retrieval_modal):
+        if not C.confirm("Confirm return", f"Return {self.r_qty.get()} {self.active_return_uom} as {new_cond}?\n\nThis will update stock and the project record.", parent=self.retrieval_modal):
             return
         try:
             # [CONCURRENCY][UNHAPPY-PATH] one transaction: close the issuance rows, move the units (stock / maintenance / lost),
