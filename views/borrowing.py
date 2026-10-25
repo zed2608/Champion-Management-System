@@ -1,7 +1,7 @@
 from services.validators import fmt_qty
 import customtkinter as ctk
 from views.ui_thread import UiMixin
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
 from database import get_connection
 from services import issuance_service as iss, validators as v
 from services.errors import ServiceError, NotFound, Conflict, friendly_message
@@ -13,6 +13,7 @@ from pyzbar.pyzbar import decode, ZBarSymbol
 import os
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta, date as _date
+from decimal import Decimal
 import calendar as _cal
 import threading
 from ui import components as C
@@ -905,26 +906,38 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             messagebox.showerror("Unauthorized", f"'{tool.name}' is NOT approved for this project.", parent=self.issuance_modal)
             return
 
-        allowed_qty = float(req['req_qty'])
-        already_issued = float(req['issued_qty'])
-        in_cart = sum(item['qty_borrowed'] for item in self.borrow_cart if item['id'] == tool.tool_id)
-        available = float(tool.available)
+        allowed_qty = Decimal(str(req['req_qty']))
+        already_issued = Decimal(str(req['issued_qty']))
+        in_cart = sum((item['qty_borrowed'] for item in self.borrow_cart if item['id'] == tool.tool_id), Decimal(0))
+        available = Decimal(str(tool.available))
+        whole = v.whole_quantity_only(tool.item_type, tool.unit_of_measure)
+        step = Decimal('1') if whole else Decimal('0.5')
+        if not whole:
+            entered = simpledialog.askstring("Quantity to issue", f"How many {tool.unit_of_measure} of {tool.name}?\nUp to 2 decimal places.",
+                                           initialvalue="1", parent=self.issuance_modal)
+            if entered is None:
+                return
+            try:
+                step = v.item_quantity(entered, tool.item_type, tool.unit_of_measure)
+            except v.ValidationError as e:
+                return messagebox.showwarning("Check quantity", str(e), parent=self.issuance_modal)
 
-        if (already_issued + in_cart + 1) > allowed_qty:
+        if (already_issued + in_cart + step) > allowed_qty:
             messagebox.showerror("Limit Reached", f"Cannot add '{tool.name}'.\nApproved Limit: {fmt_qty(allowed_qty)}\nAlready Issued: {fmt_qty(already_issued)}\nIn Cart: {fmt_qty(in_cart)}", parent=self.issuance_modal)
             return
-        if (in_cart + 1) > available:
+        if (in_cart + step) > available:
             messagebox.showerror("Out of Stock", f"Cannot add '{tool.name}'.\nOnly {fmt_qty(available)} left in the warehouse.", parent=self.issuance_modal)
             return
 
         existing = next((item for item in self.borrow_cart if item['id'] == tool.tool_id), None)
         if existing:
-            existing['qty_borrowed'] += 1
+            existing['qty_borrowed'] += step
             existing['max_qty'] = available
         else:
             self.borrow_cart.append({
                 "id": tool.tool_id, "name": tool.name, "cond": tool.condition,
-                "tag": tool.tag_id, "qty_borrowed": 1, "max_qty": available
+                "tag": tool.tag_id, "qty_borrowed": step, "max_qty": available,
+                "step": step, "uom": tool.unit_of_measure
             })
 
         self.refresh_cart_ui()
@@ -935,8 +948,8 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         new_qty = item['qty_borrowed'] + change
         req = next((r for r in self.current_project_reqs if r['tool_id'] == item['id']), None)
         if not req: return
-        allowed_qty = float(req['req_qty'])
-        already_issued = float(req['issued_qty'])
+        allowed_qty = Decimal(str(req['req_qty']))
+        already_issued = Decimal(str(req['issued_qty']))
         
         if (already_issued + new_qty) > allowed_qty:
             messagebox.showwarning("Limit Reached", f"You cannot exceed the approved limit of {fmt_qty(allowed_qty)}.", parent=self.issuance_modal)
@@ -964,9 +977,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             row.pack_propagate(False)
             ctk.CTkLabel(row, text=f"✓ {item['name']}  |  Tag: {item['tag']}", font=T.font(12, "bold"), text_color=T.PRIMARY).pack(side="left", padx=10, pady=5)
             ctk.CTkButton(row, text="✕", width=25, height=25, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda idx=i: self.remove_from_cart(idx)).pack(side="right", padx=(5, 10))
-            C.button(row, compact=True, kind="secondary", text="+", width=25, command=lambda idx=i: self.update_cart_qty(idx, 1)).pack(side="right", padx=2)
-            ctk.CTkLabel(row, text=f"Qty: {item['qty_borrowed']}", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="right", padx=8)
-            C.button(row, compact=True, kind="secondary", text="-", width=25, command=lambda idx=i: self.update_cart_qty(idx, -1)).pack(side="right", padx=2)
+            step = item.get('step', Decimal(1))
+            C.button(row, compact=True, kind="secondary", text="+", width=25, command=lambda idx=i, s=step: self.update_cart_qty(idx, s)).pack(side="right", padx=2)
+            ctk.CTkLabel(row, text=f"Qty: {fmt_qty(item['qty_borrowed'])} {item.get('uom', '')}", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="right", padx=8)
+            C.button(row, compact=True, kind="secondary", text="-", width=25, command=lambda idx=i, s=step: self.update_cart_qty(idx, -s)).pack(side="right", padx=2)
 
     def execute_borrow(self):
         if not self.active_borrow_user_id:
@@ -979,6 +993,9 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             return messagebox.showerror("Error", "The cart is empty! Scan at least one tool.", parent=self.issuance_modal)
 
         cart = [{"tool_id": it['id'], "qty": it['qty_borrowed']} for it in self.borrow_cart]
+        summary = "\n".join(f"{it['name']}: {fmt_qty(it['qty_borrowed'])} {it.get('uom', '')}" for it in self.borrow_cart)
+        if not messagebox.askyesno("Confirm issue", f"Issue these items to {self.active_borrow_user_name} for {selected_proj}?\n\n{summary}", parent=self.issuance_modal):
+            return
         try:
             # [CONCURRENCY] ONE transaction: lock stock + project quota, re-validate, decrement, record, commit (or roll back all)
             res = iss.issue(self.user_info, self.active_borrow_user_id, proj_id, cart, selected_proj)
@@ -1139,6 +1156,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             return
         self.active_return_tool_id = rec['tool_id']
         self.active_return_item_type = rec['item_type']
+        self.active_return_uom = rec.get('unit_of_measure') or 'pcs'
         self.max_returnable = float(rec['deployed'])
         self.r_record_info.configure(text=f"✓ Tool Identified: {rec['name']}\nCurrently Deployed Out: {_fmt_qty(rec['deployed'])}", text_color=T.SUCCESS_TEXT)
         self.r_qty.delete(0, 'end'); self.r_qty.insert(0, "1")
@@ -1168,6 +1186,12 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             return messagebox.showwarning("Condition Details Required",
                                           f"Please describe what is wrong before returning an item as '{new_cond}'.",
                                           parent=self.retrieval_modal)
+        try:
+            v.item_quantity(self.r_qty.get(), self.active_return_item_type, self.active_return_uom, field="Return quantity")
+        except v.ValidationError as e:
+            return messagebox.showwarning("Check quantity", str(e), parent=self.retrieval_modal)
+        if not messagebox.askyesno("Confirm return", f"Return {self.r_qty.get()} {self.active_return_uom} as {new_cond}?\n\nThis will update stock and the project record.", parent=self.retrieval_modal):
+            return
         try:
             # [CONCURRENCY][UNHAPPY-PATH] one transaction: close the issuance rows, move the units (stock / maintenance / lost),
             # create the Maintenance ticket for anything that is not Good, commit. Any failure rolls all of it back.

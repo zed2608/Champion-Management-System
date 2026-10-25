@@ -88,6 +88,19 @@ def test_issue_equipment_and_consumable_in_one_transaction(w):
     assert {r["status"] for r in rows(d, "SELECT status FROM project_requirements")} == {"Fulfilled"}
 
 
+def test_consumable_in_pieces_cannot_be_issued_or_returned_fractionally(w):
+    d, u, staff, cal, grs, pid = w
+    run(d, "UPDATE tool SET unit_of_measure='pcs' WHERE tool_id=%s", (grs,))
+    before = avail(d, grs)
+    with pytest.raises(v.ValidationError, match="whole number"):
+        iss.issue(staff, u["w1"], pid, [{"tool_id": grs, "qty": "0.5"}], "Alpha")
+    assert avail(d, grs) == before
+    iss.issue(staff, u["w1"], pid, [{"tool_id": grs, "qty": 1}], "Alpha")
+    with pytest.raises(v.ValidationError, match="whole number"):
+        iss.retrieve(staff, u["w1"], grs, "0.5", "Good", "")
+    assert avail(d, grs) == before - 1
+
+
 def test_partial_issue_keeps_project_approved_and_requirement_open(w):
     d, u, staff, cal, grs, pid = w
     res = iss.issue(staff, u["w1"], pid, [{"tool_id": cal, "qty": 1}], "p")

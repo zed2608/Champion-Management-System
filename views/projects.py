@@ -7,6 +7,7 @@ import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 import difflib
 from services.validators import fmt_qty
+from services import validators as v
 from services.errors import friendly_message
 from services import project_service as ps
 from ui import components as C
@@ -505,33 +506,29 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
     def add_from_catalog(self, row_data, qty_entry, modal):
         try:
-            req_qty = float(qty_entry.get())
-        except ValueError:
-            return messagebox.showwarning("Invalid", "Please enter a valid number.", parent=modal)
+            req_qty = v.item_quantity(qty_entry.get(), row_data['type'], row_data['uom'])
+        except v.ValidationError as e:
+            return messagebox.showwarning("Check quantity", str(e), parent=modal)
 
-        if req_qty <= 0:
-            return
-
-        if req_qty > float(row_data['total']):
-            return messagebox.showerror("Denied", f"Cannot request {req_qty}. The company only owns {fmt_qty(row_data['total'])} {row_data['uom']} total.", parent=modal)
+        existing = next((item for item in self.req_cart if item['tool_id'] == row_data['tool_id']), None)
+        new_qty = req_qty + (v.parse_quantity(existing['qty']) if existing else 0)
+        if new_qty > v.parse_quantity(row_data['total'], allow_zero=True):
+            return messagebox.showerror("Quantity too high", f"The company owns {fmt_qty(row_data['total'])} {row_data['uom']} in total.", parent=modal)
 
         needs_retrieval = False
-        if req_qty > float(row_data['avail']):
+        if new_qty > v.parse_quantity(row_data['avail'], allow_zero=True):
             warn_msg = (
                 f"⚠️ TIMELINE CONFLICT RISK\n\nYou requested {req_qty}, but only {fmt_qty(row_data['avail'])} are in the warehouse.\n\nMissing items are deployed elsewhere. If not returned before your Start Date, the project may be delayed.\n\nAdd anyway?")
             if not messagebox.askyesno("Stock Conflict", warn_msg, parent=modal):
                 return
             needs_retrieval = True
 
-        for item in self.req_cart:
-            if item['tool_id'] == row_data['tool_id']:
-                item['qty'] += req_qty
-                item['needs_retrieval'] = item['needs_retrieval'] or needs_retrieval
-                self.refresh_req_cart()
-                qty_entry.delete(0, 'end')
-                messagebox.showinfo(
-                    "Updated", f"Updated {row_data['name']} quantity to {fmt_qty(item['qty'])} {row_data['uom']}.", parent=modal)
-                return
+        if existing:
+            existing['qty'] = new_qty
+            existing['needs_retrieval'] = existing['needs_retrieval'] or needs_retrieval
+            self.refresh_req_cart()
+            qty_entry.delete(0, 'end')
+            return
 
         self.req_cart.append({
             'tool_id': row_data['tool_id'], 'name': row_data['name'],
@@ -539,8 +536,6 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         })
         self.refresh_req_cart()
         qty_entry.delete(0, 'end')
-        messagebox.showinfo(
-            "Added", f"Successfully added {fmt_qty(req_qty)} {row_data['uom']} of {row_data['name']} to project requirements.", parent=modal)
 
     def refresh_req_cart(self):
         for w in self.cart_scroll.winfo_children():
@@ -661,6 +656,10 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             "requirements": [{"tool_id": it["tool_id"], "qty": it["qty"], "needs_retrieval": it.get("needs_retrieval")}
                              for it in self.req_cart],
         }
+        summary = "\n".join(f"• {it['name']}: {fmt_qty(it['qty'])} {it['uom']}" for it in self.req_cart)
+        verb = "Save changes to" if editing_id else "Create and approve"
+        if not messagebox.askyesno("Confirm project", f"{verb} '{name}'?\n\nClient: {client}\nDates: {start_date or 'Not set'} to {end_date or 'Not set'}\nRequired items:\n{summary}", parent=self.draft_modal):
+            return
         try:
             # [STATE-MACHINE][RBAC] Admin only; validated server-side; edit DIFFS the requirement lines (no delete-and-reinsert);
             # an Admin-created project is auto-approved (no separate approve step).

@@ -225,6 +225,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             messagebox.showerror("Error", "Tool ID/Tag and Reported By are required.",
                                  parent=self.winfo_toplevel())
             return
+        if not messagebox.askyesno("Confirm issue", f"Record {qty} unit(s) of {tool_input} as {condition}?\n\nThis may change available stock.", parent=self.winfo_toplevel()):
+            return
         try:
             # [CONCURRENCY][RBAC] one transaction: locks the tool's stock, moves exactly these units, creates the ticket
             res = mnt.flag_tool(self.user_info, tool_input, reported_by, condition, notes, qty)
@@ -358,6 +360,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         notes_entry.pack(fill="x", pady=(5, 10))
 
         def resolve_issue():
+            if not messagebox.askyesno("Confirm resolution", f"Resolve issue #{row['issue_id']} as {cond_menu.get()}?\nNew units: {restock_entry.get().strip() or '0'}", parent=modal):
+                return
             try:
                 # [CONCURRENCY] one transaction: locks the ticket (a stale modal is refused) and the stock, moves the units
                 out = mnt.resolve_issue(self.user_info, row["issue_id"], cond_menu.get(),
@@ -392,6 +396,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 5))
         ctk.CTkLabel(top, text="Wear & Maintenance Forecast", font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
+        self.wear_search = C.field(top, placeholder_text="Search tool or category...", width=220)
+        self.wear_search.pack(side="right")
+        self.wear_search.bind("<Return>", lambda e: self.load_wear())
         ctk.CTkLabel(frame, text="Hours each tool has been out on jobs (open issuances count up to now), how much of its service interval is used, "
                                  "and when service is due at the last 30 days' pace. Click a row to set that tool's own interval or mark it serviced.",
                      font=T.font(12), text_color=T.TEXT_MUTED, wraplength=900, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
@@ -413,6 +420,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                     ("Damage / 100 h", 2, 100), ("Flags", 4, 170)]
 
     def load_wear(self, keep_page=False):
+        search = self.wear_search.get().strip().casefold()
         for w in self._wear_scroll.winfo_children():
             w.destroy()
         loading = ctk.CTkLabel(self._wear_scroll, text="Calculating...", text_color=T.TEXT_MUTED, font=T.font(12, "italic"))
@@ -426,6 +434,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                 msg = friendly_message(e)
                 self.post_ui(lambda: loading.winfo_exists() and loading.configure(text=msg, text_color=T.DANGER_TEXT))
                 return
+            rows = [r for r in rows if search in str(r.get("name") or "").casefold() or search in str(r.get("category") or "").casefold()]
             self.post_ui(lambda: self._show_wear(rows, defaults, loading))
         threading.Thread(target=work, daemon=True).start()
 
@@ -508,6 +517,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Archived & Decommissioned Tools",
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
+        self.tools_search = C.field(top, placeholder_text="Search name or category...", width=220)
+        self.tools_search.pack(side="right")
+        self.tools_search.bind("<KeyRelease>", lambda e: self.load_archived_tools())
 
         self._tools_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
@@ -516,6 +528,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         return frame
 
     def load_archived_tools(self, keep_page=False):
+        self._tools_query = self.tools_search.get()
         if getattr(self, "_tools_table", None) is None or not self._tools_table.winfo_exists():
             for w in self._tools_scroll.winfo_children():
                 w.destroy()
@@ -538,7 +551,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             return fetch_page(
                 cur, """SELECT t.tool_id, t.name, t.category, t.`condition`, IFNULL(t.archived_at, t.date_acquired) as archived_date,
                                IFNULL(i.quantity_total, 0) as qty_total""",
-                "FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id WHERE t.is_archived = 1", [],
+                "FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id WHERE t.is_archived = 1 "
+                "AND (t.name LIKE %s OR t.category LIKE %s)", [like_pattern(self._tools_query)] * 2,
                 "ORDER BY t.archived_at DESC, t.tool_id DESC", page, size)
         finally:
             if conn.is_connected():
@@ -571,6 +585,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Inactive / Archived Employees",
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
+        self.employees_search = C.field(top, placeholder_text="Search name or employee ID...", width=220)
+        self.employees_search.pack(side="right")
+        self.employees_search.bind("<KeyRelease>", lambda e: self.load_archived_employees())
 
         self._emp_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
@@ -578,6 +595,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         return frame
 
     def load_archived_employees(self, keep_page=False):
+        self._emp_query = self.employees_search.get()
         if getattr(self, "_emp_table", None) is None or not self._emp_table.winfo_exists():
             for w in self._emp_scroll.winfo_children():
                 w.destroy()
@@ -599,7 +617,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         try:
             cur = conn.cursor(dictionary=True)
             return fetch_page(cur, "SELECT user_id, employee_id, full_name, role, status, archived_at",
-                              "FROM `user` WHERE IFNULL(status, 'Inactive') != 'Active'", [],
+                              "FROM `user` WHERE IFNULL(status, 'Inactive') != 'Active' "
+                              "AND (full_name LIKE %s OR employee_id LIKE %s)", [like_pattern(self._emp_query)] * 2,
                               "ORDER BY archived_at DESC, user_id DESC", page, size)
         finally:
             if conn.is_connected():
@@ -632,6 +651,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Completed / Archived Projects",
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
+        self.projects_search = C.field(top, placeholder_text="Search project or client...", width=220)
+        self.projects_search.pack(side="right")
+        self.projects_search.bind("<KeyRelease>", lambda e: self.load_archived_projects())
 
         self._proj_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
@@ -639,6 +661,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         return frame
 
     def load_archived_projects(self, keep_page=False):
+        self._proj_query = self.projects_search.get()
         if getattr(self, "_proj_table", None) is None or not self._proj_table.winfo_exists():
             for w in self._proj_scroll.winfo_children():
                 w.destroy()
@@ -665,7 +688,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         try:
             cur = conn.cursor(dictionary=True)
             return fetch_page(cur, "SELECT project_id, name, client, status, end_date, archived_at",
-                              "FROM projects WHERE archived_at IS NOT NULL", [],
+                              "FROM projects WHERE archived_at IS NOT NULL AND (name LIKE %s OR client LIKE %s)",
+                              [like_pattern(self._proj_query)] * 2,
                               "ORDER BY archived_at DESC, project_id DESC", page, size)
         finally:
             if conn.is_connected():
@@ -824,6 +848,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                       
                       command=self.load_backup_history).pack(side="right")
 
+        self.backup_search = C.field(hist_hdr, placeholder_text="Search backup name or status...", width=220)
+        self.backup_search.pack(side="right")
+        self.backup_search.bind("<Return>", lambda e: self.load_backup_history())
         self._backup_hist_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
         self._backup_hist_scroll.pack(
@@ -966,12 +993,13 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
     def load_backup_history(self):
         if not hasattr(self, "_backup_hist_scroll"):
             return
+        self._backup_query = self.backup_search.get()
         if getattr(self, "_backup_table", None) is None or not self._backup_table.winfo_exists():
             for w in self._backup_hist_scroll.winfo_children():
                 w.destroy()
 
             def fetch(page, size):
-                rows, total = backup_service.history_page(self.user_info, size, page * size)
+                rows, total = backup_service.history_page(self.user_info, size, page * size, self._backup_query)
                 return rows, PageInfo(page, size, total)
 
             def fetch_clamped(page, size):                 # the service returns the total; clamp here if the list shrank

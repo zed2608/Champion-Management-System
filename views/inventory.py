@@ -12,6 +12,7 @@ import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 from datetime import datetime
 from services.validators import fmt_qty
+from services import validators as v
 from services.errors import friendly_message
 from services.paging import fetch_page
 from services.validators import like_pattern
@@ -89,7 +90,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
                                           "pcs", "boxes", "sets", "kg", "rolls", "packs", "liters", "meters", "feet"], fg_color=T.INFO_BG, text_color=T.TEXT)
         self.uom_menu.pack(fill="x", pady=(5, 0))
 
-        ctk.CTkLabel(form_card, text="💡 Consumables (e.g. boxes of nails) support fractional returns. (e.g., return 0.5 for half box).", font=T.font(12), text_color=T.TEXT_MUTED, justify="left", wraplength=300).pack(anchor="w", padx=20, pady=(0, 10))
+        ctk.CTkLabel(form_card, text="Equipment and pieces use whole numbers. Divisible consumables allow up to 2 decimals.", font=T.font(12), text_color=T.TEXT_MUTED, justify="left", wraplength=300).pack(anchor="w", padx=20, pady=(0, 10))
 
         ctk.CTkLabel(form_card, text="Product Name *", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w", padx=20)
         self.name_entry = C.field(
@@ -213,10 +214,6 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         C.button(search_frame, kind="secondary", text="📷 Scan & Test QR", width=140, 
                       command=self.open_test_scanner).pack(side="right", padx=(10, 0))
         
-        self.batch_print_btn = C.button(search_frame, kind="secondary", text="⎙ Batch Print Tags", width=140, command=self.execute_batch_print)
-        self.batch_print_btn.pack(side="right", padx=(10, 0))
-        self.batch_print_btn.configure(state="disabled")
-
         selection_frame = ctk.CTkFrame(table_card, fg_color="transparent")
         selection_frame.pack(fill="x", padx=22)
         self.select_page_var = ctk.StringVar(value="off")
@@ -227,6 +224,9 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         self.select_page_check.pack_forget()  # the loaded page decides whether selection is possible
         self.selected_count_label = ctk.CTkLabel(selection_frame, text="0 selected", font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.selected_count_label.pack(side="left")
+        self.batch_print_btn = C.button(selection_frame, kind="primary", text="⎙ Print Selected Tags", width=160, command=self.execute_batch_print)
+        self.batch_print_btn.pack(side="left", padx=(14, 0))
+        self.batch_print_btn.configure(state="disabled")
         self.no_tag_hint = ctk.CTkLabel(selection_frame, text="No tagged tools on this page. Assign a tag to print labels.",
                                         font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.no_tag_hint.pack(side="left")
@@ -588,6 +588,13 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             msg = f"Wait! Similar product names already exist:\n\n{sim_list}\n\nAre you sure you want to add '{name}' as a new distinct item?"
             if not messagebox.askyesno("Similar Name Detected", msg, parent=self.add_modal):
                 return
+        try:
+            qty = v.item_quantity(self.qty_entry.get(), itype, uom, allow_zero=True)
+            v.parse_price(self.price_entry.get() or 0)
+        except v.ValidationError as e:
+            return messagebox.showwarning("Check item", str(e), parent=self.add_modal)
+        if not messagebox.askyesno("Confirm new item", f"Add {name}?\n\nType: {itype}\nQuantity: {fmt_qty(qty)} {uom}\nCategory: {cat}", parent=self.add_modal):
+            return
         try:
             # [RBAC][CONCURRENCY] Admin only; validated server-side (numbers, whole units for equipment, limits); one transaction
             res = inv_svc.add_item(self.user_info, name=name, category=cat, supplier=sup, description=desc, location=loc,

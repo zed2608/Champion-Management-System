@@ -77,15 +77,19 @@ def _normalise(cur, data, exclude_project_id=None):
     # requirements: active tools, valid quantities (whole for equipment), one line per tool
     lines = {}
     for item in data.get("requirements") or []:
-        cur.execute("SELECT tool_id, name, item_type, is_archived FROM tool WHERE tool_id = %s", (item.get("tool_id"),))
+        cur.execute("""SELECT t.tool_id, t.name, t.item_type, t.unit_of_measure, t.is_archived,
+                              i.quantity_total FROM tool t JOIN inventory i ON i.tool_id=t.tool_id WHERE t.tool_id = %s""",
+                    (item.get("tool_id"),))
         t = cur.fetchone()
         if not t:
             raise v.ValidationError("A required tool no longer exists.")
         if t["is_archived"]:
             raise v.ValidationError(f"'{t['name']}' is archived and cannot be required by a project.")
-        qty = v.parse_quantity(item.get("qty"), whole=(t["item_type"] or "Equipment") != "Consumable", field=f"Quantity for {t['name']}")
+        qty = v.item_quantity(item.get("qty"), t["item_type"], t["unit_of_measure"], field=f"Quantity for {t['name']}")
         line = lines.setdefault(t["tool_id"], {"tool_id": t["tool_id"], "qty": Decimal(0), "warning": False, "name": t["name"]})
         line["qty"] += qty
+        if line["qty"] > Decimal(str(t["quantity_total"])):
+            raise v.ValidationError(f"'{t['name']}': requested {v.fmt_qty(line['qty'])} exceeds the company total of {v.fmt_qty(t['quantity_total'])}.")
         line["warning"] = line["warning"] or bool(item.get("needs_retrieval"))
     if not lines:
         raise v.ValidationError("Please add at least one tool requirement.")

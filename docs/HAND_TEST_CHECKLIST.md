@@ -101,10 +101,10 @@ Legend: **Do** = exact clicks. **Expect** = what you must see. Write PASS or FAI
 
 ## F. Reports and PDF (Admin)
 
-31. **Open every report tab** (ABC, Usage, Activity, Allocation, Damage, Low stock, Overdue, Wear, Anomalies).
+31. **Open every report tab** (Usage, Activity, Allocation, Damage, Low stock, Overdue). Wear is under Maintenance.
     *Expect:* each shows data or a plain "none found"; charts draw; no error box.
 32. ★ **Export all PDFs.** On each tab click **⎙ Export PDF** > **⎙ Export Now**.
-    *Expect:* a PDF opens for each (9 in all), titled correctly, with the company header and a "Records: N" line under each table. No error box.
+    *Expect:* a PDF opens for each (6 in all), titled correctly, with the company header and a "Records: N" line under each table. No error box.
 33. **PDF problems (partly automatic).** A full disk and a locked folder are simulated by the automatic tests; do NOT try them by hand.
     By hand, only check this: if the PC has no PDF viewer, export once. *Expect:* "The report was saved but no program could open it" plus the file path, not an "Export Error".
     Skip if your PC has a PDF viewer.
@@ -117,8 +117,8 @@ Legend: **Do** = exact clicks. **Expect** = what you must see. Write PASS or FAI
     *Expect:* "Recomputing every hash…", then an **INTACT** verdict with the number of entries and the chain head (a long hex code). Not red.
 36. **Audit Report PDF.** Click **⎙ Audit Report PDF**.
     *Expect:* a PDF whose first table says Result: INTACT and prints the same head hash as step 35, followed by the newest entries.
-37. **Anomalies tab** (Reports > Anomalies).
-    *Expect:* with little data it says there is not enough data (no false alarms); recommendations, if any, each show the numbers behind them in pesos.
+37. **Report search.** Search a worker, item, project or status in each relevant report, press Enter, and export the PDF.
+    *Expect:* the PDF rows match the filtered screen. Low Stock has no date filter. The optional PDF note does not filter rows.
 38. **Dashboard cards.** Dashboard (Admin) > **Show details** > **↻ Refresh** on System status.
     *Expect:* last backup (red if none or older than 7 days), audit chain status, top 5 wear forecasts, top 5 recommendations, and the monthly savings card. The page never freezes while they load.
 
@@ -199,9 +199,9 @@ P4. **Toasts after actions.** Archive and restore a tool, update your profile, r
 P5. **Hover and click feel.** Move the mouse over buttons, sidebar items, the Low Stock and Action Items cards and table rows. *Expect:* each fades smoothly (about a tenth of a second), the pointer turns into a hand, a button darkens briefly while pressed. Nothing flickers when you slide across a row or card. Leave the mouse over a sidebar item you just clicked: it stays highlighted as the active page.
 P6. **Reduced motion.** Put `CHAMPION_REDUCE_MOTION=1` in `.env`, restart. *Expect:* no fades, no count-up, no pulsing placeholders, a shorter still splash; everything still works. Remove the line to get the animations back.
 P7. **Loading placeholders.** Open Inventory, Issuance & Retrieval, Tracking. *Expect:* grey bars (gently pulsing) instead of an empty white frame for a moment, then the rows.
-P8. **KPI cards.** Admin dashboard: five cards of identical size, number on top, label below, a small grey status line, a coloured stripe on the left. Numbers count up in about 0.4 seconds when the dashboard opens or refreshes. Low Stock turns pink when something is below its minimum. Log in as Staff: four cards, no ADMIN INSIGHTS panel. All five ADMIN INSIGHTS cards (backup, audit chain, wear, recommendations, and the savings line) are still there for Admin.
+P8. **KPI cards.** Admin and Staff dashboards show four number cards with short labels and coloured stripes. Low Stock turns pink when something is below its minimum. Staff has no ADMIN INSIGHTS panel; Admin can open the detailed insights.
 P9. **Readable from 2 metres.** Stand 2 m from the screen at the resolution you will present at. *Expect:* sidebar, card numbers, table text and the green headers are readable; grey hint text is the faintest thing and is still legible. If something is too small, note the screen and tell me.
-P10. **Every screen still reachable.** Click every sidebar item and every tab: Dashboard, Project Management, Inventory, Issuance & Retrieval (2 tabs), Tracking (3 tabs), Reports (9 tabs), Maintenance (6 tabs), Role Management, Help (5 tabs), Profile (click your name top right). *Expect:* each opens with a title, a one-line subtitle, and the primary action (**+ Add ...**) on the right where the screen has one. No overlapping or cut-off text at 1366 x 768.
+P10. **Every screen still reachable.** Click every sidebar item and every tab: Dashboard, Project Management, Inventory, Issuance & Retrieval (2 tabs), Tracking (3 tabs), Reports (6 tabs), Maintenance (6 tabs), Role Management, Help (5 tabs), Profile (click your name top right). *Expect:* each opens with a title and no overlapping or cut-off text at 1366 x 768.
 P11. **One full issue/return still works.** Issuance & Retrieval > **📤 Issue Tools** to a demo worker, then **📥 Retrieve Tools** with one **Damaged** (empty details refused, then accepted). *Expect:* the same results as before the polish (one success box, a receipt, a ticket number, quantities right in Inventory).
 P12. **Colours.** Buttons come in four looks only: green (main action), grey (secondary), text-only (quiet) and red (danger). Statuses are readable on white (no pale green or yellow text).
 P13. **Dark/light switch.** Not built (see `docs/POLISH_SUMMARY.md`): there is nothing to check.
@@ -210,10 +210,18 @@ P13. **Dark/light switch.** Not built (see `docs/POLISH_SUMMARY.md`): there is n
 
 Use `champion_demo` from `docs/DEMO_SETUP.md`. These checks still need a person at an unlocked screen; automated Tk event checks do not judge visual appearance.
 
-T1. **Tagged print selection.** Inventory: click the checkbox and the surrounding Print cell for a tagged tool such as Masking Tape. *Expect:* one click ticks it, the count becomes `1 selected`, and **Batch Print Tags** enables. Untick it: count returns to zero and the button disables. Change page, set Rows per page to 50, search another tagged tool, then clear the search and click a row that was reused. *Expect:* the visible tick matches the selected tool IDs, not whichever tool used that row before.
-T2. **Untagged print selection.** Search `Hard Hat` or `Bolt Cutter 24in`. *Expect:* its Print cell says **Tag first** and clicking it does nothing. Clear the search, click the **Select** label or checkbox on a tagged row. *Expect:* the count and Batch Print state update. Tick **Select tagged tools on this page**. *Expect:* only tagged rows on the current page are selected. Untick it to clear that page's tagged rows.
-T3. **All nine Reports tabs.** At 1366×768 and 1920×1080, open ABC, Usage, Employee Activity, Project Allocation, Damage and Loss, Low Stock, Overdue, Wear, and Anomalies. *Expect:* headers, filters and scrolling work; the table or result starts promptly below the description and any chart with data. Empty chart/summary areas take no space. With a period containing no rows, expect a compact `No data for this period` message where supported. Check that real charts still draw and one PDF export opens if a viewer is installed.
-T4. **Existing dashboard roles.** Log in as Admin, then Staff. *Expect:* the existing Admin dashboard still shows its five KPI cards and Admin Insights; Staff sees only permitted pages and no Admin Insights. This branch did not redesign the dashboard.
+T1. **Tagged print selection.** Inventory: click the checkbox and the surrounding Print cell for a tagged tool such as Masking Tape. *Expect:* one click ticks it, the count becomes `1 selected`, and **Print Selected Tags** enables beside it. Untick it: count returns to zero and the button disables. Change page, set Rows per page to 50, search another tagged tool, then clear the search and click a row that was reused. *Expect:* the visible tick matches the selected tool IDs, not whichever tool used that row before.
+T2. **Untagged print selection.** Search `Hard Hat` or `Bolt Cutter 24in`. *Expect:* its Print cell says **Tag first** and clicking it does nothing. Clear the search, click the **Select** label or checkbox on a tagged row. *Expect:* the count and Print Selected Tags state update. Tick **Select tagged tools on this page**. *Expect:* only tagged rows on the current page are selected. Untick it to clear that page's tagged rows.
+T3. **All six Reports tabs.** At 1366×768 and 1920×1080, open Usage, Employee Activity, Project Allocation, Damage and Loss, Low Stock, and Overdue. *Expect:* headers, search, filters and scrolling work; the table starts promptly below the description and any chart with data. Export after searching and check the PDF rows. Low Stock has no date picker. Check real charts and one PDF export if a viewer is installed.
+T4. **Dashboard and sidebar.** Log in as Admin, then Staff. *Expect:* four readable KPI cards with short notes; Staff sees only permitted pages and no Admin Insights. Move the mouse across sidebar pages without clicking; every unselected hover highlight clears when the pointer leaves. Check the opening and post-login loading screens have the same style.
 T5. **Issue and return.** On demo data, issue one tagged tool to a demo Worker on a valid project, then return it. *Expect:* one receipt, correct Inventory quantity, and a completed history row. If returning Damaged, empty details are refused and filled details create a ticket. This branch did not change the service workflow.
 
-`scripts/check_tour_inventory.py` passed Tk press/release checks on `champion_demo`, and `scripts/capture_tour_reports.py --check-only` opened all nine tabs at both sizes. Screenshot capture returned `OSError: screen grab failed`; these visual checks remain open.
+Earlier `scripts/check_tour_inventory.py` passed Tk press/release checks on `champion_demo`. Re-run the updated checks on Windows because this revision changed quantity, confirmations, and reports; screenshot capture was unavailable in the earlier run.
+
+## Quantity, confirmation and search checks (current branch)
+
+1. Create a Rotary Hammer (Equipment, pcs) and try `0.5` as stock, project requirement, issue, return and maintenance quantity. Each must be refused without saving. Repeat with Consumable, pcs.
+2. Create a Consumable, kg with `2.5`. Request and issue `0.5`, return `0.25` as Good. Inventory available, deployed quantity, project requirement and history must agree. Try `0.001` and check that it is refused. A duplicate project cart addition must never exceed total owned stock.
+3. Cancel each confirmation for new Inventory item, new/edited Project, Issue, Return, Maintenance flag and issue resolution. Reload the relevant screen: no stock or record should have changed. Confirm each action once and check one success message.
+4. Search all Maintenance data lists (issues, archived tools, employees, projects, wear, backup history). Search a term that appears only on a later page and check the result is found. Search each Reports tab, export, and compare the PDF rows to the screen.
+5. Check the six Reports tabs, Inventory selection row and sidebar at 1366×768 and 1920×1080 on Windows. Check keyboard Enter in quantity and report search fields and test the mouse hover after opening and closing dialogs.

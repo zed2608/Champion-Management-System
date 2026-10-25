@@ -66,6 +66,23 @@ def test_equipment_must_be_whole():
         v.parse_quantity("2.5", whole=True)
 
 
+@pytest.mark.parametrize("item_type,uom,amount,allowed", [
+    ("Equipment", "pcs", "0.5", False),
+    ("Equipment", "kg", "0.5", False),
+    ("Consumable", "pcs", "0.5", False),
+    ("Consumable", "boxes", "0.5", True),
+    ("Consumable", "kg", "0.25", True),
+    ("Consumable", "liters", "0.01", True),
+    ("Consumable", "packs", "1.234", False),
+])
+def test_same_quantity_rule_for_catalog_stock_issue_and_return(item_type, uom, amount, allowed):
+    if allowed:
+        assert v.item_quantity(amount, item_type, uom) == Decimal(amount).quantize(Decimal(".01"))
+    else:
+        with pytest.raises(v.ValidationError):
+            v.item_quantity(amount, item_type, uom)
+
+
 def test_price_rules():
     assert v.parse_price("1,250.50") == Decimal("1250.50")
     assert v.parse_price("0") == Decimal("0.00")

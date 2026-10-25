@@ -26,10 +26,6 @@ REPAIR_FLAGS = ("Damaged", "Needs Repair", "Missing Parts")
 OUTCOMES = ("Good", "Needs Repair", "Damaged", "Lost")
 
 
-def _whole_only(item_type) -> bool:
-    return (item_type or "Equipment") != "Consumable"
-
-
 @require_role("Admin")
 def flag_tool(actor, tool_ref, reported_by, condition, notes, quantity=1) -> dict:
     """Manually flag ``quantity`` unit(s) of a tool that are physically in stock."""
@@ -43,15 +39,14 @@ def flag_tool(actor, tool_ref, reported_by, condition, notes, quantity=1) -> dic
 
     def work(cur):
         if ref.isdigit():
-            cur.execute("SELECT tool_id, name, item_type FROM tool WHERE tool_id = %s", (ref,))
+            cur.execute("SELECT tool_id, name, item_type, unit_of_measure FROM tool WHERE tool_id = %s", (ref,))
         else:
             scan = v.parse_scan(ref)
-            cur.execute("SELECT tool_id, name, item_type FROM tool WHERE tag_id = %s", (scan.value if scan.kind == "tool" else ref,))
+            cur.execute("SELECT tool_id, name, item_type, unit_of_measure FROM tool WHERE tag_id = %s", (scan.value if scan.kind == "tool" else ref,))
         tool = cur.fetchone()
         if not tool:
             raise NotFound("No tool found with that PID or Tag ID.")
-        if _whole_only(tool["item_type"]) and qty != qty.to_integral_value():
-            raise v.ValidationError(f"'{tool['name']}' is equipment: flag whole units only.")
+        v.item_quantity(qty, tool["item_type"], tool.get("unit_of_measure"), field="Quantity")
         lock_inventory(cur, [tool["tool_id"]])
         cur.execute("SELECT user_id FROM `user` WHERE employee_id = %s", (reporter_text,))
         rep = cur.fetchone()
@@ -87,8 +82,7 @@ def resolve_issue(actor, issue_id, outcome, restock_quantity, resolution_notes) 
         if t["status"] != "Open":
             raise Conflict("This issue has already been resolved.")           # stale modal / two Admins
         inv = lock_inventory(cur, [t["tool_id"]])[t["tool_id"]]
-        if _whole_only(inv["item_type"]) and restock != restock.to_integral_value():
-            raise v.ValidationError("Equipment can only be restocked in whole units.")
+        v.item_quantity(restock, inv["item_type"], inv.get("unit_of_measure"), field="Restock quantity", allow_zero=True)
         qty = Decimal(str(t["quantity"] or 0))
         effect = "no stock change"
         if t["condition_flag"] in REPAIR_FLAGS and qty > 0:

@@ -208,6 +208,8 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                                        f"Wait! Similar names already exist:\n\n{sim_list}\n\nAre you sure you want to register '{name}' as a new distinct user?",
                                        parent=self.reg_modal):
                 return
+        if not messagebox.askyesno("Confirm registration", f"Register {name} as {role}?", parent=self.reg_modal):
+            return
         try:
             # [RBAC][CONCURRENCY] Admin only; Workers get NO password; ids come from a locked sequence; blank e-mail is stored as NULL
             res = user_service.register_user(self.user_info, name=name, email=email, role=role, password=pwd,
@@ -543,6 +545,8 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                     sim_list = "\n".join([f"• {sn}" for sn in similar])
                     if not messagebox.askyesno("Similar Name Detected", f"Similar user names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this user to '{new_name}'?", parent=modal):
                         return
+            if not messagebox.askyesno("Confirm account changes", f"Save changes for {new_name} ({new_role})?", parent=modal):
+                return
             try:
                 res = user_service.update_user(self.user_info, row["user_id"], name=new_name, email=new_email, role=new_role,
                                                new_password=new_pass, confirm_password=conf_pass, allow_duplicate_name=allow_dup)

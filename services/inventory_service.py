@@ -18,10 +18,6 @@ from services.stock_ledger import lock_inventory
 ITEM_TYPES = ("Equipment", "Consumable")
 
 
-def _whole_only(item_type) -> bool:
-    return item_type != "Consumable"
-
-
 def find_similar_names(name, exclude_tool_id=None):
     """Read-only helper for the "Similar name detected" prompt: (exact_match: bool, similar: list[str])."""
     name = v.clean_named_label(name, max_len=v.MAX_NAME, field="Product Name")
@@ -41,6 +37,9 @@ def _blank_if_placeholder(text):
 def _clean_fields(item_type, category, name, description, supplier, location, unit_of_measure, price):
     if item_type not in ITEM_TYPES:
         raise v.ValidationError("Item type must be Equipment or Consumable.")
+    uom = v.clean_text(unit_of_measure, max_len=20, field="Unit of measure").lower()
+    if uom not in v.UNITS:
+        raise v.ValidationError("Choose a unit from the list (pcs, boxes, sets, kg, packs, liters, rolls, meters or feet).")
     return {
         "name": v.clean_named_label(name, max_len=v.MAX_NAME, field="Product Name"),
         "category": v.clean_named_label(category, max_len=100, field="Category"),
@@ -48,21 +47,21 @@ def _clean_fields(item_type, category, name, description, supplier, location, un
         "supplier": _blank_if_placeholder(v.clean_named_label(supplier, max_len=100, field="Supplier", required=False)),
         "description": v.clean_text(description, max_len=v.MAX_NOTES, field="Description", required=False, multiline=True) or None,
         "location": _blank_if_placeholder(v.clean_text(location, max_len=100, field="Location", required=False)),
-        "unit_of_measure": v.clean_text(unit_of_measure, max_len=20, field="Unit of measure"),
+        "unit_of_measure": uom,
         "price": v.parse_price(price if str(price or "").strip() else 0),
     }
 
 
-def _stock_value(raw, item_type, field):
+def _stock_value(raw, item_type, uom, field):
     if str(raw if raw is not None else "").strip() == "":
         raise v.ValidationError(f"{field} is required.")
-    return v.parse_quantity(raw, whole=_whole_only(item_type), field=field, allow_zero=True)
+    return v.item_quantity(raw, item_type, uom, field=field, allow_zero=True)
 
 
 @require_role("Admin")
 def add_item(actor, *, name, category, supplier, description, location, item_type, unit_of_measure, price, quantity) -> dict:
     f = _clean_fields(item_type, category, name, description, supplier, location, unit_of_measure, price)
-    qty = _stock_value(quantity, item_type, "Quantity")
+    qty = _stock_value(quantity, item_type, f["unit_of_measure"], "Quantity")
 
     def work(cur):
         cur.execute("SELECT 1 AS x FROM tool WHERE is_archived = 0 AND name = %s FOR UPDATE", (f["name"],))
@@ -85,15 +84,22 @@ def update_item(actor, tool_id, *, name, category, supplier, description, locati
                 quantity, min_stock, tag_id) -> dict:
     """Edit an item. The Total Qty may not drop below the units that are deployed or in maintenance (checked under lock)."""
     f = _clean_fields(item_type, category, name, description, supplier, location, unit_of_measure, price)
-    new_total = _stock_value(quantity, item_type, "Total Qty")
-    new_min = v.parse_quantity(min_stock if str(min_stock or "").strip() else 0, whole=_whole_only(item_type),
-                               field="Min Stock", allow_zero=True)
+    new_total = _stock_value(quantity, item_type, f["unit_of_measure"], "Total Qty")
+    new_min = v.item_quantity(min_stock if str(min_stock or "").strip() else 0, item_type, f["unit_of_measure"],
+                              field="Min Stock", allow_zero=True)
     tag_raw = v.clean_text(tag_id, max_len=100, field="Tag ID", required=False)
 
     def work(cur):
         inv = lock_inventory(cur, [tool_id])[tool_id]
-        cur.execute("SELECT tag_id FROM tool WHERE tool_id = %s", (tool_id,))
-        current_tag = (cur.fetchone() or {}).get("tag_id")
+        cur.execute("SELECT tag_id, unit_of_measure FROM tool WHERE tool_id = %s", (tool_id,))
+        current = cur.fetchone() or {}
+        current_tag = current.get("tag_id")
+        if inv["item_type"] != item_type or (current.get("unit_of_measure") or "pcs").lower() != f["unit_of_measure"]:
+            cur.execute("SELECT EXISTS(SELECT 1 FROM `transaction` WHERE tool_id=%s) AS used", (tool_id,))
+            used = cur.fetchone()["used"]
+            cur.execute("SELECT EXISTS(SELECT 1 FROM project_requirements WHERE tool_id=%s) AS used", (tool_id,))
+            if used or cur.fetchone()["used"] or inv["quantity_in_maintenance"] or inv["quantity_total"] != inv["quantity_available"]:
+                raise Conflict("This item has project, issue or maintenance records. Its type and unit can no longer be changed.")
         # an unchanged (possibly legacy-format) tag is kept as is; only a NEW tag must match the strict pattern
         if not tag_raw:
             tag = None

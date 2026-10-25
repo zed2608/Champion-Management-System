@@ -28,8 +28,9 @@ def _int(value, field, low=0, high=10_000):
 # ---- seeding -------------------------------------------------------------------------------------------------------------------
 def _untouched_default(row, label, digest, label_key, text_key):
     """Only refresh an exact previous built-in; leave all custom and edited content alone."""
+    digests = digest if isinstance(digest, (list, tuple)) else (digest,)
     return (row[label_key] == label and
-            hashlib.sha256(row[text_key].encode("utf-8")).hexdigest() == digest)
+            hashlib.sha256(row[text_key].encode("utf-8")).hexdigest() in digests)
 
 
 @require_role("Admin", "Staff")

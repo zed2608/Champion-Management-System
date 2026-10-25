@@ -19,6 +19,8 @@ MAX_SEARCH = 64
 MAX_QTY = Decimal("100000")
 MAX_PRICE = Decimal("99999999.99")      # DECIMAL(10,2)
 MAX_PASSWORD_BYTES = 72                 # bcrypt hard limit; bcrypt 5.0 raises ValueError above it
+DIVISIBLE_UNITS = frozenset({"boxes", "sets", "kg", "packs", "liters", "rolls", "meters", "feet"})
+UNITS = DIVISIBLE_UNITS | {"pcs"}
 
 TAG_ID_RE = re.compile(r"^[A-Z0-9][A-Z0-9-]{2,31}$")
 EMPLOYEE_ID_RE = re.compile(r"^(ADM|STF|WKR)-\d{4}-\d{3,}$")
@@ -178,6 +180,20 @@ def parse_quantity(value, *, whole: bool = False, field: str = "Quantity", allow
     if whole and q != q.to_integral_value():
         raise ValidationError(f"{field} must be a whole number for equipment.")
     return q.quantize(Decimal("0.01"))
+
+
+def whole_quantity_only(item_type, unit_of_measure) -> bool:
+    """Equipment and consumables counted in pieces use whole units throughout the system."""
+    return (item_type or "Equipment") != "Consumable" or (unit_of_measure or "pcs").strip().lower() not in DIVISIBLE_UNITS
+
+
+def item_quantity(value, item_type, unit_of_measure, *, field="Quantity", allow_zero=False) -> Decimal:
+    whole = whole_quantity_only(item_type, unit_of_measure)
+    q = parse_quantity(value, field=field, allow_zero=allow_zero)
+    if whole and q != q.to_integral_value():
+        label = "equipment" if item_type != "Consumable" else f"{unit_of_measure or 'pcs'}"
+        raise ValidationError(f"{field} must be a whole number for {label}.")
+    return q
 
 
 def fmt_qty(x) -> str:

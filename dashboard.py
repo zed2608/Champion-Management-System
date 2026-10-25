@@ -146,6 +146,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
                 command=lambda m=item: self.show_frame(m)
             )
             btn.pack(side="left", fill="x", expand=True)
+            btn.bind("<Leave>", lambda e: self.after_idle(self._sync_nav_hover), add="+")
 
             badge = ctk.CTkLabel(container, text="", width=8,
                                  height=8, corner_radius=4, fg_color="transparent")
@@ -817,25 +818,25 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
             cards_frame.grid_columnconfigure(i, weight=1)
 
         # Four concise numbers; each opens the screen where the user can act.
-        c1 = C.KpiCard(cards_frame, "Tools out", "View tool history", T.PRIMARY, "0")
+        c1 = C.KpiCard(cards_frame, "Tools out", "History", T.PRIMARY, "0")
         c1.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
         self.dash_util_lbl, self.dash_util_note = c1.value_label, c1.note_label
         self._bind_widget_tree(c1, lambda *_: self.show_frame("Tracking & Accountability"), hover=True)
 
         c2 = C.KpiCard(cards_frame, "Overdue projects" if is_admin else "Tools in stock",
-                       "View projects" if is_admin else "View inventory", T.INFO, "0")
+                       "Projects" if is_admin else "Inventory", T.INFO, "0")
         c2.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
         self.dash_wf_lbl = c2.value_label
         self._bind_widget_tree(c2, lambda *_: self.show_frame("Project Management" if is_admin else "Inventory"), hover=True)
 
         c3 = C.KpiCard(cards_frame, "Open tool issues" if is_admin else "Active projects",
-                       "View maintenance" if is_admin else "View projects", T.ACCENT, "0")
+                       "Maintenance" if is_admin else "Projects", T.ACCENT, "0")
         c3.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
         self.dash_inv_lbl = c3.value_label
         self._bind_widget_tree(c3, lambda *_: self.show_frame("Maintenance" if is_admin else "Project Management"), hover=True)
 
         # Low stock (admin + staff): a click opens Inventory filtered to the low items
-        c_ls = C.KpiCard(cards_frame, "Low stock", "View inventory", T.DANGER, "0")
+        c_ls = C.KpiCard(cards_frame, "Low stock", "Inventory", T.DANGER, "0")
         c_ls.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
         self.dash_lowstock_card, self.dash_lowstock_top, self.dash_lowstock_val = c_ls, c_ls.top, c_ls.value_label
         self.dash_lowstock_note = c_ls.note_label

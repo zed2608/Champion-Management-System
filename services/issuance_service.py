@@ -34,9 +34,8 @@ class Blocked(Conflict):
         self.reason, self.tool_id, self.quantity, self.available = reason, tool_id, quantity, available
 
 
-def _is_whole_only(item_type) -> bool:
-    """Equipment is counted in whole units; only consumables may be fractional."""
-    return (item_type or "Equipment") != "Consumable"
+def _is_whole_only(item_type, unit_of_measure="pcs") -> bool:
+    return v.whole_quantity_only(item_type, unit_of_measure)
 
 
 def _num(x) -> Decimal:
@@ -89,7 +88,7 @@ def verify_borrower(actor, employee_id) -> dict:
 
 def _requirements(cur, project_id):
     cur.execute("""
-        SELECT pr.req_id, pr.tool_id, t.name, t.item_type, pr.quantity AS req_qty, pr.status,
+        SELECT pr.req_id, pr.tool_id, t.name, t.item_type, t.unit_of_measure, pr.quantity AS req_qty, pr.status,
                COALESCE((SELECT SUM(tr.quantity) FROM `transaction` tr
                          WHERE tr.project_id = pr.project_id AND tr.tool_id = pr.tool_id
                            AND tr.type = 'Issue' AND tr.status = 'Active'), 0) AS issued_qty
@@ -119,17 +118,18 @@ class ToolInfo:
     condition: str
     available: Decimal
     in_maintenance: Decimal
+    unit_of_measure: str = "pcs"
 
 
 def _tool_from_db(tag):
     with db.read() as cur:
-        cur.execute("""SELECT t.tool_id, t.name, t.tag_id, t.item_type, t.`condition` AS tool_condition, t.is_archived,
+        cur.execute("""SELECT t.tool_id, t.name, t.tag_id, t.item_type, t.unit_of_measure, t.`condition` AS tool_condition, t.is_archived,
                               COALESCE(i.quantity_available, 0) AS av, COALESCE(i.quantity_in_maintenance, 0) AS maint
                        FROM tool t LEFT JOIN inventory i ON i.tool_id = t.tool_id WHERE t.tag_id = %s""", (tag,))
         r = cur.fetchone()
     if not r:
         return None
-    return ToolInfo(r["tool_id"], r["name"], r["tag_id"], r["item_type"], r["tool_condition"], r["av"], r["maint"]), bool(r["is_archived"])
+    return ToolInfo(r["tool_id"], r["name"], r["tag_id"], r["item_type"], r["tool_condition"], r["av"], r["maint"], r["unit_of_measure"]), bool(r["is_archived"])
 
 
 @require_role(*STAFF)
@@ -143,7 +143,7 @@ def lookup_tool(actor, scanned) -> ToolInfo:
     rec = tool_cache.by_tag(tag)
     if rec is not None:
         info, archived = ToolInfo(rec.tool_id, rec.name, rec.tag_id, rec.item_type, rec.condition,
-                                  rec.quantity_available, rec.quantity_in_maintenance), rec.is_archived
+                                  rec.quantity_available, rec.quantity_in_maintenance, rec.unit_of_measure), rec.is_archived
     else:
         found = _tool_from_db(tag)
         if not found:
@@ -214,8 +214,7 @@ def issue(actor, borrower_id, project_id, cart, purpose) -> IssueResult:
             row, qty = inv[tid], merged[tid]
             if row["is_archived"]:
                 raise Conflict(f"'{row['name']}' is archived and cannot be issued.")
-            if _is_whole_only(row["item_type"]) and qty != qty.to_integral_value():
-                raise v.ValidationError(f"'{row['name']}' is equipment and must be issued in whole numbers.")
+            v.item_quantity(qty, row["item_type"], row.get("unit_of_measure"), field=f"Quantity for {row['name']}")
             if tid not in reqs:
                 raise Conflict(f"'{row['name']}' is not approved for this project.")
             cur.execute("SELECT COALESCE(SUM(quantity), 0) AS d FROM `transaction` WHERE project_id = %s AND tool_id = %s "
@@ -234,7 +233,7 @@ def issue(actor, borrower_id, project_id, cart, purpose) -> IssueResult:
             row, qty = inv[tid], merged[tid]
             take_stock(cur, tid, qty)
             # equipment: one row per unit (per-unit condition at return); consumables: ONE row with the exact quantity
-            pieces = [Decimal(1)] * int(qty) if _is_whole_only(row["item_type"]) else [qty]
+            pieces = [Decimal(1)] * int(qty) if _is_whole_only(row["item_type"], row.get("unit_of_measure")) else [qty]
             for piece in pieces:
                 cur.execute("""INSERT INTO `transaction`
                                  (user_id, tool_id, project_id, type, purpose, quantity, status, condition_at_borrow, issued_by)
@@ -307,11 +306,11 @@ def find_deployed(actor, user_id, tag_or_trn) -> dict:
         target = cur.fetchone()
         if not target:
             raise NotFound("No active records found for this tag / TRN.")
-        cur.execute("""SELECT t.tool_id, t.name, IFNULL(t.item_type, 'Equipment') AS item_type,
+        cur.execute("""SELECT t.tool_id, t.name, IFNULL(t.item_type, 'Equipment') AS item_type, t.unit_of_measure,
                               COALESCE(SUM(tr.quantity), 0) AS deployed
                        FROM `transaction` tr JOIN tool t ON t.tool_id = tr.tool_id
                        WHERE tr.tool_id = %s AND tr.user_id = %s AND tr.status = 'Active'
-                       GROUP BY t.tool_id, t.name, t.item_type""", (target["tool_id"], user_id))
+                       GROUP BY t.tool_id, t.name, t.item_type, t.unit_of_measure""", (target["tool_id"], user_id))
         rec = cur.fetchone()
     if not rec:
         raise NotFound("This employee has no active records for that tool.")
@@ -341,8 +340,7 @@ def retrieve(actor, user_id, tool_id, qty, condition, notes) -> RetrieveResult:
         res = RetrieveResult(condition=condition)
         inv = lock_inventory(cur, [tool_id])[tool_id]
         res.tool_name = inv["name"]
-        if _is_whole_only(inv["item_type"]) and want != want.to_integral_value():
-            raise v.ValidationError("Equipment items must be returned in whole numbers.")
+        v.item_quantity(want, inv["item_type"], inv.get("unit_of_measure"), field="Return quantity")
         cur.execute("SELECT * FROM `transaction` WHERE tool_id = %s AND user_id = %s AND status = 'Active' "
                     "ORDER BY borrow_date, transaction_id FOR UPDATE", (tool_id, user_id))
         rows = cur.fetchall()
