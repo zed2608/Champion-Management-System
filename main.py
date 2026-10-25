@@ -240,6 +240,7 @@ class LoginApp(ctk.CTk):
         load_win = ctk.CTkToplevel(self)
         self.center_window(load_win, 460, 260)
         load_win.overrideredirect(True)
+        load_win.attributes("-topmost", True)
         load_win.configure(fg_color=T.PRIMARY)
         ctk.CTkLabel(load_win, text="CHAMPION FINE TOOLING",
                      font=T.font(20, "bold"), text_color=T.ON_PRIMARY).pack(pady=(70, 4))
@@ -256,9 +257,11 @@ class LoginApp(ctk.CTk):
                 log_action(user['user_id'], "Login", "Authentication", f"User '{user['full_name']}' logged in.")
             except Exception as e:
                 print(f"Failed to log login action: {e}")
-            progress.stop()
-            load_win.destroy()
-            self.launch_dashboard(user)
+            try:
+                self.launch_dashboard(user)
+            finally:
+                progress.stop()
+                load_win.destroy()
 
         load_win.after(80, open_dashboard)
 
