@@ -1,4 +1,4 @@
-"""Uniform building blocks for every screen: cards, the four-button set, form fields, the page header and the "More" menu.
+"""Uniform building blocks for every screen: cards, action colors, form fields, the page header and the "More" menu.
 
 Screens call these instead of styling CustomTkinter widgets by hand, so every screen looks and sizes the same.
 They return ordinary CustomTkinter widgets (a button is still a CTkButton), so existing code that reads ``_text`` or calls ``configure`` keeps working.
@@ -6,6 +6,7 @@ Colours, fonts and sizes come from ui.theme only.
 """
 import tkinter as tk
 from tkinter import messagebox
+import re
 
 import customtkinter as ctk
 
@@ -47,6 +48,8 @@ apply_widget_defaults()
 
 BUTTON_KINDS = {
     "primary": dict(fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, text_color=T.ON_PRIMARY),
+    "accent": dict(fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER, text_color=T.ON_ACCENT),
+    "info": dict(fg_color=T.INFO, hover_color=T.INFO_HOVER, text_color=T.ON_INFO),
     "secondary": dict(fg_color=T.BORDER, hover_color=T.BORDER_STRONG, text_color=T.TEXT),
     "ghost": dict(fg_color="transparent", hover_color=T.SURFACE_MUTED, text_color=T.PRIMARY),
     "danger": dict(fg_color=T.DANGER, hover_color=T.DANGER_HOVER, text_color=T.ON_DANGER),
@@ -275,7 +278,8 @@ _install_foreground_notices()
 
 
 def button(parent, text="", command=None, kind="primary", compact=False, **kw):
-    """One of four buttons: primary (filled green), secondary (grey), ghost (text only) or danger (red). Fixed height, pointer cursor."""
+    """Consistent action colors: add/confirm yellow, retrieval blue, cancel/remove/clear red."""
+    kind = action_kind(text, kind)
     style = BUTTON_KINDS[kind]
     kw.pop("height", None)
     kw.pop("corner_radius", None)
@@ -285,6 +289,20 @@ def button(parent, text="", command=None, kind="primary", compact=False, **kw):
                          text_color=kw.pop("text_color", style["text_color"]), text_color_disabled=kw.pop("text_color_disabled", T.TEXT_MUTED),
                          **kw)
     return motion.enhance_button(btn)               # hover fade, press effect, pointer cursor (all off under CHAMPION_REDUCE_MOTION=1)
+
+
+def action_kind(text, default="primary"):
+    """Pick the same meaning and color for actions throughout the screens."""
+    words = set(re.findall(r"[a-z]+", str(text).lower()))
+    if words & {"cancel", "remove", "delete", "clear"}:
+        return "danger"
+    if "confirm" in words:
+        return "accent"
+    if "retrieve" in words or "retrieval" in words:
+        return "info"
+    if words & {"add", "register", "issue", "export"}:
+        return "accent"
+    return default
 
 
 def field(parent, **kw):

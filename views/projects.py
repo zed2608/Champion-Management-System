@@ -338,7 +338,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             tag_row.pack_propagate(False)
             ctk.CTkLabel(tag_row, text=f"👷 {worker}", font=T.font(12), text_color=T.PRIMARY).pack(side="left", padx=8)
             if not getattr(self, '_is_cart_locked', False):
-                ctk.CTkButton(tag_row, text="✕", width=22, height=22, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda i=idx: self._remove_worker(i)).pack(side="right", padx=5)
+                C.button(tag_row, text="✕", kind="danger", compact=True, width=28,
+                         command=lambda i=idx: self._remove_worker(i)).pack(side="right", padx=5)
 
     def _remove_worker(self, idx):
         if 0 <= idx < len(self.workers_list):

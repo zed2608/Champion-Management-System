@@ -968,7 +968,8 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             row.pack(fill="x", pady=2, padx=5)
             row.pack_propagate(False)
             ctk.CTkLabel(row, text=f"✓ {item['name']}  |  Tag: {item['tag']}", font=T.font(12, "bold"), text_color=T.PRIMARY).pack(side="left", padx=10, pady=5)
-            ctk.CTkButton(row, text="✕", width=25, height=25, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda idx=i: self.remove_from_cart(idx)).pack(side="right", padx=(5, 10))
+            C.button(row, text="✕", kind="danger", compact=True, width=28,
+                     command=lambda idx=i: self.remove_from_cart(idx)).pack(side="right", padx=(5, 10))
             step = item.get('step', Decimal(1))
             C.button(row, compact=True, kind="secondary", text="+", width=25, command=lambda idx=i, s=step: self.update_cart_qty(idx, s)).pack(side="right", padx=2)
             ctk.CTkLabel(row, text=f"Qty: {fmt_qty(item['qty_borrowed'])} {item.get('uom', '')}", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="right", padx=8)

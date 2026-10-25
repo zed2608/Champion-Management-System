@@ -42,6 +42,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "To print labels, first assign each tool a Tag ID in its details. Only tagged rows have Print checkboxes.",
             "Select tagged rows, or select all tagged rows on the current page, then choose Print Selected Tags beside the selection count. Untagged rows say Tag first.",
             "Search boxes are on the right of each list. The Rows selector and page buttons stay together above the list.",
+            "Yellow buttons add, confirm, register, issue or export. Blue opens retrieval. Red cancels, removes, deletes or clears. Green is used for other main actions.",
         ]),
         (False, "4. Project Management (Requisition Workflow)", [
             "Admins create and approve projects. Enter a project name and client, then assign workers by their Employee IDs.",
@@ -323,12 +324,17 @@ class HelpView(UiMixin, ctk.CTkFrame):
         elif "About" in selected_tab:
             self.render_about_tab()
 
-    def _build_search_bar(self, parent, on_search, placeholder="Search keywords..."):
+    def _build_search_bar(self, parent, on_search, placeholder="Search keywords...", action=None):
         bar = ctk.CTkFrame(parent, fg_color="transparent")
         bar.pack(fill="x", padx=20, pady=(4, 4))
+        controls = ctk.CTkFrame(bar, fg_color="transparent")
+        controls.pack(side="right")
+        if action:
+            text, command = action
+            C.button(controls, text=text, command=command, width=140).pack(side="left", padx=(0, 8))
         entry_var = ctk.StringVar()
-        entry = C.field(bar, placeholder_text=placeholder, width=C.SEARCH_WIDTH, textvariable=entry_var)
-        entry.pack(side="right")
+        entry = C.field(controls, placeholder_text=placeholder, width=C.SEARCH_WIDTH, textvariable=entry_var)
+        entry.pack(side="left")
         
         entry._search_timer = None
         def _do_search(*args):
@@ -358,12 +364,11 @@ class HelpView(UiMixin, ctk.CTkFrame):
         hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 0))
         ctk.CTkLabel(hdr, text="User Guide — Automated Management System", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
         
-        if self.is_admin:
-            C.button(hdr, kind="primary", text="+ Add Guide", width=140, command=lambda: self.open_guide_modal()).pack(side="right", padx=(10, 0))
-
         search_container = ctk.CTkFrame(outer, fg_color="transparent")
         search_container.grid(row=1, column=0, sticky="ew")
-        self._guide_search_entry = self._build_search_bar(search_container, self._filter_guide, "Search guide sections...")
+        action = ("+ Add Guide", self.open_guide_modal) if self.is_admin else None
+        self._guide_search_entry = self._build_search_bar(search_container, self._filter_guide,
+                                                         "Search guide sections...", action=action)
 
         self._guide_scroll = ctk.CTkScrollableFrame(outer, fg_color="transparent")
         self._guide_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
@@ -459,7 +464,8 @@ class HelpView(UiMixin, ctk.CTkFrame):
             e.pack(side="left", fill="x", expand=True)
             e.insert(0, content)
             step_entries.append(e)
-            ctk.CTkButton(row, text="✕", width=25, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda: [row.destroy(), step_entries.remove(e)]).pack(side="right", padx=5)
+            C.button(row, text="✕", kind="danger", compact=True, width=28,
+                     command=lambda: [row.destroy(), step_entries.remove(e)]).pack(side="right", padx=5)
 
         if existing_row:
             title_entry.insert(0, existing_row['title'])
@@ -507,12 +513,11 @@ class HelpView(UiMixin, ctk.CTkFrame):
         hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 0))
         ctk.CTkLabel(hdr, text="Frequently Asked Questions", font=T.font(16, "bold"), text_color=T.PRIMARY).pack(side="left")
         
-        if self.is_admin:
-            C.button(hdr, kind="primary", text="+ Add FAQ", width=140, command=lambda: self.open_faq_modal()).pack(side="right", padx=(10, 0))
-
         search_container = ctk.CTkFrame(outer, fg_color="transparent")
         search_container.grid(row=1, column=0, sticky="ew")
-        self._faq_search_entry = self._build_search_bar(search_container, self._filter_faq, "Search FAQs...")
+        action = ("+ Add FAQ", self.open_faq_modal) if self.is_admin else None
+        self._faq_search_entry = self._build_search_bar(search_container, self._filter_faq,
+                                                       "Search FAQs...", action=action)
 
         self._faq_scroll = ctk.CTkScrollableFrame(outer, fg_color="transparent")
         self._faq_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
