@@ -55,15 +55,14 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        C.PageHeader(top_bar, "Issuance & Retrieval", "Issue tools to workers and take them back").pack(side="left")
+        C.PageHeader(top_bar, "Issuance & Retrieval", "Issue tools to workers and take them back").pack(fill="x")
 
         tabs = ["📋 Deployment History", "📅 Deployment Schedule"]
         self.tab_var = ctk.StringVar(value="📋 Deployment History")
 
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
-            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
-        )
+        section_row = ctk.CTkFrame(top_bar, fg_color="transparent")
+        section_row.pack(fill="x", pady=(8, 0))
+        self.seg_btn = C.section_menu(section_row, tabs, self.tab_var, self.switch_tab)
         self.seg_btn.pack(side="right")
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
@@ -506,9 +505,12 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(title_col, text="Click any row to view details or reprint receipt.",
                      font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w")
 
+        action_bar = ctk.CTkFrame(table_card, fg_color="transparent")
+        action_bar.pack(fill="x", padx=20, pady=(0, 8))
+        controls = ctk.CTkFrame(action_bar, fg_color="transparent")
+        controls.pack(side="right")
         self.search_var = ctk.StringVar()
-        self.search_entry = C.field(top_bar, placeholder_text="Search Name or Tag...", width=200, textvariable=self.search_var)
-        self.search_entry.pack(side="right", padx=(10, 0))
+        self.search_entry = C.field(controls, placeholder_text="Search Name or Tag...", width=C.SEARCH_WIDTH, textvariable=self.search_var)
         
         self._search_timer = None
         def on_search_change(*args):
@@ -517,11 +519,11 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             self._search_timer = self.after(300, self.load_transaction_history)
         self.search_var.trace_add("write", on_search_change)
                       
-        self.history_filter = ctk.CTkOptionMenu(top_bar, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Retrieved", "Overdue", "A-Z (Item)"], width=160, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.load_transaction_history())
-        self.history_filter.pack(side="right", padx=(10, 5))
-
-        C.button(top_bar, kind="secondary", text="📥 Retrieve Tools", width=120, command=self.open_retrieval_modal).pack(side="right", padx=(5, 10))
-        C.button(top_bar, kind="primary", text="📤 Issue Tools", width=110, command=self.open_issuance_modal).pack(side="right", padx=(10, 0))
+        self.history_filter = ctk.CTkOptionMenu(controls, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Retrieved", "Overdue", "A-Z (Item)"], width=160, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.load_transaction_history())
+        C.button(controls, kind="primary", text="📤 Issue Tools", width=110, command=self.open_issuance_modal).pack(side="left", padx=(0, 6))
+        C.button(controls, kind="secondary", text="📥 Retrieve Tools", width=120, command=self.open_retrieval_modal).pack(side="left", padx=(0, 12))
+        self.history_filter.pack(side="left", padx=(0, 10))
+        self.search_entry.pack(side="left")
 
         self.data_scroll = ctk.CTkScrollableFrame(table_card, fg_color="transparent")
         self.data_scroll.pack(fill="both", expand=True, padx=20, pady=(10, 20))

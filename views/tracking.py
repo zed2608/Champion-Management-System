@@ -111,15 +111,14 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        C.PageHeader(top_bar, "Tracking & Accountability", "Who had what, when, and the tamper-evident record of it").pack(side="left")
+        C.PageHeader(top_bar, "Tracking & Accountability", "Who had what, when, and the tamper-evident record of it").pack(fill="x")
 
         tabs = ["📋 Issuance & Retrieval Logs", "🔎 Audit Records", "⚙️ Activity Log"]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
-            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
-        )
+        section_row = ctk.CTkFrame(top_bar, fg_color="transparent")
+        section_row.pack(fill="x", pady=(8, 0))
+        self.seg_btn = C.section_menu(section_row, tabs, self.tab_var, self.switch_tab)
         self.seg_btn.pack(side="right")
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
@@ -172,7 +171,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
 
         self.log_search_var = ctk.StringVar()
         self.log_search = C.field(
-            top, placeholder_text="Search employee or tool...", width=220, textvariable=self.log_search_var)
+            top, placeholder_text="Search employee or tool...", width=C.SEARCH_WIDTH, textvariable=self.log_search_var)
         self.log_search.pack(side="right", padx=(5, 0))
 
         self._log_timer = None
@@ -524,16 +523,12 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        C.PageHeader(top_bar, "Tracking & Accountability", "Your own deployment history").pack(side="left")
+        C.PageHeader(top_bar, "Tracking & Accountability", "Your own deployment history").pack(fill="x")
 
         tabs = ["👤 My History"]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tabs, variable=self.tab_var,
-            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
-        )
-        self.seg_btn.pack(side="right")
+        self.seg_btn = None  # Staff has only one section; no picker needed.
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
         self.tab_content.grid(

@@ -33,7 +33,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "For security, inactivity for 15 minutes triggers a warning; if ignored for 30 seconds, auto-logout executes.",
         ]),
         (True, "3. Products / Inventory (Admin)", [
-            "Use the left form to register new tools or consumables into the system.",
+            "Choose Add New Item in Inventory to register a tool or consumable.",
             "Equipment and consumables measured in pieces (pcs) use whole numbers. Consumables measured in boxes, sets, kg, packs, liters, rolls, meters or feet can use up to 2 decimal places (e.g., 0.5 kg).",
             "Click any row in the table to open the Edit/Archive modal.",
             "'Archive' safely removes a tool from active use and sends it to Maintenance → Archived Tools. The tool can be restored at any time.",
@@ -41,12 +41,14 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "If quantity available is lower than total and tied to an active transaction, location may show as deployed to project.",
             "To print labels, first assign each tool a Tag ID in its details. Only tagged rows have Print checkboxes.",
             "Select tagged rows, or select all tagged rows on the current page, then choose Print Selected Tags beside the selection count. Untagged rows say Tag first.",
+            "Search boxes are on the right of each list. The Rows selector and page buttons stay together above the list.",
         ]),
         (False, "4. Project Management (Requisition Workflow)", [
             "Admins create and approve projects. Enter a project name and client, then assign workers by their Employee IDs.",
             "Enter both dates in YYYY-MM-DD format, or leave both blank. End Date must be on or after Start Date.",
             "Add at least one item and its required quantity. Equipment and consumables measured in pcs use whole numbers. Divisible consumables can use up to 2 decimal places.",
             "In the item catalog, In stock / Total shows current warehouse stock and company stock. Click + Add and confirm to put an amount in the project plan. This does not remove stock; stock changes when an item is issued or returned.",
+            "Add Project starts with an empty item list. Edit Project shows only that project's saved items. Use the red X to remove an item from the plan after confirming.",
             "A request can exceed stock currently available, but issuance waits for stock to return. It cannot exceed the company's total stock.",
             "Admin projects start Approved. The project becomes Ongoing when all required tool quantities are issued. Admins can complete and archive it later.",
             "A worker must be assigned to the project. Only approved or ongoing projects can issue tools, within their tool requirements.",
@@ -283,22 +285,21 @@ class HelpView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 10))
 
-        C.PageHeader(top_bar, "Help & Support Hub", "Guides, answers and a way to reach an administrator").pack(side="left", padx=20)
+        C.PageHeader(top_bar, "Help & Support Hub", "Guides, answers and a way to reach an administrator").pack(fill="x", padx=20)
 
         tabs = [
-            "    ▤ Help Guide    ", 
-            "         💬 FAQs         ", 
-            " ⛭ System Requirements ", 
-            "   ✉ Support Tickets   ",
-            "     ℹ About     "
+            "▤ Help Guide",
+            "💬 FAQs",
+            "⛭ System Requirements",
+            "✉ Support Tickets",
+            "ℹ About",
         ]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
-            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
-        )
-        self.seg_btn.pack(side="right", padx=20)
+        section_row = ctk.CTkFrame(top_bar, fg_color="transparent")
+        section_row.pack(fill="x", padx=20, pady=(8, 0))
+        self.seg_btn = C.section_menu(section_row, tabs, self.tab_var, self.switch_tab)
+        self.seg_btn.pack(side="right")
         self.seg_btn.set(tabs[0])
 
         self.tab_content = ctk.CTkFrame(self, fg_color=T.SURFACE, corner_radius=10)
@@ -326,7 +327,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
         bar = ctk.CTkFrame(parent, fg_color="transparent")
         bar.pack(fill="x", padx=20, pady=(4, 4))
         entry_var = ctk.StringVar()
-        entry = C.field(bar, placeholder_text=placeholder, width=300, textvariable=entry_var)
+        entry = C.field(bar, placeholder_text=placeholder, width=C.SEARCH_WIDTH, textvariable=entry_var)
         entry.pack(side="right")
         
         entry._search_timer = None

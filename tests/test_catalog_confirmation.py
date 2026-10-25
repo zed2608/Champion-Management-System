@@ -53,3 +53,32 @@ def test_decimal_requirement_requires_confirmation_and_leaves_stock_unchanged(mo
     assert row["avail"] == row["total"] == "25.5"
     assert "Stock is unchanged" in status.text
     assert entry.get() == ""
+
+
+def test_new_project_starts_with_empty_cart_and_old_remove_cannot_pop(monkeypatch):
+    scanner = types.ModuleType("pyzbar.pyzbar")
+    scanner.decode = lambda *_args, **_kwargs: []
+    scanner.ZBarSymbol = SimpleNamespace(QRCODE=64)
+    monkeypatch.setitem(sys.modules, "pyzbar.pyzbar", scanner)
+    from views import projects
+
+    stale = {"tool_id": 17, "name": "Old tool", "qty": 2}
+    view = SimpleNamespace(req_cart=[stale], workers_list=["WKR-1"],
+                           editing_project_id=8, editing_project_status="Approved",
+                           _is_cart_locked=False, draft_modal=object(),
+                           refresh_req_cart=lambda: None)
+    projects.ProjectsView._begin_project_form(view)
+    assert view.req_cart == [] and view.workers_list == []
+    assert view.editing_project_id is None
+
+    def should_not_ask(*_args, **_kwargs):
+        raise AssertionError("A stale remove button must do nothing")
+
+    monkeypatch.setattr(projects.C, "confirm", should_not_ask)
+    projects.ProjectsView.remove_req_from_cart(view, 17)
+    assert view.req_cart == []
+
+    view.req_cart = [stale]
+    monkeypatch.setattr(projects.C, "confirm", lambda *_args, **_kwargs: True)
+    projects.ProjectsView.remove_req_from_cart(view, 17)
+    assert view.req_cart == []

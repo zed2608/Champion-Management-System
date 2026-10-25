@@ -187,10 +187,12 @@ class InventoryView(UiMixin, ctk.CTkFrame):
 
         search_frame = ctk.CTkFrame(table_card, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=(20, 10))
+        controls = ctk.CTkFrame(search_frame, fg_color="transparent")
+        controls.pack(side="right")
 
         self.search_var = ctk.StringVar()
         self.search_entry = C.field(
-            search_frame, placeholder_text="Search name, tag, supplier, location...", width=260, textvariable=self.search_var)
+            controls, placeholder_text="Search inventory...", width=C.SEARCH_WIDTH, textvariable=self.search_var)
 
         self._search_timer = None
         def on_search_change(*args):
@@ -199,27 +201,29 @@ class InventoryView(UiMixin, ctk.CTkFrame):
             self._search_timer = self.after(300, self.perform_search)
         self.search_var.trace_add("write", on_search_change)
 
-        self.sort_menu = ctk.CTkOptionMenu(search_frame, values=["Most Recent", "Oldest", "A-Z (Name)", "Z-A (Name)", "PID (Low-High)", "Needs Tag", "Already Tagged"],
+        self.sort_menu = ctk.CTkOptionMenu(controls, values=["Most Recent", "Oldest", "A-Z (Name)", "Z-A (Name)", "PID (Low-High)", "Needs Tag", "Already Tagged"],
                                            width=125, height=38, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.perform_search())
         self.sort_menu.pack(side="left", padx=(0, 10))
 
         is_staff = self.user_info.get("role", "").lower() == "staff"
 
-        C.button(search_frame, kind="secondary", text="📷 Scan QR", width=105,
+        C.button(controls, kind="secondary", text="📷 Scan QR", width=105,
                       command=self.open_test_scanner).pack(side="left", padx=(0, 10))
-        self.search_entry.pack(side="right", fill="x", expand=True)
+        self.search_entry.pack(side="left")
         
         selection_frame = ctk.CTkFrame(table_card, fg_color=T.SURFACE_ALT, corner_radius=T.RADIUS_MD)
         selection_frame.pack(fill="x", padx=20, pady=(2, 8))
+        selection_actions = ctk.CTkFrame(selection_frame, fg_color="transparent")
+        selection_actions.pack(side="right", padx=8)
         self.select_page_var = ctk.StringVar(value="off")
-        self.select_page_check = ctk.CTkCheckBox(selection_frame, text="Select tagged tools on this page", variable=self.select_page_var,
+        self.select_page_check = ctk.CTkCheckBox(selection_actions, text="Select tagged tools on this page", variable=self.select_page_var,
                                                  onvalue="on", offvalue="off", font=T.font(12),
                                                  command=self._toggle_page_selection)
         self.select_page_check.pack(side="left", padx=(8, 14))
         self.select_page_check.pack_forget()  # the loaded page decides whether selection is possible
-        self.selected_count_label = ctk.CTkLabel(selection_frame, text="0 selected", font=T.font(12), text_color=T.TEXT_SECONDARY)
+        self.selected_count_label = ctk.CTkLabel(selection_actions, text="0 selected", font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.selected_count_label.pack(side="left", pady=8)
-        self.batch_print_btn = C.button(selection_frame, kind="primary", text="⎙ Print Selected Tags", width=160, command=self.execute_batch_print)
+        self.batch_print_btn = C.button(selection_actions, kind="primary", text="⎙ Print Selected Tags", width=160, command=self.execute_batch_print)
         self.batch_print_btn.pack(side="left", padx=(14, 0))
         self.batch_print_btn.configure(state="disabled", fg_color=T.SURFACE_MUTED,
                                        text_color_disabled=T.TEXT_SECONDARY)

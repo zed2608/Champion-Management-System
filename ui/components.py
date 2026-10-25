@@ -54,6 +54,15 @@ BUTTON_KINDS = {
 BUTTON_HEIGHT = T.BUTTON_HEIGHT          # every normal button
 BUTTON_HEIGHT_COMPACT = 28               # buttons inside table rows
 FIELD_HEIGHT = T.FIELD_HEIGHT
+SEARCH_WIDTH = 200
+SECTION_MENU_WIDTH = 240
+
+
+def section_menu(parent, values, variable, command=None):
+    """Compact section picker used in module headers with many sections."""
+    return ctk.CTkOptionMenu(parent, values=values, variable=variable, command=command,
+                             width=SECTION_MENU_WIDTH, height=FIELD_HEIGHT,
+                             fg_color=T.SURFACE_ALT, text_color=T.TEXT)
 
 
 def fit_window(window, width, height, margin=60):
@@ -118,16 +127,10 @@ def _confirm_window(title, message, parent):
     dialog.resizable(False, False)
     result = {"yes": False}
 
-    body = ctk.CTkFrame(dialog, fg_color="transparent")
-    body.pack(fill="both", expand=True, padx=22, pady=(20, 10))
-    ctk.CTkLabel(body, text=title, font=T.font(16, "bold"), text_color=T.PRIMARY,
-                 anchor="w").pack(fill="x", pady=(0, 12))
-    details = ctk.CTkScrollableFrame(body, fg_color=T.SURFACE_ALT, height=130)
-    details.pack(fill="both", expand=True)
-    ctk.CTkLabel(details, text=message, font=T.font(12), text_color=T.TEXT,
-                 wraplength=380, justify="left", anchor="w").pack(fill="x", padx=12, pady=12)
-    actions = ctk.CTkFrame(body, fg_color="transparent")
-    actions.pack(fill="x", pady=(14, 0))
+    # Pack the fixed footer first. The message can scroll, but the decision
+    # buttons must never be pushed outside the dialog at Windows display scale.
+    actions = ctk.CTkFrame(dialog, fg_color="transparent")
+    actions.pack(side="bottom", fill="x", padx=22, pady=(8, 18))
 
     def close(yes=False):
         result["yes"] = yes
@@ -135,9 +138,19 @@ def _confirm_window(title, message, parent):
 
     button(actions, text="Cancel", command=lambda: close(False), kind="secondary", width=100).pack(side="right")
     button(actions, text="Confirm", command=lambda: close(True), kind="primary", width=100).pack(side="right", padx=(0, 8))
+
+    body = ctk.CTkFrame(dialog, fg_color="transparent")
+    body.pack(fill="both", expand=True, padx=22, pady=(16, 0))
+    ctk.CTkLabel(body, text=title, font=T.font(16, "bold"), text_color=T.PRIMARY,
+                 anchor="w").pack(fill="x", pady=(0, 12))
+    details = (ctk.CTkScrollableFrame(body, fg_color=T.SURFACE_ALT, height=90)
+               if len(message) > 240 else ctk.CTkFrame(body, fg_color=T.SURFACE_ALT))
+    details.pack(fill="both", expand=True)
+    ctk.CTkLabel(details, text=message, font=T.font(12), text_color=T.TEXT,
+                 wraplength=380, justify="left", anchor="w").pack(fill="x", padx=12, pady=12)
     dialog.protocol("WM_DELETE_WINDOW", lambda: close(False))
     dialog.bind("<Escape>", lambda _event: close(False))
-    fit_window(dialog, 460, 290)
+    fit_window(dialog, 460, 320)
     keep_above(dialog, owner)
     dialog.deiconify()
     dialog.grab_set()
@@ -164,19 +177,21 @@ def _notice_window(title, message, parent, kind):
     dialog.title(title)
     dialog.configure(fg_color=T.SURFACE)
     dialog.resizable(False, False)
+    button(dialog, text="OK", command=dialog.destroy, kind="primary", width=100).pack(
+        side="bottom", anchor="e", padx=22, pady=(8, 18))
     body = ctk.CTkFrame(dialog, fg_color="transparent")
-    body.pack(fill="both", expand=True, padx=22, pady=(20, 16))
+    body.pack(fill="both", expand=True, padx=22, pady=(16, 0))
     color = T.DANGER_TEXT if kind == "showerror" else (T.WARNING_TEXT if kind == "showwarning" else T.PRIMARY)
     ctk.CTkLabel(body, text=title, font=T.font(16, "bold"), text_color=color,
                  anchor="w").pack(fill="x", pady=(0, 12))
-    details = ctk.CTkScrollableFrame(body, fg_color=T.SURFACE_ALT, height=120)
+    details = (ctk.CTkScrollableFrame(body, fg_color=T.SURFACE_ALT, height=90)
+               if len(message) > 240 else ctk.CTkFrame(body, fg_color=T.SURFACE_ALT))
     details.pack(fill="both", expand=True)
     ctk.CTkLabel(details, text=message, font=T.font(12), text_color=T.TEXT,
                  wraplength=380, justify="left", anchor="w").pack(fill="x", padx=12, pady=12)
-    button(body, text="OK", command=dialog.destroy, kind="primary", width=100).pack(anchor="e", pady=(14, 0))
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     dialog.bind("<Escape>", lambda _event: dialog.destroy())
-    fit_window(dialog, 460, 270)
+    fit_window(dialog, 460, 300)
     keep_above(dialog, owner)
     dialog.deiconify()
     dialog.grab_set()
@@ -203,12 +218,6 @@ def ask_text(title, message, *, parent, initialvalue=""):
     dialog.title(title)
     dialog.configure(fg_color=T.SURFACE)
     dialog.resizable(False, False)
-    ctk.CTkLabel(dialog, text=message, font=T.font(12), text_color=T.TEXT,
-                 justify="left", wraplength=380).pack(anchor="w", padx=22, pady=(20, 12))
-    entry = field(dialog)
-    entry.pack(fill="x", padx=22)
-    if initialvalue:
-        entry.insert(0, initialvalue)
     answer = {"value": None}
 
     def finish(accept):
@@ -217,9 +226,15 @@ def ask_text(title, message, *, parent, initialvalue=""):
         dialog.destroy()
 
     actions = ctk.CTkFrame(dialog, fg_color="transparent")
-    actions.pack(fill="x", padx=22, pady=(18, 18))
+    actions.pack(side="bottom", fill="x", padx=22, pady=(8, 18))
     button(actions, text="Cancel", command=lambda: finish(False), kind="secondary", width=100).pack(side="right")
     button(actions, text="Continue", command=lambda: finish(True), kind="primary", width=100).pack(side="right", padx=(0, 8))
+    ctk.CTkLabel(dialog, text=message, font=T.font(12), text_color=T.TEXT,
+                 justify="left", wraplength=380).pack(anchor="w", padx=22, pady=(20, 12))
+    entry = field(dialog)
+    entry.pack(fill="x", padx=22)
+    if initialvalue:
+        entry.insert(0, initialvalue)
     dialog.protocol("WM_DELETE_WINDOW", lambda: finish(False))
     dialog.bind("<Escape>", lambda _event: finish(False))
     entry.bind("<Return>", lambda _event: finish(True))

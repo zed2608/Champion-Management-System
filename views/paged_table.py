@@ -46,22 +46,22 @@ class PagedTable(ctk.CTkFrame):
     # ---- layout ---------------------------------------------------------------------------------------------------------------
     def _build_bar(self):
         bar = ctk.CTkFrame(self, fg_color="transparent")
-        bar.pack(fill="x", pady=(0, 4))
+        bar.pack(fill="x", pady=(0, 8))
         self.info_lbl = ctk.CTkLabel(bar, text="", font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.info_lbl.pack(side="left")
-        nav = ctk.CTkFrame(self, fg_color="transparent")
-        nav.pack(fill="x", pady=(0, 6))
-        self.next_btn = C.button(nav, "Next ▶", lambda: self.goto(self.page + 1), "secondary", compact=True, width=70)
-        self.last_btn = C.button(nav, "Last ⏭", lambda: self.goto(10 ** 9), "secondary", compact=True, width=60)
-        self.page_lbl = ctk.CTkLabel(nav, text="Page 1 of 1", font=T.font(12, "bold"), width=90)
-        self.prev_btn = C.button(nav, "◀ Prev", lambda: self.goto(self.page - 1), "secondary", compact=True, width=70)
-        self.first_btn = C.button(nav, "⏮ First", lambda: self.goto(0), "secondary", compact=True, width=60)
-        self.size_menu = ctk.CTkOptionMenu(bar, values=[str(s) for s in PAGE_SIZES], width=70, height=26, command=self._size_changed)
+        controls = ctk.CTkFrame(bar, fg_color="transparent")
+        controls.pack(side="right")
+        self.first_btn = C.button(controls, "⏮ First", lambda: self.goto(0), "secondary", compact=True, width=60)
+        self.prev_btn = C.button(controls, "◀ Prev", lambda: self.goto(self.page - 1), "secondary", compact=True, width=70)
+        self.page_lbl = ctk.CTkLabel(controls, text="Page 1 of 1", font=T.font(12, "bold"), width=90)
+        self.next_btn = C.button(controls, "Next ▶", lambda: self.goto(self.page + 1), "secondary", compact=True, width=70)
+        self.last_btn = C.button(controls, "Last ⏭", lambda: self.goto(10 ** 9), "secondary", compact=True, width=60)
+        self.size_menu = ctk.CTkOptionMenu(controls, values=[str(s) for s in PAGE_SIZES], width=70, height=26, command=self._size_changed)
         self.size_menu.set(str(self.page_size))
-        for w in (self.last_btn, self.next_btn, self.page_lbl, self.prev_btn, self.first_btn):
-            w.pack(side="right", padx=2)
-        ctk.CTkLabel(bar, text="Rows:", font=T.font(12), text_color=T.TEXT_SECONDARY).pack(side="right", padx=(8, 2))
-        self.size_menu.pack(side="right", padx=2)
+        ctk.CTkLabel(controls, text="Rows:", font=T.font(12), text_color=T.TEXT_SECONDARY).pack(side="left", padx=(0, 4))
+        self.size_menu.pack(side="left", padx=(0, 12))
+        for w in (self.first_btn, self.prev_btn, self.page_lbl, self.next_btn, self.last_btn):
+            w.pack(side="left", padx=2)
 
     def _build_grid(self):
         self.grid_frame = ctk.CTkFrame(self, fg_color="transparent")

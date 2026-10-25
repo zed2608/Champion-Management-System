@@ -82,12 +82,12 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         )
         self.seg_btn.pack(side="left", padx=(0, 10))
         self.report_search_var = ctk.StringVar()
-        self.report_search = C.field(tab_bar, placeholder_text="Search this report (name, ID, status)...", width=270,
+        self.report_search = C.field(tab_bar, placeholder_text="Search this report...", width=C.SEARCH_WIDTH,
                                      textvariable=self.report_search_var)
         self.report_search.bind("<Return>", lambda e: self.switch_tab(self.tab_var.get()))
         C.button(tab_bar, compact=True, kind="secondary", text="Search", width=65,
                  command=lambda: self.switch_tab(self.tab_var.get())).pack(side="right", padx=(5, 0))
-        self.report_search.pack(side="right", fill="x", expand=True)
+        self.report_search.pack(side="right")
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
         self.tab_content.grid(row=3, column=0, sticky="nsew", pady=(10, 0))
@@ -438,7 +438,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         search_frame.grid(row=2, column=0, sticky="ew", padx=30, pady=(0, 10))
         
         self.usage_search_var = ctk.StringVar()
-        self.usage_search_entry = C.field(search_frame, placeholder_text="Search Tool, Tag ID, Condition...", width=280, textvariable=self.usage_search_var)
+        self.usage_search_entry = C.field(search_frame, placeholder_text="Search Tool or Tag...", width=C.SEARCH_WIDTH, textvariable=self.usage_search_var)
         self.usage_search_entry.pack(side="right")
         
         self._usage_timer = None

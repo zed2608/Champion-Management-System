@@ -42,7 +42,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        C.PageHeader(top_bar, "Maintenance & Archive", "Repairs, archives, service forecasts and backups").pack(side="top", anchor="w")
+        C.PageHeader(top_bar, "Maintenance & Archive", "Repairs, archives, service forecasts and backups").pack(fill="x")
 
         tab_labels = [
             "🔧 Issues & Repairs",
@@ -53,13 +53,10 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             "💾 Backup & Restore",
         ]
         self.tab_var = ctk.StringVar(value=tab_labels[0])
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tab_labels, variable=self.tab_var,
-            command=self.switch_tab,
-            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY,
-            selected_hover_color=T.PRIMARY_HOVER
-        )
-        self.seg_btn.pack(side="top", anchor="w", pady=(10, 0))
+        section_row = ctk.CTkFrame(top_bar, fg_color="transparent")
+        section_row.pack(fill="x", pady=(10, 0))
+        self.seg_btn = C.section_menu(section_row, tab_labels, self.tab_var, self.switch_tab)
+        self.seg_btn.pack(side="right")
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
         self.tab_content.grid(
@@ -396,7 +393,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 5))
         ctk.CTkLabel(top, text="Wear & Maintenance Forecast", font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
-        self.wear_search = C.field(top, placeholder_text="Search tool or category...", width=220)
+        self.wear_search = C.field(top, placeholder_text="Search tool or category...", width=C.SEARCH_WIDTH)
         self.wear_search.pack(side="right")
         self.wear_search.bind("<Return>", lambda e: self.load_wear())
         ctk.CTkLabel(frame, text="Hours each tool has been out on jobs (open issuances count up to now), how much of its service interval is used, "
@@ -521,7 +518,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Archived & Decommissioned Tools",
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
-        self.tools_search = C.field(top, placeholder_text="Search name or category...", width=220)
+        self.tools_search = C.field(top, placeholder_text="Search name or category...", width=C.SEARCH_WIDTH)
         self.tools_search.pack(side="right")
         self.tools_search.bind("<KeyRelease>", lambda e: self.load_archived_tools())
 
@@ -589,7 +586,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Inactive / Archived Employees",
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
-        self.employees_search = C.field(top, placeholder_text="Search name or employee ID...", width=220)
+        self.employees_search = C.field(top, placeholder_text="Search name or employee ID...", width=C.SEARCH_WIDTH)
         self.employees_search.pack(side="right")
         self.employees_search.bind("<KeyRelease>", lambda e: self.load_archived_employees())
 
@@ -655,7 +652,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Completed / Archived Projects",
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
-        self.projects_search = C.field(top, placeholder_text="Search project or client...", width=220)
+        self.projects_search = C.field(top, placeholder_text="Search project or client...", width=C.SEARCH_WIDTH)
         self.projects_search.pack(side="right")
         self.projects_search.bind("<KeyRelease>", lambda e: self.load_archived_projects())
 
@@ -852,7 +849,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                       
                       command=self.load_backup_history).pack(side="right")
 
-        self.backup_search = C.field(hist_hdr, placeholder_text="Search backup name or status...", width=220)
+        self.backup_search = C.field(hist_hdr, placeholder_text="Search backup name or status...", width=C.SEARCH_WIDTH)
         self.backup_search.pack(side="right")
         self.backup_search.bind("<Return>", lambda e: self.load_backup_history())
         self._backup_hist_scroll = ctk.CTkScrollableFrame(

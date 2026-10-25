@@ -52,6 +52,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.build_table_panel()
 
     def open_draft_project_modal(self, edit_row=None, reqs=None):
+        # A new form must never render the previous project's cart. Clearing
+        # after creating its row buttons leaves stale callbacks behind.
+        self._begin_project_form()
         self.draft_modal = ctk.CTkToplevel(self)
         self.draft_modal.title(
             "Edit Project" if edit_row else "Draft Project Plan")
@@ -180,7 +183,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                 'workers_assigned') or "").split(',') if w.strip()]
             self._refresh_worker_tags()
             
-            self.req_cart = [{'tool_id': r['tool_id'], 'name': r['name'], 'uom': r['unit_of_measure'], 'qty': r['quantity'], 'needs_retrieval': r['status'] == 'Warning'} for r in reqs]
+            self.req_cart = [{'tool_id': r['tool_id'], 'name': r['name'], 'uom': r['unit_of_measure'], 'qty': r['quantity'], 'needs_retrieval': r['status'] == 'Warning'} for r in (reqs or [])]
             
             raw_status = edit_row['status'].replace(' (OVERDUE)', '')
             if raw_status in ['Ongoing', 'Completed', 'Cancelled', 'Declined']:
@@ -212,13 +215,16 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                              font=T.font(12), text_color=T.DANGER_TEXT, wraplength=440).pack(anchor="w", padx=20, pady=(0, 5))
             # ----------------------------------------------------------------------
         else:
-            self.editing_project_id = None
-            self.editing_project_status = None
-            self.workers_list.clear()
-            self.req_cart.clear()
-            self._is_cart_locked = False
+            self.refresh_req_cart()
 
         self.p_name.focus_set()
+
+    def _begin_project_form(self):
+        self.editing_project_id = None
+        self.editing_project_status = None
+        self.workers_list = []
+        self.req_cart = []
+        self._is_cart_locked = False
 
     def _format_date_mask(self, event, entry_widget):
         if event.keysym in ('BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 'Tab'):
@@ -549,7 +555,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             ctk.CTkLabel(self.cart_scroll, text="No items selected.",
                          text_color=T.TEXT_MUTED, font=T.font(12)).pack(pady=20)
             return
-        for i, item in enumerate(self.req_cart):
+        for item in self.req_cart:
             row = ctk.CTkFrame(self.cart_scroll, fg_color="transparent")
             row.pack(fill="x", pady=2)
             warning_icon = "⚠️ " if item.get('needs_retrieval') else "✓ "
@@ -557,7 +563,18 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             info = f"{warning_icon}{item['name']} ({fmt_qty(item['qty'])} {item['uom']})"
             ctk.CTkLabel(row, text=info, font=T.font(12, "bold"), text_color=text_col).pack(side="left", padx=5)
             if not getattr(self, '_is_cart_locked', False):
-                ctk.CTkButton(row, text="✕", width=20, height=20, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda idx=i: [self.req_cart.pop(idx), self.refresh_req_cart()]).pack(side="right")
+                C.button(row, text="✕", compact=True, width=28, kind="danger",
+                         command=lambda tool_id=item['tool_id']: self.remove_req_from_cart(tool_id)).pack(side="right")
+
+    def remove_req_from_cart(self, tool_id):
+        item = next((r for r in self.req_cart if r['tool_id'] == tool_id), None)
+        if item is None or getattr(self, '_is_cart_locked', False):
+            return
+        if not C.confirm("Remove project item", f"Remove {item['name']} from this project plan?",
+                         parent=self.draft_modal):
+            return
+        self.req_cart.remove(item)
+        self.refresh_req_cart()
 
     def scan_worker(self):
         try:
@@ -712,7 +729,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(top, text="Project Deployment Plans", font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         self.proj_search_var = ctk.StringVar()
-        self.proj_search = C.field(top, placeholder_text="Search project or client...", width=250, takefocus=True, textvariable=self.proj_search_var)
+        self.proj_search = C.field(top, placeholder_text="Search project or client...", width=C.SEARCH_WIDTH, takefocus=True, textvariable=self.proj_search_var)
         self.proj_search.pack(side="right", padx=(5, 0))
 
         self._proj_search_timer = None
