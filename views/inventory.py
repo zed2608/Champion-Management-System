@@ -214,7 +214,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         selection_frame = ctk.CTkFrame(table_card, fg_color=T.SURFACE_ALT, corner_radius=T.RADIUS_MD)
         selection_frame.pack(fill="x", padx=20, pady=(2, 8))
         selection_actions = ctk.CTkFrame(selection_frame, fg_color="transparent")
-        selection_actions.pack(side="right", padx=8)
+        selection_actions.pack(side="left", padx=8)
         self.select_page_var = ctk.StringVar(value="off")
         self.select_page_check = ctk.CTkCheckBox(selection_actions, text="Select tagged tools on this page", variable=self.select_page_var,
                                                  onvalue="on", offvalue="off", font=T.font(12),
