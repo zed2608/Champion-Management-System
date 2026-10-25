@@ -1,7 +1,7 @@
 from services.validators import fmt_qty
 import customtkinter as ctk
 from views.ui_thread import UiMixin
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox
 from database import get_connection
 from services import issuance_service as iss, validators as v
 from services.errors import ServiceError, NotFound, Conflict, friendly_message
@@ -368,7 +368,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.issuance_modal.title("Issue Tools")
         C.fit_window(self.issuance_modal, 500, 700)
         self.issuance_modal.configure(fg_color=T.SURFACE)
-        self.issuance_modal.attributes("-topmost", True)
+        C.keep_above(self.issuance_modal)
         self.issuance_modal.grab_set()
         
         form_card = ctk.CTkScrollableFrame(self.issuance_modal, fg_color=T.SURFACE, corner_radius=0)
@@ -427,7 +427,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.retrieval_modal.title("Retrieve Tools")
         C.fit_window(self.retrieval_modal, 500, 650)
         self.retrieval_modal.configure(fg_color=T.SURFACE)
-        self.retrieval_modal.attributes("-topmost", True)
+        C.keep_above(self.retrieval_modal)
         self.retrieval_modal.grab_set()
         
         form_card = ctk.CTkScrollableFrame(self.retrieval_modal, fg_color=T.SURFACE, corner_radius=0)
@@ -633,7 +633,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         modal.geometry("520x550")
         modal.minsize(400, 450)
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - 260
@@ -903,8 +903,8 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         whole = v.whole_quantity_only(tool.item_type, tool.unit_of_measure)
         step = Decimal('1') if whole else Decimal('0.5')
         if not whole:
-            entered = simpledialog.askstring("Quantity to issue", f"How many {tool.unit_of_measure} of {tool.name}?\nUp to 2 decimal places.",
-                                           initialvalue="1", parent=self.issuance_modal)
+            entered = C.ask_text("Quantity to issue", f"How many {tool.unit_of_measure} of {tool.name}?\nUp to 2 decimal places.",
+                                 initialvalue="1", parent=self.issuance_modal)
             if entered is None:
                 return
             try:
@@ -1088,7 +1088,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             preview = ctk.CTkToplevel(self)
             preview.title(f"Receipt — TRN-{trans_id_range}")
             preview.configure(fg_color=T.SURFACE)
-            preview.attributes("-topmost", True)
+            C.keep_above(preview)
             preview.grab_set()
             preview.update_idletasks()
             pw, ph = 840, min(img.height // 2 + 120, 700)

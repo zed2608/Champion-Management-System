@@ -307,7 +307,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         y = int((dialog.winfo_screenheight() / 2) - (480 / 2))
         dialog.geometry(f"400x480+{x}+{y}")
         dialog.configure(fg_color=T.SURFACE)
-        dialog.attributes("-topmost", True)
+        C.keep_above(dialog)
         dialog.grab_set()
 
         ctk.CTkLabel(dialog, text="CHANGE PASSWORD", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=30, pady=(20, 10))

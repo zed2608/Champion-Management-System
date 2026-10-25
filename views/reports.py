@@ -84,10 +84,10 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         self.report_search_var = ctk.StringVar()
         self.report_search = C.field(tab_bar, placeholder_text="Search this report (name, ID, status)...", width=270,
                                      textvariable=self.report_search_var)
-        self.report_search.pack(side="left", fill="x", expand=True)
         self.report_search.bind("<Return>", lambda e: self.switch_tab(self.tab_var.get()))
         C.button(tab_bar, compact=True, kind="secondary", text="Search", width=65,
-                 command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=5)
+                 command=lambda: self.switch_tab(self.tab_var.get())).pack(side="right", padx=(5, 0))
+        self.report_search.pack(side="right", fill="x", expand=True)
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
         self.tab_content.grid(row=3, column=0, sticky="nsew", pady=(10, 0))
@@ -114,7 +114,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         top = ctk.CTkToplevel(self)
         top.title("Select Date")
-        top.attributes("-topmost", True)
+        C.keep_above(top)
         top.grab_set()
         top.resizable(False, False)
         
@@ -439,7 +439,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         
         self.usage_search_var = ctk.StringVar()
         self.usage_search_entry = C.field(search_frame, placeholder_text="Search Tool, Tag ID, Condition...", width=280, textvariable=self.usage_search_var)
-        self.usage_search_entry.pack(side="left", padx=(0, 10))
+        self.usage_search_entry.pack(side="right")
         
         self._usage_timer = None
         def on_usage_search(*args):
@@ -1244,7 +1244,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         dialog.title(f"Export: {title}")
         dialog.geometry("460x320")
         dialog.configure(fg_color=T.BG)
-        dialog.attributes("-topmost", True)
+        C.keep_above(dialog)
         dialog.grab_set()
         dialog.resizable(False, False)
         dialog.update_idletasks()

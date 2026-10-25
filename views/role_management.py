@@ -46,7 +46,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         self.reg_modal.title("Register New User")
         C.fit_window(self.reg_modal, 450, 650)
         self.reg_modal.configure(fg_color=T.SURFACE)
-        self.reg_modal.attributes("-topmost", True)
+        C.keep_above(self.reg_modal)
         self.reg_modal.grab_set()
         
         self._form_card = ctk.CTkScrollableFrame(
@@ -384,7 +384,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         modal.geometry("500x700")
         modal.configure(fg_color=T.SURFACE)
         modal.resizable(False, False)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - 250

@@ -327,7 +327,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
         bar.pack(fill="x", padx=20, pady=(4, 4))
         entry_var = ctk.StringVar()
         entry = C.field(bar, placeholder_text=placeholder, width=300, textvariable=entry_var)
-        entry.pack(side="left", padx=(0, 10))
+        entry.pack(side="right")
         
         entry._search_timer = None
         def _do_search(*args):
@@ -425,7 +425,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
         modal = ctk.CTkToplevel(self)
         modal.title("Edit Guide" if existing_row else "Add Guide")
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         
         modal.update_idletasks()
@@ -573,7 +573,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
         modal = ctk.CTkToplevel(self)
         modal.title("Edit FAQ" if existing_row else "Add FAQ")
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         
         modal.update_idletasks()
@@ -722,7 +722,7 @@ class HelpView(UiMixin, ctk.CTkFrame):
         dialog = ctk.CTkToplevel(self.winfo_toplevel())
         dialog.title("Edit Requirement" if existing_row else "Add Requirement")
         dialog.configure(fg_color=T.SURFACE)
-        dialog.attributes("-topmost", True)
+        C.keep_above(dialog)
         dialog.grab_set()
         
         dialog.update_idletasks()

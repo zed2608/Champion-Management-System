@@ -57,7 +57,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         self.add_modal.title("Add New Item")
         C.fit_window(self.add_modal, 500, 700)
         self.add_modal.configure(fg_color=T.SURFACE)
-        self.add_modal.attributes("-topmost", True)
+        C.keep_above(self.add_modal)
         self.add_modal.grab_set()
 
         form_card = ctk.CTkScrollableFrame(
@@ -191,7 +191,6 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         self.search_var = ctk.StringVar()
         self.search_entry = C.field(
             search_frame, placeholder_text="Search name, tag, supplier, location...", width=260, textvariable=self.search_var)
-        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
         self._search_timer = None
         def on_search_change(*args):
@@ -207,7 +206,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         is_staff = self.user_info.get("role", "").lower() == "staff"
 
         C.button(search_frame, kind="secondary", text="📷 Scan QR", width=105,
-                      command=self.open_test_scanner).pack(side="right", padx=(10, 0))
+                      command=self.open_test_scanner).pack(side="left", padx=(0, 10))
+        self.search_entry.pack(side="right", fill="x", expand=True)
         
         selection_frame = ctk.CTkFrame(table_card, fg_color=T.SURFACE_ALT, corner_radius=T.RADIUS_MD)
         selection_frame.pack(fill="x", padx=20, pady=(2, 8))
@@ -221,7 +221,8 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         self.selected_count_label.pack(side="left", pady=8)
         self.batch_print_btn = C.button(selection_frame, kind="primary", text="⎙ Print Selected Tags", width=160, command=self.execute_batch_print)
         self.batch_print_btn.pack(side="left", padx=(14, 0))
-        self.batch_print_btn.configure(state="disabled")
+        self.batch_print_btn.configure(state="disabled", fg_color=T.SURFACE_MUTED,
+                                       text_color_disabled=T.TEXT_SECONDARY)
         self.no_tag_hint = ctk.CTkLabel(selection_frame, text="No tagged tools on this page. Assign a tag to print labels.",
                                         font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.no_tag_hint.pack(side="left")
@@ -254,7 +255,9 @@ class InventoryView(UiMixin, ctk.CTkFrame):
     def _update_print_selection_ui(self):
         count = len(self.selected_for_print)
         self.selected_count_label.configure(text=f"{count} selected")
-        self.batch_print_btn.configure(state="normal" if count else "disabled")
+        self.batch_print_btn.configure(state="normal" if count else "disabled",
+                                       fg_color=T.PRIMARY if count else T.SURFACE_MUTED,
+                                       text_color_disabled=T.TEXT_SECONDARY)
         table = getattr(self, "_inv_table", None)
         if table is not None and table.winfo_exists():
             eligible = [str(row['tool_id']) for row in table.rows if row.get('tag_id')]
@@ -659,7 +662,7 @@ class InventoryView(UiMixin, ctk.CTkFrame):
         modal.title(f"Manage Item: {lookup_id}")
         C.fit_window(modal, 550, 750)
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
 
         ctk.CTkLabel(modal, text=f"Item Details — PID: {lookup_id}", font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 3))

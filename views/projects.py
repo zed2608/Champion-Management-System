@@ -57,7 +57,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             "Edit Project" if edit_row else "Draft Project Plan")
         C.fit_window(self.draft_modal, 500, 750)
         self.draft_modal.configure(fg_color=T.SURFACE)
-        self.draft_modal.attributes("-topmost", True)
+        C.keep_above(self.draft_modal)
         self.draft_modal.grab_set()
 
         form_card = ctk.CTkScrollableFrame(
@@ -249,7 +249,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
         top = ctk.CTkToplevel(self.draft_modal)
         top.title("Select Date")
-        top.attributes("-topmost", True)
+        C.keep_above(top, self.draft_modal)
         top.grab_set()
         top.resizable(False, False)
 
@@ -344,25 +344,26 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         modal.title("Inventory Requisition Catalog")
         C.fit_window(modal, 900, 600)
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal, self.draft_modal)
         modal.grab_set()
-        # Keep the draft modal on top but this modal above it
-        modal.transient(self.draft_modal)
+        # The catalog remains above the edit form until the catalog closes.
         ctk.CTkLabel(modal, text="Select Items for Project Requisition", font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 5))
         ctk.CTkLabel(modal, text="Choose a quantity and click + Add. This plans items for the project; stock changes when items are issued.",
                      font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=(0, 10))
 
         search_frame = ctk.CTkFrame(modal, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=(0, 5))
+        search_controls = ctk.CTkFrame(search_frame, fg_color="transparent")
+        search_controls.pack(side="right")
 
-        ctk.CTkLabel(search_frame, text="Name:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
+        ctk.CTkLabel(search_controls, text="Name:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
         search_name = C.field(
-            search_frame, placeholder_text="Item name...", width=180, takefocus=True)
+            search_controls, placeholder_text="Item name...", width=180, takefocus=True)
         search_name.pack(side="left", padx=(5, 10))
 
-        ctk.CTkLabel(search_frame, text="PID:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
+        ctk.CTkLabel(search_controls, text="PID:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
         search_pid = C.field(
-            search_frame, placeholder_text="Product ID...", width=100, takefocus=True)
+            search_controls, placeholder_text="Product ID...", width=100, takefocus=True)
         search_pid.pack(side="left", padx=(5, 10))
 
         def do_search(): load_catalog(name_q=search_name.get().strip(),
@@ -374,8 +375,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                 return
             search_name.delete(0, 'end'); search_pid.delete(0, 'end'); load_catalog()
 
-        C.button(search_frame, kind="primary", text="Search", width=80, command=do_search).pack(side="left", padx=5)
-        C.button(search_frame, kind="secondary", text="↻ Reset", width=80, 
+        C.button(search_controls, kind="primary", text="Search", width=80, command=do_search).pack(side="left", padx=5)
+        C.button(search_controls, kind="secondary", text="↻ Reset", width=80,
                       command=do_reset).pack(side="left", padx=5)
 
         search_name.bind("<Return>", lambda e: do_search())
@@ -844,7 +845,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         # Added extra space so description doesn't clip
         modal.geometry("650x750")
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - (650 // 2)

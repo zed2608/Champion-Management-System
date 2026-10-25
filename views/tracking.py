@@ -69,7 +69,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         modal.title(f"Deployment History - Receipt #{trans_id}")
 
         modal.minsize(500, 500)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         
         modal.update_idletasks()
@@ -268,7 +268,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.audit_search_var = ctk.StringVar()
         self.audit_search = C.field(
             filter_row, placeholder_text="Search name / tool...", width=200, textvariable=self.audit_search_var)
-        self.audit_search.pack(side="left", padx=(0, 5))
+        self.audit_search.pack(side="right")
 
         self._audit_timer = None
         def on_audit_search(*args):
@@ -375,7 +375,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.act_search_var = ctk.StringVar()
         self.act_search = C.field(
             filter_row, placeholder_text="Search user or details...", width=200, textvariable=self.act_search_var)
-        self.act_search.pack(side="left", padx=(0, 5))
+        self.act_search.pack(side="right")
 
         self._act_timer = None
         def on_act_search(*args):
@@ -385,10 +385,12 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.act_search_var.trace_add("write", on_act_search)
 
         # [PANEL-AWE] tamper-evidence: recompute the hash chain on demand and print it
-        self.verify_btn = C.button(filter_row, kind="primary", text="🔐 Verify Audit Chain", width=150, 
+        action_row = ctk.CTkFrame(frame, fg_color="transparent")
+        action_row.pack(fill="x", padx=20, pady=(0, 8))
+        self.verify_btn = C.button(action_row, kind="primary", text="🔐 Verify Audit Chain", width=150,
                                         command=self.verify_audit_chain)
         self.verify_btn.pack(side="left", padx=(10, 5))
-        self.audit_pdf_btn = C.button(filter_row, kind="secondary", text="⎙ Audit Report PDF", width=140, 
+        self.audit_pdf_btn = C.button(action_row, kind="secondary", text="⎙ Audit Report PDF", width=140,
                                            command=self.export_audit_pdf)
         self.audit_pdf_btn.pack(side="left", padx=5)
         self.chain_lbl = ctk.CTkLabel(frame, text="", font=T.font(12, "bold"), text_color=T.TEXT_MUTED, wraplength=900, justify="left")

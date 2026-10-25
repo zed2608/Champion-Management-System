@@ -432,7 +432,7 @@ class DashboardApp(UiMixin, ctk.CTkToplevel):
         dialog.title("Inactivity Warning")
         dialog.resizable(False, False)
         dialog.grab_set()
-        dialog.lift()
+        C.keep_above(dialog, self)
 
         self.update_idletasks()
         dx = self.winfo_x() + (self.winfo_width() - 360) // 2

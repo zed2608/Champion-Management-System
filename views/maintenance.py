@@ -194,7 +194,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         self.issues_search_var = ctk.StringVar()
         self.issues_search = C.field(filter_row, placeholder_text="Search tool or reporter...",
                                           width=200, textvariable=self.issues_search_var)
-        self.issues_search.pack(side="left", padx=(0, 5))
+        self.issues_search.pack(side="right")
 
         self._issues_timer = None
 
@@ -308,7 +308,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         modal = ctk.CTkToplevel(self)
         modal.title(f"Issue #{row['issue_id']} — {row['tool_name']}")
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
 
         modal.update_idletasks()
@@ -474,7 +474,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         modal = ctk.CTkToplevel(self)
         modal.title(f"Service - {row['name']}")
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         modal.geometry("460x330")
         ctk.CTkLabel(modal, text=row["name"], font=T.font(16, "bold")).pack(pady=(18, 4))

@@ -20,7 +20,7 @@ def apply_widget_defaults():
     patch = {
         "CTkButton": dict(fg_color=both("PRIMARY"), hover_color=both("PRIMARY_HOVER"), text_color=both("ON_PRIMARY"), text_color_disabled=both("TEXT_MUTED"),
                           corner_radius=T.RADIUS_SM),
-        "CTkOptionMenu": dict(fg_color=both("SURFACE_ALT"), button_color=both("PRIMARY"), button_hover_color=both("PRIMARY_HOVER"),
+        "CTkOptionMenu": dict(fg_color=both("SURFACE_ALT"), button_color=both("BORDER"), button_hover_color=both("BORDER_STRONG"),
                               text_color=both("TEXT"), dropdown_fg_color=both("SURFACE"), dropdown_text_color=both("TEXT"),
                               dropdown_hover_color=both("SURFACE_MUTED"), corner_radius=T.RADIUS_SM),
         "CTkComboBox": dict(fg_color=both("SURFACE"), border_color=both("BORDER_STRONG"), button_color=both("PRIMARY"),
@@ -61,6 +61,202 @@ def fit_window(window, width, height, margin=60):
     sw, sh = window.winfo_screenwidth(), window.winfo_screenheight()
     w, h = min(width, max(320, sw - margin)), min(height, max(320, sh - margin))
     window.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h) // 2)}")
+
+
+def keep_above(window, parent=None):
+    """Keep a newly opened window above the window that opened it."""
+    previous_grab = window.grab_current()
+    if previous_grab is window:
+        previous_grab = None
+    owner = parent if parent is not None else window.master
+    if owner is not None:
+        owner = owner.winfo_toplevel()
+        if owner is not window:
+            # The start-up splash and intro open while login is withdrawn.
+            # A transient child of a withdrawn window would also disappear.
+            try:
+                visible = bool(owner.winfo_viewable())
+            except AttributeError:
+                visible = True
+            if visible:
+                window.transient(owner)
+    window.attributes("-topmost", True)
+    window.lift()
+
+    def raise_after_map():
+        try:
+            if window.winfo_exists():
+                window.lift()
+                window.focus_force()
+        except tk.TclError:
+            pass
+
+    window.after_idle(raise_after_map)
+
+    def restore_parent(event):
+        if event.widget is not window or previous_grab is None:
+            return
+        try:
+            if previous_grab.winfo_exists():
+                previous_grab.grab_set()
+                previous_grab.lift()
+                previous_grab.focus_force()
+        except tk.TclError:
+            pass
+
+    window.bind("<Destroy>", restore_parent, add="+")
+
+
+def _confirm_window(title, message, parent):
+    """An explicit, foreground Yes/No window for nested project and item panels."""
+    owner = parent.winfo_toplevel()
+    previous_grab = owner.grab_current()
+    dialog = ctk.CTkToplevel(owner)
+    dialog.withdraw()
+    dialog.title(title)
+    dialog.configure(fg_color=T.SURFACE)
+    dialog.resizable(False, False)
+    result = {"yes": False}
+
+    body = ctk.CTkFrame(dialog, fg_color="transparent")
+    body.pack(fill="both", expand=True, padx=22, pady=(20, 10))
+    ctk.CTkLabel(body, text=title, font=T.font(16, "bold"), text_color=T.PRIMARY,
+                 anchor="w").pack(fill="x", pady=(0, 12))
+    details = ctk.CTkScrollableFrame(body, fg_color=T.SURFACE_ALT, height=130)
+    details.pack(fill="both", expand=True)
+    ctk.CTkLabel(details, text=message, font=T.font(12), text_color=T.TEXT,
+                 wraplength=380, justify="left", anchor="w").pack(fill="x", padx=12, pady=12)
+    actions = ctk.CTkFrame(body, fg_color="transparent")
+    actions.pack(fill="x", pady=(14, 0))
+
+    def close(yes=False):
+        result["yes"] = yes
+        dialog.destroy()
+
+    button(actions, text="Cancel", command=lambda: close(False), kind="secondary", width=100).pack(side="right")
+    button(actions, text="Confirm", command=lambda: close(True), kind="primary", width=100).pack(side="right", padx=(0, 8))
+    dialog.protocol("WM_DELETE_WINDOW", lambda: close(False))
+    dialog.bind("<Escape>", lambda _event: close(False))
+    fit_window(dialog, 460, 290)
+    keep_above(dialog, owner)
+    dialog.deiconify()
+    dialog.grab_set()
+    dialog.focus_force()
+    try:
+        owner.wait_window(dialog)
+    finally:
+        if previous_grab is not None:
+            try:
+                if previous_grab.winfo_exists():
+                    previous_grab.grab_set()
+                    previous_grab.lift()
+            except tk.TclError:
+                pass
+    return result["yes"]
+
+
+def _notice_window(title, message, parent, kind):
+    """Show validation, error and success notices in front of their owner."""
+    owner = parent.winfo_toplevel()
+    previous_grab = owner.grab_current()
+    dialog = ctk.CTkToplevel(owner)
+    dialog.withdraw()
+    dialog.title(title)
+    dialog.configure(fg_color=T.SURFACE)
+    dialog.resizable(False, False)
+    body = ctk.CTkFrame(dialog, fg_color="transparent")
+    body.pack(fill="both", expand=True, padx=22, pady=(20, 16))
+    color = T.DANGER_TEXT if kind == "showerror" else (T.WARNING_TEXT if kind == "showwarning" else T.PRIMARY)
+    ctk.CTkLabel(body, text=title, font=T.font(16, "bold"), text_color=color,
+                 anchor="w").pack(fill="x", pady=(0, 12))
+    details = ctk.CTkScrollableFrame(body, fg_color=T.SURFACE_ALT, height=120)
+    details.pack(fill="both", expand=True)
+    ctk.CTkLabel(details, text=message, font=T.font(12), text_color=T.TEXT,
+                 wraplength=380, justify="left", anchor="w").pack(fill="x", padx=12, pady=12)
+    button(body, text="OK", command=dialog.destroy, kind="primary", width=100).pack(anchor="e", pady=(14, 0))
+    dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    fit_window(dialog, 460, 270)
+    keep_above(dialog, owner)
+    dialog.deiconify()
+    dialog.grab_set()
+    dialog.focus_force()
+    try:
+        owner.wait_window(dialog)
+    finally:
+        if previous_grab is not None:
+            try:
+                if previous_grab.winfo_exists():
+                    previous_grab.grab_set()
+                    previous_grab.lift()
+            except tk.TclError:
+                pass
+    return "ok"
+
+
+def ask_text(title, message, *, parent, initialvalue=""):
+    """Get a short value above the active form; Cancel returns None."""
+    owner = parent.winfo_toplevel()
+    previous_grab = owner.grab_current()
+    dialog = ctk.CTkToplevel(owner)
+    dialog.withdraw()
+    dialog.title(title)
+    dialog.configure(fg_color=T.SURFACE)
+    dialog.resizable(False, False)
+    ctk.CTkLabel(dialog, text=message, font=T.font(12), text_color=T.TEXT,
+                 justify="left", wraplength=380).pack(anchor="w", padx=22, pady=(20, 12))
+    entry = field(dialog)
+    entry.pack(fill="x", padx=22)
+    if initialvalue:
+        entry.insert(0, initialvalue)
+    answer = {"value": None}
+
+    def finish(accept):
+        if accept:
+            answer["value"] = entry.get()
+        dialog.destroy()
+
+    actions = ctk.CTkFrame(dialog, fg_color="transparent")
+    actions.pack(fill="x", padx=22, pady=(18, 18))
+    button(actions, text="Cancel", command=lambda: finish(False), kind="secondary", width=100).pack(side="right")
+    button(actions, text="Continue", command=lambda: finish(True), kind="primary", width=100).pack(side="right", padx=(0, 8))
+    dialog.protocol("WM_DELETE_WINDOW", lambda: finish(False))
+    dialog.bind("<Escape>", lambda _event: finish(False))
+    entry.bind("<Return>", lambda _event: finish(True))
+    fit_window(dialog, 460, 220)
+    keep_above(dialog, owner)
+    dialog.deiconify()
+    dialog.grab_set()
+    entry.focus_set()
+    try:
+        owner.wait_window(dialog)
+    finally:
+        if previous_grab is not None:
+            try:
+                if previous_grab.winfo_exists():
+                    previous_grab.grab_set()
+                    previous_grab.lift()
+            except tk.TclError:
+                pass
+    return answer["value"]
+
+
+def _install_foreground_notices():
+    # Every view imports tkinter.messagebox itself; patching the module once
+    # covers warnings and errors in camera, project and inventory workflows.
+    for kind in ("showinfo", "showwarning", "showerror"):
+        original = getattr(messagebox, kind)
+
+        def show(title=None, message=None, *, _kind=kind, _original=original, **options):
+            parent = options.get("parent")
+            if parent is not None and hasattr(parent, "tk"):
+                return _notice_window(str(title or "Notice"), str(message or ""), parent, _kind)
+            return _original(title, message, **options)
+
+        setattr(messagebox, kind, show)
+
+
+_install_foreground_notices()
 
 
 def button(parent, text="", command=None, kind="primary", compact=False, **kw):
@@ -123,13 +319,17 @@ def notify(widget, message, kind="success"):
 
 
 def confirm(title, message, *, parent=None):
-    """Ask before an action. Keep the dialog in front of topmost panels.
+    """Ask before an action; the question stays above the active panel.
 
-    Windows can place a native message box behind a topmost CTkToplevel even
-    when it has a parent, making the button appear to do nothing. Temporarily
-    lower the panel and any topmost ancestor, then restore them in parent to
-    child order so a nested catalog stays above its project form.
+    A native Windows question can fall behind a topmost project or catalog
+    window. Use an owned CTk window for real screens; keep the native fallback
+    for callers without a Tk window.
     """
+    if parent is not None and hasattr(parent, "tk"):
+        return _confirm_window(title, message, parent)
+
+    # The native fallback is also useful to headless integrations which
+    # provide a messagebox parent without an actual Tk window.
     topmost_windows = []
     if parent is not None:
         window = parent
