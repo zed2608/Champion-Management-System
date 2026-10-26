@@ -44,16 +44,11 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
     def open_register_modal(self):
         self.reg_modal = ctk.CTkToplevel(self)
         self.reg_modal.title("Register New User")
-        self.reg_modal.geometry("450x650")
+        C.fit_window(self.reg_modal, 450, 650)
         self.reg_modal.configure(fg_color=T.SURFACE)
-        self.reg_modal.attributes("-topmost", True)
+        C.keep_above(self.reg_modal)
         self.reg_modal.grab_set()
         
-        self.reg_modal.update_idletasks()
-        x = (self.reg_modal.winfo_screenwidth() // 2) - (450 // 2)
-        y = (self.reg_modal.winfo_screenheight() // 2) - (650 // 2)
-        self.reg_modal.geometry(f"450x650+{x}+{y}")
-
         self._form_card = ctk.CTkScrollableFrame(
             self.reg_modal, fg_color=T.SURFACE, corner_radius=0)
         self._form_card.pack(fill="both", expand=True)
@@ -93,6 +88,13 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         self._reg_bottom = ctk.CTkFrame(form_card, fg_color="transparent")
         self._reg_bottom.pack(fill="x")
         self._build_reg_bottom("Staff")
+        btn_row = ctk.CTkFrame(self.reg_modal, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 16))
+        btn_row.grid_columnconfigure((0, 1), weight=1)
+        C.button(btn_row, kind="primary", text="Register",
+                 command=self.execute_register).grid(row=0, column=0, padx=(0, 5), sticky="ew")
+        C.button(btn_row, kind="secondary", text="Cancel",
+                 command=self.reg_modal.destroy).grid(row=0, column=1, padx=(5, 0), sticky="ew")
 
     def _build_reg_bottom(self, role):
         for w in self._reg_bottom.winfo_children():
@@ -167,18 +169,6 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 eye_confirm.configure(text="✕" if self._show_confirm else "👁")
             eye_confirm.configure(command=_toggle_confirm)
 
-        btn_row = ctk.CTkFrame(self._reg_bottom, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(15, 20))
-        btn_row.grid_columnconfigure((0, 1), weight=1)
-        C.button(btn_row, kind="primary", text="Register", 
-                      
-                      
-                      command=self.execute_register).grid(row=0, column=0, padx=(0, 5), sticky="ew")
-        C.button(btn_row, kind="secondary", text="Cancel", 
-                      
-                      
-                      command=self.reg_modal.destroy).grid(row=0, column=1, padx=(5, 0), sticky="ew")
-
     def _on_reg_role_change(self, role):
         self._build_reg_bottom(role)
 
@@ -197,17 +187,19 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
             return messagebox.showerror("Validation Error", friendly_message(e), parent=self.reg_modal)
         allow_dup = False
         if same:                                                       # real employees share names: WARN, then allow
-            if not messagebox.askyesno("Same Name Found",
+            if not C.confirm("Same Name Found",
                                        f"{same} active user(s) are already named '{name}'.\n\nRegister another person with the same name?",
                                        parent=self.reg_modal):
                 return
             allow_dup = True
         elif similar:
             sim_list = "\n".join([f"• {sn}" for sn in similar])
-            if not messagebox.askyesno("Similar Name Detected",
+            if not C.confirm("Similar Name Detected",
                                        f"Wait! Similar names already exist:\n\n{sim_list}\n\nAre you sure you want to register '{name}' as a new distinct user?",
                                        parent=self.reg_modal):
                 return
+        if not C.confirm("Confirm registration", f"Register {name} as {role}?", parent=self.reg_modal):
+            return
         try:
             # [RBAC][CONCURRENCY] Admin only; Workers get NO password; ids come from a locked sequence; blank e-mail is stored as NULL
             res = user_service.register_user(self.user_info, name=name, email=email, role=role, password=pwd,
@@ -370,7 +362,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 conn.close()
 
     def delete_user(self, row):
-        if not messagebox.askyesno("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
+        if not C.confirm("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
             return
         try:
             user_service.archive_user(self.user_info, row['user_id'])     # refuses yourself and the last active Admin
@@ -392,7 +384,7 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         modal.geometry("500x700")
         modal.configure(fg_color=T.SURFACE)
         modal.resizable(False, False)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - 250
@@ -536,13 +528,15 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
                 return messagebox.showerror("Error", friendly_message(e), parent=modal)
             if new_name.lower() != row['full_name'].lower():
                 if same:
-                    if not messagebox.askyesno("Same Name Found", f"{same} active user(s) are already named '{new_name}'.\n\nRename this user anyway?", parent=modal):
+                    if not C.confirm("Same Name Found", f"{same} active user(s) are already named '{new_name}'.\n\nRename this user anyway?", parent=modal):
                         return
                     allow_dup = True
                 elif similar:
                     sim_list = "\n".join([f"• {sn}" for sn in similar])
-                    if not messagebox.askyesno("Similar Name Detected", f"Similar user names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this user to '{new_name}'?", parent=modal):
+                    if not C.confirm("Similar Name Detected", f"Similar user names already exist:\n\n{sim_list}\n\nAre you sure you want to rename this user to '{new_name}'?", parent=modal):
                         return
+            if not C.confirm("Confirm account changes", f"Save changes for {new_name} ({new_role})?", parent=modal):
+                return
             try:
                 res = user_service.update_user(self.user_info, row["user_id"], name=new_name, email=new_email, role=new_role,
                                                new_password=new_pass, confirm_password=conf_pass, allow_duplicate_name=allow_dup)

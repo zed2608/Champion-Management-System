@@ -69,7 +69,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         modal.title(f"Deployment History - Receipt #{trans_id}")
 
         modal.minsize(500, 500)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         
         modal.update_idletasks()
@@ -111,15 +111,14 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        C.PageHeader(top_bar, "Tracking & Accountability", "Who had what, when, and the tamper-evident record of it").pack(side="left")
+        C.PageHeader(top_bar, "Tracking & Accountability", "Who had what, when, and the tamper-evident record of it").pack(fill="x")
 
         tabs = ["📋 Issuance & Retrieval Logs", "🔎 Audit Records", "⚙️ Activity Log"]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
-            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
-        )
+        section_row = ctk.CTkFrame(top_bar, fg_color="transparent")
+        section_row.pack(fill="x", pady=(8, 0))
+        self.seg_btn = C.section_menu(section_row, tabs, self.tab_var, self.switch_tab)
         self.seg_btn.pack(side="right")
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
@@ -172,7 +171,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
 
         self.log_search_var = ctk.StringVar()
         self.log_search = C.field(
-            top, placeholder_text="Search employee or tool...", width=220, textvariable=self.log_search_var)
+            top, placeholder_text="Search employee or tool...", width=C.SEARCH_WIDTH, textvariable=self.log_search_var)
         self.log_search.pack(side="right", padx=(5, 0))
 
         self._log_timer = None
@@ -268,7 +267,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.audit_search_var = ctk.StringVar()
         self.audit_search = C.field(
             filter_row, placeholder_text="Search name / tool...", width=200, textvariable=self.audit_search_var)
-        self.audit_search.pack(side="left", padx=(0, 5))
+        self.audit_search.pack(side="right")
 
         self._audit_timer = None
         def on_audit_search(*args):
@@ -375,7 +374,7 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.act_search_var = ctk.StringVar()
         self.act_search = C.field(
             filter_row, placeholder_text="Search user or details...", width=200, textvariable=self.act_search_var)
-        self.act_search.pack(side="left", padx=(0, 5))
+        self.act_search.pack(side="right")
 
         self._act_timer = None
         def on_act_search(*args):
@@ -385,10 +384,12 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         self.act_search_var.trace_add("write", on_act_search)
 
         # [PANEL-AWE] tamper-evidence: recompute the hash chain on demand and print it
-        self.verify_btn = C.button(filter_row, kind="primary", text="🔐 Verify Audit Chain", width=150, 
+        action_row = ctk.CTkFrame(frame, fg_color="transparent")
+        action_row.pack(fill="x", padx=20, pady=(0, 8))
+        self.verify_btn = C.button(action_row, kind="primary", text="🔐 Verify Audit Chain", width=150,
                                         command=self.verify_audit_chain)
         self.verify_btn.pack(side="left", padx=(10, 5))
-        self.audit_pdf_btn = C.button(filter_row, kind="secondary", text="⎙ Audit Report PDF", width=140, 
+        self.audit_pdf_btn = C.button(action_row, kind="secondary", text="⎙ Audit Report PDF", width=140,
                                            command=self.export_audit_pdf)
         self.audit_pdf_btn.pack(side="left", padx=5)
         self.chain_lbl = ctk.CTkLabel(frame, text="", font=T.font(12, "bold"), text_color=T.TEXT_MUTED, wraplength=900, justify="left")
@@ -522,16 +523,12 @@ class TrackingView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        C.PageHeader(top_bar, "Tracking & Accountability", "Your own deployment history").pack(side="left")
+        C.PageHeader(top_bar, "Tracking & Accountability", "Your own deployment history").pack(fill="x")
 
         tabs = ["👤 My History"]
         self.tab_var = ctk.StringVar(value=tabs[0])
 
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tabs, variable=self.tab_var,
-            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
-        )
-        self.seg_btn.pack(side="right")
+        self.seg_btn = None  # Staff has only one section; no picker needed.
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
         self.tab_content.grid(

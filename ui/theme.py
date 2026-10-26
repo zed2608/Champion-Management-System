@@ -14,12 +14,12 @@ Spacing / radius / motion
 
 # ---------------------------------------------------------------- colours (light mode)
 # surfaces and lines
-BG = "#F4F6F8"                  # page background
-SURFACE = "#FFFFFF"             # cards, dialogs
-SURFACE_ALT = "#F9FAFB"         # zebra rows, quiet panels
-SURFACE_MUTED = "#F0F0F0"       # disabled / chips
-BORDER = "#E0E0E0"
-BORDER_STRONG = "#CCCCCC"
+BG = "#F5F2E9"                  # warm beige canvas
+SURFACE = "#FFFEFA"             # warm white cards and dialogs
+SURFACE_ALT = "#F8F5ED"         # quiet panels and alternate rows
+SURFACE_MUTED = "#EEE9DD"       # disabled controls and chips
+BORDER = "#DDD7C9"
+BORDER_STRONG = "#B8B0A0"
 WHITE = "#FFFFFF"
 BLACK = "#000000"
 
@@ -66,7 +66,7 @@ DANGER_BORDER = "#FFC0C0"
 ON_DANGER = "#FFFFFF"
 
 INFO = "#26709E"
-INFO_HOVER = "#2980B9"
+INFO_HOVER = "#1F618D"
 INFO_DARK = "#1F618D"
 INFO_TEXT = "#1F618D"
 INFO_BG = "#E8F8F5"
@@ -87,7 +87,7 @@ DARK = {      # dark-mode value of every colour that changes; names missing here
     "WARNING_TEXT": "#F0A44B", "WARNING_BG": "#33271A", "WARNING_BORDER": "#6B4A26",
     "DANGER": "#CF3A40", "DANGER_TEXT": "#FF8A8E", "DANGER_BG": "#351C1E", "DANGER_BG_STRONG": "#47262A", "DANGER_BORDER": "#7A3A3E",
     "DANGER_HOVER": "#C93A3F", "DANGER_DARK": "#B33237", "ON_DANGER": "#FFFFFF",
-    "INFO": "#3B8FD0", "INFO_TEXT": "#7DBBEA", "INFO_BG": "#16303D", "INFO_HOVER": "#2E7AB8", "INFO_DARK": "#2E7AB8", "ON_INFO": "#0B1A24",
+    "INFO": "#3B8FD0", "INFO_TEXT": "#7DBBEA", "INFO_BG": "#16303D", "INFO_HOVER": "#4BA4DE", "INFO_DARK": "#2E7AB8", "ON_INFO": "#0B1A24",
 }
 DANGER_TEXT = DANGER            # readable on white already (7.4:1)
 
@@ -101,7 +101,7 @@ TEXT_PAIRS = [
     ("ON_SUCCESS", "SUCCESS"), ("SUCCESS_TEXT", "SURFACE"), ("SUCCESS_TEXT", "SUCCESS_BG"), ("SUCCESS_TEXT", "BG"),
     ("ON_WARNING", "WARNING"), ("WARNING_TEXT", "SURFACE"), ("WARNING_TEXT", "WARNING_BG"),
     ("ON_DANGER", "DANGER"), ("ON_DANGER", "DANGER_HOVER"), ("DANGER_TEXT", "SURFACE"), ("DANGER_TEXT", "DANGER_BG"), ("DANGER_TEXT", "DANGER_BG_STRONG"),
-    ("ON_INFO", "INFO"), ("INFO_TEXT", "SURFACE"), ("INFO_TEXT", "INFO_BG"), ("ON_PURPLE", "PURPLE"),
+    ("ON_INFO", "INFO"), ("ON_INFO", "INFO_HOVER"), ("INFO_TEXT", "SURFACE"), ("INFO_TEXT", "INFO_BG"), ("ON_PURPLE", "PURPLE"),
 ]
 
 # ---------------------------------------------------------------- fonts

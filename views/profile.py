@@ -256,7 +256,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         file_path = filedialog.askopenfilename(title="Select Profile Picture", filetypes=[
                                                ("Image Files", "*.png *.jpg *.jpeg")])
         if file_path:
-            if messagebox.askyesno("Confirm Upload", "Set this image as your new profile picture?"):
+            if C.confirm("Confirm Upload", "Set this image as your new profile picture?"):
                 dest_dir = os.path.join(os.path.dirname(
                     os.path.dirname(__file__)), "assets", "profiles")
                 os.makedirs(dest_dir, exist_ok=True)
@@ -277,7 +277,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
                 "Validation Error", "Full Name and Email are required.")
             return
 
-        if not messagebox.askyesno("Confirm Update", "Are you sure you want to save these changes?"):
+        if not C.confirm("Confirm Update", "Are you sure you want to save these changes?"):
             return
         allow_dup = False
         while True:
@@ -286,7 +286,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
                 res = user_service.update_profile(self.user_info, name=new_name, email=new_email, allow_duplicate_name=allow_dup)
                 break
             except user_service.DuplicateName as dup:
-                if not messagebox.askyesno("Same Name Found", f"{dup.count} active user(s) are already named '{dup.name}'.\n\nUse this name anyway?"):
+                if not C.confirm("Same Name Found", f"{dup.count} active user(s) are already named '{dup.name}'.\n\nUse this name anyway?"):
                     return
                 allow_dup = True
             except Exception as e:
@@ -307,7 +307,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
         y = int((dialog.winfo_screenheight() / 2) - (480 / 2))
         dialog.geometry(f"400x480+{x}+{y}")
         dialog.configure(fg_color=T.SURFACE)
-        dialog.attributes("-topmost", True)
+        C.keep_above(dialog)
         dialog.grab_set()
 
         ctk.CTkLabel(dialog, text="CHANGE PASSWORD", font=T.font(14, "bold"), text_color=T.TEXT).pack(anchor="w", padx=30, pady=(20, 10))
@@ -367,7 +367,7 @@ class ProfileView(UiMixin, ctk.CTkFrame):
                     "Weak Password", "Password must meet all strength guidelines.", parent=dialog)
                 return
 
-            if messagebox.askyesno("Confirm", "Change password?", parent=dialog):
+            if C.confirm("Confirm", "Change password?", parent=dialog):
                 try:
                     user_service.change_password(self.user_info, curr_pwd, new_pwd, conf_pwd)     # [RBAC] own account only
                 except Exception as e:

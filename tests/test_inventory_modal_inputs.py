@@ -98,7 +98,7 @@ def test_unchanged_panel_saves_and_does_not_turn_a_blank_location_into_the_text_
     modal, e = open_modal(view, tool, ctk)
     assert e["location"].get() == "N/A"                  # how the panel DISPLAYS a missing location
     press(modal, "Update")
-    assert shown == []
+    assert [x[0] for x in shown] == ["showinfo"]
     r = rows(d, "SELECT location, supplier FROM tool WHERE tool_id=%s", (tool,))[0]
     assert r["location"] is None, "saving an untouched panel must not store the display text 'N/A'"
     assert r["supplier"] == "petron"
@@ -189,14 +189,17 @@ def test_batch_print_checkbox_is_disabled_for_untagged_tools_and_works_for_tagge
         assert view.batch_print_btn.cget("state") == "disabled"
         button_in(view, "⎙ Batch Print Tags").invoke()
         assert not shown                                           # disabled button cannot start an empty print
-        enabled.toggle()                                           # tick it
+        enabled._text_label.event_generate("<Button-1>")            # the visible Select text is clickable
+        root.update()
         assert {str(x) for x in view.selected_for_print} == {str(tagged)}     # the screen keeps the ids as text
         assert view.selected_count_label.cget("text") == "1 selected"
         assert view.batch_print_btn.cget("state") == "normal"
-        view.select_page_check.toggle()                           # all eligible rows on this page become unselected
+        view.select_page_check._text_label.event_generate("<Button-1>")  # clear this page with its label
+        root.update()
         assert view.selected_for_print == set()
         assert view.batch_print_btn.cget("state") == "disabled"
-        view.select_page_check.toggle()
+        view.select_page_check._text_label.event_generate("<Button-1>")
+        root.update()
         assert {str(x) for x in view.selected_for_print} == {str(tagged)}
         shown.clear()
         button_in(view, "⎙ Batch Print Tags").invoke()

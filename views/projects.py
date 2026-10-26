@@ -7,6 +7,7 @@ import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 import difflib
 from services.validators import fmt_qty
+from services import validators as v
 from services.errors import friendly_message
 from services import project_service as ps
 from ui import components as C
@@ -51,18 +52,16 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.build_table_panel()
 
     def open_draft_project_modal(self, edit_row=None, reqs=None):
+        # A new form must never render the previous project's cart. Clearing
+        # after creating its row buttons leaves stale callbacks behind.
+        self._begin_project_form()
         self.draft_modal = ctk.CTkToplevel(self)
         self.draft_modal.title(
             "Edit Project" if edit_row else "Draft Project Plan")
-        self.draft_modal.geometry("500x750")
+        C.fit_window(self.draft_modal, 500, 750)
         self.draft_modal.configure(fg_color=T.SURFACE)
-        self.draft_modal.attributes("-topmost", True)
+        C.keep_above(self.draft_modal)
         self.draft_modal.grab_set()
-
-        self.draft_modal.update_idletasks()
-        x = (self.draft_modal.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.draft_modal.winfo_screenheight() // 2) - (750 // 2)
-        self.draft_modal.geometry(f"500x750+{x}+{y}")
 
         form_card = ctk.CTkScrollableFrame(
             self.draft_modal, fg_color=T.SURFACE, corner_radius=0)
@@ -83,7 +82,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             form_card, height=80, fg_color=T.SURFACE_ALT, border_width=1, border_color=T.BORDER)
         self.p_desc.pack(fill="x", padx=20, pady=(5, 10))
 
-        self.p_head = field("Project Head / Manager *",
+        self.p_head = field("Project Manager (optional)",
                             "e.g., Engr. Juan Santos")
         self.p_client = field("Client / Company *", "e.g., Makati Dev Corp")
         self.p_location = field("Site Location", "e.g., Block 4, Alabang")
@@ -125,7 +124,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
         start_f = ctk.CTkFrame(row_dates, fg_color="transparent")
         start_f.grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ctk.CTkLabel(start_f, text="Start Date", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
+        ctk.CTkLabel(start_f, text="Start Date (enter both dates)", font=T.font(12, "bold"), text_color=T.TEXT).pack(anchor="w")
         start_input_row = ctk.CTkFrame(start_f, fg_color="transparent")
         start_input_row.pack(fill="x", pady=(5, 0))
         self.p_start = C.field(
@@ -159,8 +158,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         self.p_start.bind("<Return>", lambda e: self.p_end.focus_set())
         self.p_end.bind("<Return>", lambda e: self.save_project())
 
-        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(20, 20))
+        btn_row = ctk.CTkFrame(self.draft_modal, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 16))
         btn_text = "Update Project" if edit_row else ("Save & Approve (Ready for Deployment)" if self.is_admin else "Save as Draft")
         self.btn_save = C.button(btn_row, kind="primary", text=btn_text, command=self.save_project)
         self.btn_save.pack(side="left", fill="x", expand=True, padx=(0, 5))
@@ -184,7 +183,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                 'workers_assigned') or "").split(',') if w.strip()]
             self._refresh_worker_tags()
             
-            self.req_cart = [{'tool_id': r['tool_id'], 'name': r['name'], 'uom': r['unit_of_measure'], 'qty': r['quantity'], 'needs_retrieval': r['status'] == 'Warning'} for r in reqs]
+            self.req_cart = [{'tool_id': r['tool_id'], 'name': r['name'], 'uom': r['unit_of_measure'], 'qty': r['quantity'], 'needs_retrieval': r['status'] == 'Warning'} for r in (reqs or [])]
             
             raw_status = edit_row['status'].replace(' (OVERDUE)', '')
             if raw_status in ['Ongoing', 'Completed', 'Cancelled', 'Declined']:
@@ -216,13 +215,16 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                              font=T.font(12), text_color=T.DANGER_TEXT, wraplength=440).pack(anchor="w", padx=20, pady=(0, 5))
             # ----------------------------------------------------------------------
         else:
-            self.editing_project_id = None
-            self.editing_project_status = None
-            self.workers_list.clear()
-            self.req_cart.clear()
-            self._is_cart_locked = False
+            self.refresh_req_cart()
 
         self.p_name.focus_set()
+
+    def _begin_project_form(self):
+        self.editing_project_id = None
+        self.editing_project_status = None
+        self.workers_list = []
+        self.req_cart = []
+        self._is_cart_locked = False
 
     def _format_date_mask(self, event, entry_widget):
         if event.keysym in ('BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 'Tab'):
@@ -253,7 +255,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
 
         top = ctk.CTkToplevel(self.draft_modal)
         top.title("Select Date")
-        top.attributes("-topmost", True)
+        C.keep_above(top, self.draft_modal)
         top.grab_set()
         top.resizable(False, False)
 
@@ -336,7 +338,8 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             tag_row.pack_propagate(False)
             ctk.CTkLabel(tag_row, text=f"👷 {worker}", font=T.font(12), text_color=T.PRIMARY).pack(side="left", padx=8)
             if not getattr(self, '_is_cart_locked', False):
-                ctk.CTkButton(tag_row, text="✕", width=22, height=22, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda i=idx: self._remove_worker(i)).pack(side="right", padx=5)
+                C.button(tag_row, text="✕", kind="danger", compact=True, width=28,
+                         command=lambda i=idx: self._remove_worker(i)).pack(side="right", padx=5)
 
     def _remove_worker(self, idx):
         if 0 <= idx < len(self.workers_list):
@@ -346,44 +349,41 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
     def open_tool_picker(self):
         modal = ctk.CTkToplevel(self)
         modal.title("Inventory Requisition Catalog")
-        modal.geometry("900x600")
+        C.fit_window(modal, 900, 600)
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
-        # Must be false or it will hide message boxes
-        modal.attributes("-topmost", False)
+        C.keep_above(modal, self.draft_modal)
         modal.grab_set()
-        # Keep the draft modal on top but this modal above it
-        modal.transient(self.draft_modal)
-        modal.update_idletasks()
-        x = (modal.winfo_screenwidth() // 2) - (900 // 2)
-        y = (modal.winfo_screenheight() // 2) - (600 // 2)
-        modal.geometry(f"900x600+{x}+{y}")
-
+        # The catalog remains above the edit form until the catalog closes.
         ctk.CTkLabel(modal, text="Select Items for Project Requisition", font=T.font(16, "bold"), text_color=T.TEXT).pack(pady=(20, 5))
-        ctk.CTkLabel(modal, text="Search by Name or PID, then set quantity and click + Add.",
+        ctk.CTkLabel(modal, text="Choose a quantity and click + Add. This plans items for the project; stock changes when items are issued.",
                      font=T.font(12), text_color=T.TEXT_MUTED).pack(pady=(0, 10))
 
         search_frame = ctk.CTkFrame(modal, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=(0, 5))
+        search_controls = ctk.CTkFrame(search_frame, fg_color="transparent")
+        search_controls.pack(side="right")
 
-        ctk.CTkLabel(search_frame, text="Name:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
+        ctk.CTkLabel(search_controls, text="Name:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
         search_name = C.field(
-            search_frame, placeholder_text="Item name...", width=180, takefocus=True)
+            search_controls, placeholder_text="Item name...", width=180, takefocus=True)
         search_name.pack(side="left", padx=(5, 10))
 
-        ctk.CTkLabel(search_frame, text="PID:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
+        ctk.CTkLabel(search_controls, text="PID:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left")
         search_pid = C.field(
-            search_frame, placeholder_text="Product ID...", width=100, takefocus=True)
+            search_controls, placeholder_text="Product ID...", width=100, takefocus=True)
         search_pid.pack(side="left", padx=(5, 10))
 
         def do_search(): load_catalog(name_q=search_name.get().strip(),
                                       pid_q=search_pid.get().strip())
 
-        def do_reset(): search_name.delete(
-            0, 'end'); search_pid.delete(0, 'end'); load_catalog()
+        def do_reset():
+            if (search_name.get() or search_pid.get()) and not C.confirm(
+                    "Reset item search", "Clear the item search and show all items?", parent=modal):
+                return
+            search_name.delete(0, 'end'); search_pid.delete(0, 'end'); load_catalog()
 
-        C.button(search_frame, kind="primary", text="Search", width=80, command=do_search).pack(side="left", padx=5)
-        C.button(search_frame, kind="secondary", text="↻ Reset", width=80, 
+        C.button(search_controls, kind="primary", text="Search", width=80, command=do_search).pack(side="left", padx=5)
+        C.button(search_controls, kind="secondary", text="↻ Reset", width=80,
                       command=do_reset).pack(side="left", padx=5)
 
         search_name.bind("<Return>", lambda e: do_search())
@@ -402,7 +402,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             cat_inner.pack(fill="x", expand=True)
 
             cols = ["PID", "Type", "Item Name", "UoM",
-                    "Avail/Tot", "Req Qty", "Action"]
+                    "In stock / Total", "Needed", "Action"]
             weights = [1, 1, 3, 1, 1, 1, 1]
 
             for col, w in enumerate(weights):
@@ -499,39 +499,41 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
                     cursor.close()
                     conn.close()
 
+        modal.catalog_status = ctk.CTkLabel(modal, text="In stock stays the same until an item is issued.",
+                                               font=T.font(12), text_color=T.TEXT_SECONDARY)
+        modal.catalog_status.pack(side="bottom", pady=(0, 8))
         load_catalog()
         C.button(modal, kind="secondary", text="Done / Close Catalog", 
                       command=modal.destroy).pack(pady=(5, 15))
 
     def add_from_catalog(self, row_data, qty_entry, modal):
         try:
-            req_qty = float(qty_entry.get())
-        except ValueError:
-            return messagebox.showwarning("Invalid", "Please enter a valid number.", parent=modal)
+            req_qty = v.item_quantity(qty_entry.get(), row_data['type'], row_data['uom'])
+        except v.ValidationError as e:
+            return messagebox.showwarning("Check quantity", str(e), parent=modal)
 
-        if req_qty <= 0:
+        existing = next((item for item in self.req_cart if item['tool_id'] == row_data['tool_id']), None)
+        new_qty = req_qty + (v.parse_quantity(existing['qty']) if existing else 0)
+        if new_qty > v.parse_quantity(row_data['total'], allow_zero=True):
+            return messagebox.showerror("Quantity too high", f"The company owns {fmt_qty(row_data['total'])} {row_data['uom']} in total.", parent=modal)
+
+        needs_retrieval = new_qty > v.parse_quantity(row_data['avail'], allow_zero=True)
+        action = "Update" if existing else "Add"
+        message = (f"{action} {fmt_qty(req_qty)} {row_data['uom']} of {row_data['name']} to this project?\n\n"
+                   "This is a planned requirement. The stock count changes when the item is issued.")
+        if needs_retrieval:
+            message += (f"\n\nOnly {fmt_qty(row_data['avail'])} {row_data['uom']} are currently in stock. "
+                        "The remaining items must be returned before they can be issued.")
+        if not C.confirm("Confirm project requirement", message, parent=modal):
             return
 
-        if req_qty > float(row_data['total']):
-            return messagebox.showerror("Denied", f"Cannot request {req_qty}. The company only owns {fmt_qty(row_data['total'])} {row_data['uom']} total.", parent=modal)
-
-        needs_retrieval = False
-        if req_qty > float(row_data['avail']):
-            warn_msg = (
-                f"⚠️ TIMELINE CONFLICT RISK\n\nYou requested {req_qty}, but only {fmt_qty(row_data['avail'])} are in the warehouse.\n\nMissing items are deployed elsewhere. If not returned before your Start Date, the project may be delayed.\n\nAdd anyway?")
-            if not messagebox.askyesno("Stock Conflict", warn_msg, parent=modal):
-                return
-            needs_retrieval = True
-
-        for item in self.req_cart:
-            if item['tool_id'] == row_data['tool_id']:
-                item['qty'] += req_qty
-                item['needs_retrieval'] = item['needs_retrieval'] or needs_retrieval
-                self.refresh_req_cart()
-                qty_entry.delete(0, 'end')
-                messagebox.showinfo(
-                    "Updated", f"Updated {row_data['name']} quantity to {fmt_qty(item['qty'])} {row_data['uom']}.", parent=modal)
-                return
+        if existing:
+            existing['qty'] = new_qty
+            existing['needs_retrieval'] = existing['needs_retrieval'] or needs_retrieval
+            self.refresh_req_cart()
+            qty_entry.delete(0, 'end')
+            self._catalog_added(modal, row_data, new_qty)
+            return
 
         self.req_cart.append({
             'tool_id': row_data['tool_id'], 'name': row_data['name'],
@@ -539,8 +541,13 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         })
         self.refresh_req_cart()
         qty_entry.delete(0, 'end')
-        messagebox.showinfo(
-            "Added", f"Successfully added {fmt_qty(req_qty)} {row_data['uom']} of {row_data['name']} to project requirements.", parent=modal)
+        self._catalog_added(modal, row_data, new_qty)
+
+    @staticmethod
+    def _catalog_added(modal, row_data, total_qty):
+        modal.catalog_status.configure(
+            text=f"Added to project: {row_data['name']} ({fmt_qty(total_qty)} {row_data['uom']}). Stock is unchanged.",
+            text_color=T.SUCCESS_TEXT)
 
     def refresh_req_cart(self):
         for w in self.cart_scroll.winfo_children():
@@ -549,7 +556,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             ctk.CTkLabel(self.cart_scroll, text="No items selected.",
                          text_color=T.TEXT_MUTED, font=T.font(12)).pack(pady=20)
             return
-        for i, item in enumerate(self.req_cart):
+        for item in self.req_cart:
             row = ctk.CTkFrame(self.cart_scroll, fg_color="transparent")
             row.pack(fill="x", pady=2)
             warning_icon = "⚠️ " if item.get('needs_retrieval') else "✓ "
@@ -557,7 +564,18 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             info = f"{warning_icon}{item['name']} ({fmt_qty(item['qty'])} {item['uom']})"
             ctk.CTkLabel(row, text=info, font=T.font(12, "bold"), text_color=text_col).pack(side="left", padx=5)
             if not getattr(self, '_is_cart_locked', False):
-                ctk.CTkButton(row, text="✕", width=20, height=20, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda idx=i: [self.req_cart.pop(idx), self.refresh_req_cart()]).pack(side="right")
+                C.button(row, text="✕", compact=True, width=28, kind="danger",
+                         command=lambda tool_id=item['tool_id']: self.remove_req_from_cart(tool_id)).pack(side="right")
+
+    def remove_req_from_cart(self, tool_id):
+        item = next((r for r in self.req_cart if r['tool_id'] == tool_id), None)
+        if item is None or getattr(self, '_is_cart_locked', False):
+            return
+        if not C.confirm("Remove project item", f"Remove {item['name']} from this project plan?",
+                         parent=self.draft_modal):
+            return
+        self.req_cart.remove(item)
+        self.refresh_req_cart()
 
     def scan_worker(self):
         try:
@@ -631,6 +649,9 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         if not self._validate_date(end_date, "End Date", self.draft_modal):
             return
 
+        if bool(start_date) != bool(end_date):
+            return messagebox.showerror("Missing Date", "Enter both Start Date and End Date, or leave both blank.", parent=self.draft_modal)
+
         if start_date and end_date:
             if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(start_date, "%Y-%m-%d"):
                 return messagebox.showerror("Invalid Date Range", "The End Date cannot be earlier than the Start Date.", parent=self.draft_modal)
@@ -648,7 +669,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         if similar:
             sim_list = "\n".join([f"• {sn}" for sn in similar])
             msg = f"Similar active project names already exist:\n\n{sim_list}\n\nAre you sure you want to save '{name}'?"
-            if not messagebox.askyesno("Similar Name Detected", msg, parent=self.draft_modal):
+            if not C.confirm("Similar Name Detected", msg, parent=self.draft_modal):
                 return
 
         data = {
@@ -658,6 +679,10 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             "requirements": [{"tool_id": it["tool_id"], "qty": it["qty"], "needs_retrieval": it.get("needs_retrieval")}
                              for it in self.req_cart],
         }
+        summary = "\n".join(f"• {it['name']}: {fmt_qty(it['qty'])} {it['uom']}" for it in self.req_cart)
+        verb = "Save changes to" if editing_id else "Create and approve"
+        if not C.confirm("Confirm project", f"{verb} '{name}'?\n\nClient: {client}\nDates: {start_date or 'Not set'} to {end_date or 'Not set'}\nRequired items:\n{summary}", parent=self.draft_modal):
+            return
         try:
             # [STATE-MACHINE][RBAC] Admin only; validated server-side; edit DIFFS the requirement lines (no delete-and-reinsert);
             # an Admin-created project is auto-approved (no separate approve step).
@@ -705,7 +730,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(top, text="Project Deployment Plans", font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         self.proj_search_var = ctk.StringVar()
-        self.proj_search = C.field(top, placeholder_text="Search project or client...", width=250, takefocus=True, textvariable=self.proj_search_var)
+        self.proj_search = C.field(top, placeholder_text="Search project or client...", width=C.SEARCH_WIDTH, takefocus=True, textvariable=self.proj_search_var)
         self.proj_search.pack(side="right", padx=(5, 0))
 
         self._proj_search_timer = None
@@ -838,7 +863,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         # Added extra space so description doesn't clip
         modal.geometry("650x750")
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - (650 // 2)
@@ -919,7 +944,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             msg = f"Mark this project as {new_status}?"
             if new_status == 'Approved' and has_warnings:
                 msg = "⚠️ WARNING: Some required tools are deployed elsewhere and currently out of stock.\n\nMark as Ready for Deployment anyway?"
-            if not messagebox.askyesno("Confirm Status", msg, parent=modal):
+            if not C.confirm("Confirm Status", msg, parent=modal):
                 return
             try:
                 # [STATE-MACHINE] only allowed edges, and only if the project is still in the status this screen showed
@@ -959,7 +984,7 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
         C.button(btn_frame, kind="secondary", text="Close", width=70, command=modal.destroy).pack(side="right", padx=5)
 
     def archive_project(self, project_id, project_name, modal, current_status=None):
-        if not messagebox.askyesno("Confirm Archive", f"Archive project '{project_name}' to the archive vault?\n\nIt will be moved to Maintenance > Archived Projects.", parent=modal):
+        if not C.confirm("Confirm Archive", f"Archive project '{project_name}' to the archive vault?\n\nIt will be moved to Maintenance > Archived Projects.", parent=modal):
             return
         try:
             ps.archive_project(self.user_info, project_id, (current_status or "").replace(" (OVERDUE)", ""))

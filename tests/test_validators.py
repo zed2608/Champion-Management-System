@@ -66,6 +66,23 @@ def test_equipment_must_be_whole():
         v.parse_quantity("2.5", whole=True)
 
 
+@pytest.mark.parametrize("item_type,uom,amount,allowed", [
+    ("Equipment", "pcs", "0.5", False),
+    ("Equipment", "kg", "0.5", False),
+    ("Consumable", "pcs", "0.5", False),
+    ("Consumable", "boxes", "0.5", True),
+    ("Consumable", "kg", "0.25", True),
+    ("Consumable", "liters", "0.01", True),
+    ("Consumable", "packs", "1.234", False),
+])
+def test_same_quantity_rule_for_catalog_stock_issue_and_return(item_type, uom, amount, allowed):
+    if allowed:
+        assert v.item_quantity(amount, item_type, uom) == Decimal(amount).quantize(Decimal(".01"))
+    else:
+        with pytest.raises(v.ValidationError):
+            v.item_quantity(amount, item_type, uom)
+
+
 def test_price_rules():
     assert v.parse_price("1,250.50") == Decimal("1250.50")
     assert v.parse_price("0") == Decimal("0.00")
@@ -86,6 +103,17 @@ def test_clean_text_strips_control_chars_and_caps():
 
 def test_multiline_keeps_newlines():
     assert v.clean_text("a\nb", max_len=1000, multiline=True) == "a\nb"
+
+
+def test_names_reject_numbers_but_tool_and_project_names_keep_sizes_and_phases():
+    assert v.clean_person_name("María D. Reyes-Jr.") == "María D. Reyes-Jr."
+    for value in ("123", "John 2", "Jane; DROP TABLE user"):
+        with pytest.raises(v.ValidationError):
+            v.clean_person_name(value)
+    assert v.clean_named_label("10 mm drill", field="Product Name") == "10 mm drill"
+    assert v.clean_named_label("Phase 2", field="Project Name") == "Phase 2"
+    with pytest.raises(v.ValidationError):
+        v.clean_named_label("123", field="Project Name")
 
 
 def test_search_is_capped_and_escaped():
@@ -126,6 +154,8 @@ def test_date_helpers():
         v.parse_iso_date("28/02/2026")
     with pytest.raises(v.ValidationError):
         v.validate_date_range(date(2026, 3, 1), date(2026, 2, 1))
+    with pytest.raises(v.ValidationError, match="both"):
+        v.validate_date_range(date(2026, 3, 1), None)
     v.validate_date_range(date(2026, 2, 1), date(2026, 2, 1))   # equal is fine
 
 

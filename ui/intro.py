@@ -51,7 +51,7 @@ class SplashScreen(ctk.CTkToplevel):
     def __init__(self, parent, on_done=None, ms=None):
         super().__init__(parent, fg_color=T.PRIMARY)
         self.overrideredirect(True)
-        self.attributes("-topmost", True)
+        C.keep_above(self, parent)
         _center(self, 460, 260)
         self.on_done = on_done
         self._ms = ms if ms is not None else (800 if motion.reduced_motion() else SPLASH_MS)
@@ -97,7 +97,7 @@ class IntroWindow(ctk.CTkToplevel):
         self.resizable(False, False)
         self.on_done, self.index, self._closed = on_done, 0, False
         _center(self, 720, 440)
-        self.attributes("-topmost", True)
+        C.keep_above(self, parent)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.card = C.card(self)
         self.card.pack(fill="both", expand=True, padx=T.S4, pady=(T.S4, T.S2))

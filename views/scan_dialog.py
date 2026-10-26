@@ -25,8 +25,10 @@ class ScanDialog(ctk.CTkToplevel):
     def __init__(self, parent, on_code, title="Scan QR Code", session_factory=ScannerSession, single_shot=True):
         super().__init__(parent)
         self.title(title)
-        self.geometry("450x470")
-        self.attributes("-topmost", True)
+        C.fit_window(self, 450, 470)
+        C.keep_above(self, parent)
+        self._previous_grab = parent.grab_current()
+        self.grab_set()
         self._on_code, self._single_shot = on_code, single_shot
         self._job = None
         self._closed = False
@@ -103,6 +105,14 @@ class ScanDialog(ctk.CTkToplevel):
                 self.destroy()
             except Exception:
                 pass
+            if self._previous_grab is not None:
+                try:
+                    if self._previous_grab.winfo_exists():
+                        self._previous_grab.grab_set()
+                        self._previous_grab.lift()
+                        self._previous_grab.focus_force()
+                except Exception:
+                    pass
 
 
 def open_scan_dialog(parent, on_code, title="Scan QR Code", **kw):

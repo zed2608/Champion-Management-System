@@ -24,6 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 from db import db
+from services.validators import like_pattern
 from services.errors import PROJECT_ROOT, ServiceError, get_logger
 from services.security import require_role
 
@@ -286,16 +287,20 @@ def restore_backup(actor, src_file, note="", expected_sha256=None, exe_dump=None
 
 # ---- history -----------------------------------------------------------------------------------------------------------------
 @require_role("Admin")
-def history_page(actor, limit=50, offset=0):
+def history_page(actor, limit=50, offset=0, search=""):
     """(rows newest first, total). Server-side paging."""
     limit, offset = max(1, min(int(limit), 500)), max(0, int(offset))
+    where = " FROM backup_logs bl LEFT JOIN `user` u ON bl.created_by = u.user_id"
+    args = []
+    if search:
+        where += " WHERE (bl.filename LIKE %s OR bl.note LIKE %s OR u.full_name LIKE %s OR bl.status LIKE %s)"
+        args = [like_pattern(search)] * 4
     with db.read() as cur:
-        cur.execute("SELECT COUNT(*) AS n FROM backup_logs")
+        cur.execute("SELECT COUNT(*) AS n" + where, args)
         total = cur.fetchone()["n"]
         cur.execute("SELECT bl.backup_id, IFNULL(bl.type,'Backup') AS type, bl.filename, bl.file_size, IFNULL(bl.note,'—') AS note, "
                     "IFNULL(u.full_name,'System') AS created_by, bl.created_at, bl.status, bl.filepath, bl.sha256 "
-                    "FROM backup_logs bl LEFT JOIN `user` u ON bl.created_by = u.user_id "
-                    "ORDER BY bl.created_at DESC, bl.backup_id DESC LIMIT %s OFFSET %s", (limit, offset))
+                    + where + " ORDER BY bl.created_at DESC, bl.backup_id DESC LIMIT %s OFFSET %s", (*args, limit, offset))
         return cur.fetchall(), total
 
 

@@ -5,6 +5,7 @@ from tkinter import messagebox
 from database import get_connection
 import os
 import tempfile
+from decimal import Decimal
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
 import matplotlib
@@ -47,46 +48,66 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         # Row 0: Title
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 5))
-        C.PageHeader(top_bar, "Reports", "Usage, loss, wear and anomaly reports you can export").pack(side="left")
+        C.PageHeader(top_bar, "Reports", "Find records and export a report").pack(fill="x")
 
-        # Date Filters
-        filter_f = ctk.CTkFrame(top_bar, fg_color="transparent")
-        filter_f.pack(side="right", padx=15)
-        ctk.CTkLabel(filter_f, text="From:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 5))
-        self.start_date = C.field(filter_f, placeholder_text="YYYY-MM-DD", width=100)
-        self.start_date.pack(side="left", padx=(0, 2))
-        self.start_date.configure(state="readonly")
-        C.button(filter_f, compact=True, kind="secondary", text="📅", width=32, command=lambda: self.open_date_picker(self.start_date)).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(filter_f, text="To:", font=T.font(12, "bold"), text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 5))
-        self.end_date = C.field(filter_f, placeholder_text="YYYY-MM-DD", width=100)
-        self.end_date.pack(side="left", padx=(0, 2))
-        self.end_date.configure(state="readonly")
-        C.button(filter_f, compact=True, kind="secondary", text="📅", width=32, command=lambda: self.open_date_picker(self.end_date)).pack(side="left", padx=(0, 10))
-        C.button(filter_f, compact=True, kind="primary", text="Apply", width=60, command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(0, 5))
-        C.button(filter_f, compact=True, kind="secondary", text="Clear", width=60, command=self.clear_date_filter).pack(side="left")
-
-        # Row 1: Tab buttons (own row so they never overflow the title row)
-        tab_bar = ctk.CTkFrame(self, fg_color="transparent")
-        tab_bar.grid(row=1, column=0, sticky="ew", pady=(0, 8), padx=15)
-        self.tab_var = ctk.StringVar(value="▤ Inventory ABC Analysis")
-        self.seg_btn = ctk.CTkSegmentedButton(
-            tab_bar,
-            values=["▤ Inventory ABC Analysis", "⛭ Tool Usage Report", "🖹 Employee Activity",
-                    "📋 Project Allocation", "⚠ Damage & Loss", "⭣ Low Stock", "⧖ Overdue Transactions", "🔧 Wear", "🔎 Anomalies"],
+        # The common task (choose and search a report) comes first. Optional
+        # date limits sit in a quieter row; export stays with the report data.
+        toolbar = C.card(self)
+        toolbar.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+        tab_bar = ctk.CTkFrame(toolbar, fg_color="transparent")
+        tab_bar.pack(fill="x", padx=16, pady=(12, 8))
+        ctk.CTkLabel(tab_bar, text="View report", font=T.font(12, "bold"),
+                     text_color=T.TEXT).pack(side="left")
+        controls = ctk.CTkFrame(tab_bar, fg_color="transparent")
+        controls.pack(side="right")
+        self.tab_var = ctk.StringVar(value="⛭ Tool Usage Report")
+        self.seg_btn = ctk.CTkOptionMenu(
+            controls,
+            values=["⛭ Tool Usage Report", "🖹 Employee Activity", "📋 Project Allocation",
+                    "⚠ Damage & Loss", "⭣ Low Stock", "⧖ Overdue Transactions"],
             variable=self.tab_var,
-            fg_color=T.SURFACE_MUTED,
-            selected_color=T.PRIMARY,
-            selected_hover_color=T.PRIMARY_HOVER,
+            width=210, fg_color=T.SURFACE_ALT, text_color=T.TEXT,
             command=self.switch_tab
         )
-        self.seg_btn.pack(side="right")
+        self.seg_btn.pack(side="left", padx=(0, 10))
+        self.report_search_var = ctk.StringVar()
+        self.report_search = C.field(controls, placeholder_text="Search this report...", width=C.SEARCH_WIDTH,
+                                     textvariable=self.report_search_var)
+        self.report_search.bind("<Return>", lambda e: self.switch_tab(self.tab_var.get()))
+        self.report_search.pack(side="left")
+        C.button(controls, compact=True, kind="primary", text="Search", width=65,
+                 command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(5, 0))
+
+        filter_f = ctk.CTkFrame(toolbar, fg_color=T.SURFACE_ALT, corner_radius=T.RADIUS_SM)
+        self.date_filter_frame = filter_f
+        filter_f.pack(fill="x", padx=16, pady=(0, 12))
+        ctk.CTkLabel(filter_f, text="Dates (optional)", font=T.font(12, "bold"),
+                     text_color=T.TEXT_SECONDARY).pack(side="left", padx=(10, 0), pady=8)
+        dates = ctk.CTkFrame(filter_f, fg_color="transparent")
+        dates.pack(side="right", padx=8, pady=6)
+        ctk.CTkLabel(dates, text="From", font=T.font(12), text_color=T.TEXT_SECONDARY).pack(side="left", padx=(0, 5))
+        self.start_date = C.field(dates, placeholder_text="YYYY-MM-DD", width=100)
+        self.start_date.pack(side="left", padx=(0, 2))
+        self.start_date.configure(state="readonly")
+        C.button(dates, compact=True, kind="secondary", text="📅", width=32,
+                 command=lambda: self.open_date_picker(self.start_date)).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(dates, text="To", font=T.font(12), text_color=T.TEXT_SECONDARY).pack(side="left", padx=(0, 5))
+        self.end_date = C.field(dates, placeholder_text="YYYY-MM-DD", width=100)
+        self.end_date.pack(side="left", padx=(0, 2))
+        self.end_date.configure(state="readonly")
+        C.button(dates, compact=True, kind="secondary", text="📅", width=32,
+                 command=lambda: self.open_date_picker(self.end_date)).pack(side="left", padx=(0, 10))
+        C.button(dates, compact=True, kind="primary", text="Apply", width=60,
+                 command=lambda: self.switch_tab(self.tab_var.get())).pack(side="left", padx=(0, 5))
+        C.button(dates, compact=True, kind="secondary", text="Clear", width=60,
+                 command=self.clear_date_filter).pack(side="left")
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
-        self.tab_content.grid(row=2, column=0, sticky="nsew", pady=(10, 0))
+        self.tab_content.grid(row=2, column=0, sticky="nsew")
         self.tab_content.grid_columnconfigure(0, weight=1)
         self.tab_content.grid_rowconfigure(0, weight=1)
 
-        self.render_abc_tab()
+        self.render_usage_tab()
 
     def clear_date_filter(self):
         self.start_date.configure(state="normal")
@@ -106,7 +127,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         top = ctk.CTkToplevel(self)
         top.title("Select Date")
-        top.attributes("-topmost", True)
+        C.keep_above(top)
         top.grab_set()
         top.resizable(False, False)
         
@@ -174,6 +195,29 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         self._figs.append(fig)
         return fig
 
+    def _matching_rows(self, rows):
+        """The same visible search is used for screen rows and the exported PDF."""
+        term = getattr(self, "_report_search_text", "").casefold()
+        if not term:
+            return rows
+        return [r for r in rows if any(term in str(value or "").casefold() for value in r.values())]
+
+    def _matching_damage(self, result):
+        rows = self._matching_rows(result["rows"])
+        if len(rows) == len(result["rows"]):
+            return result
+        totals = {"total_loss": Decimal(0), "total_damage": Decimal(0), "count_lost": Decimal(0),
+                  "count_damaged": Decimal(0), "count_repair": Decimal(0)}
+        for row in rows:
+            qty = Decimal(str(row["units"]))
+            flag = row["cond_flag"]
+            count = {"Lost": "count_lost", "Damaged": "count_damaged", "Needs Repair": "count_repair"}.get(flag)
+            if count:
+                totals[count] += qty
+            if flag in ("Lost", "Damaged"):
+                totals["total_loss" if flag == "Lost" else "total_damage"] += qty * Decimal(str(row["price"]))
+        return {"rows": rows, "summary": totals}
+
     def _release_figures(self):
         for fig in getattr(self, "_figs", []):
             try:
@@ -189,6 +233,11 @@ class ReportsView(UiMixin, ctk.CTkFrame):
     def switch_tab(self, selected):
         sd, ed, valid = self.get_and_validate_dates()
         if not valid: return
+        self._report_search_text = self.report_search_var.get().strip()
+        if selected == "⭣ Low Stock":
+            self.date_filter_frame.pack_forget()
+        elif not self.date_filter_frame.winfo_manager():
+            self.date_filter_frame.pack(fill="x", padx=16, pady=(0, 12))
         
         self._release_figures()
         for widget in self.tab_content.winfo_children():
@@ -402,8 +451,8 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         search_frame.grid(row=2, column=0, sticky="ew", padx=30, pady=(0, 10))
         
         self.usage_search_var = ctk.StringVar()
-        self.usage_search_entry = C.field(search_frame, placeholder_text="Search Tool, Tag ID, Condition...", width=280, textvariable=self.usage_search_var)
-        self.usage_search_entry.pack(side="left", padx=(0, 10))
+        self.usage_search_entry = C.field(search_frame, placeholder_text="Search Tool or Tag...", width=C.SEARCH_WIDTH, textvariable=self.usage_search_var)
+        self.usage_search_entry.pack(side="right")
         
         self._usage_timer = None
         def on_usage_search(*args):
@@ -440,7 +489,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         def _fetch_usage():
             try:
-                rows = rs.usage_report(self.user_info, sd, ed, search_query)
+                rows = self._matching_rows(rs.usage_report(self.user_info, sd, ed, search_query))
             except Exception as e:
                 self.post_ui(lambda err=e: scroll.winfo_exists() and self._show_error(scroll, friendly_message(err)))
                 return
@@ -617,7 +666,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         def _fetch_activity():
             try:
-                rows = rs.activity_report(self.user_info, sd, ed)
+                rows = self._matching_rows(rs.activity_report(self.user_info, sd, ed))
             except Exception as e:
                 self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
@@ -769,7 +818,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         def _fetch():
             try:
-                rows = rs.allocation_report(self.user_info, sd, ed)
+                rows = self._matching_rows(rs.allocation_report(self.user_info, sd, ed))
             except Exception as e:
                 self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
@@ -864,7 +913,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         def _fetch():
             try:
-                res = rs.damage_loss_report(self.user_info, sd, ed)
+                res = self._matching_damage(rs.damage_loss_report(self.user_info, sd, ed))
             except Exception as e:
                 self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
@@ -958,7 +1007,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         def _fetch():
             try:
-                rows = rs.low_stock_report(self.user_info)
+                rows = self._matching_rows(rs.low_stock_report(self.user_info))
             except Exception as e:
                 self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
@@ -1020,7 +1069,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         def _fetch():
             try:
-                rows = rs.overdue_report(self.user_info, sd, ed)
+                rows = self._matching_rows(rs.overdue_report(self.user_info, sd, ed))
             except Exception as e:
                 self.post_ui(lambda err=e: scroll.winfo_exists() and ctk.CTkLabel(scroll, text=friendly_message(err), text_color=T.DANGER_TEXT).pack(pady=10))
                 return
@@ -1208,7 +1257,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         dialog.title(f"Export: {title}")
         dialog.geometry("460x320")
         dialog.configure(fg_color=T.BG)
-        dialog.attributes("-topmost", True)
+        C.keep_above(dialog)
         dialog.grab_set()
         dialog.resizable(False, False)
         dialog.update_idletasks()
@@ -1226,9 +1275,9 @@ class ReportsView(UiMixin, ctk.CTkFrame):
 
         ctk.CTkFrame(card, height=1, fg_color=T.BORDER).pack(fill="x", padx=20, pady=(0, 12))
 
-        ctk.CTkLabel(card, text="Additional Criteria / Notes  (optional)",
+        ctk.CTkLabel(card, text="PDF note (optional; does not filter records)",
                      font=T.font(12, "bold"), text_color=T.TEXT_SECONDARY).pack(anchor="w", padx=20, pady=(4, 4))
-        notes_entry = C.field(card, placeholder_text="e.g., Site A only, Q1 review...")
+        notes_entry = C.field(card, placeholder_text="e.g., Prepared for the October review")
         notes_entry.pack(fill="x", padx=20, pady=(0, 16))
 
         def do_export():
@@ -1262,20 +1311,21 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             return "Inventory ABC Analysis Report", ["Rank", "Tool ID", "Tool Name", "Qty Issued", "Cumulative%", "Category"], rows
         if report_type == "usage":
             rows = [[str(r["tool_id"]), r["name"], r["tag_id"], _fmt(r["total_borrowed"]), _fmt(r["currently_out"]),
-                     _fmt(r["qty_avail"]), r["condition"]] for r in rs.usage_report(me, sd, ed)]
+                     _fmt(r["qty_avail"]), r["condition"]] for r in self._matching_rows(rs.usage_report(me, sd, ed,
+                         self.usage_search_var.get() if hasattr(self, 'usage_search_var') else ''))]
             return "Tool Usage Report", ["Tool ID", "Name", "Tag ID", "Qty Issued", "Currently Out", "Qty Avail", "Condition"], rows
         if report_type == "activity":
             rows = [[r["employee_id"], r["full_name"], r["role"], _fmt(r["total_borrows"]), _fmt(r["active_borrows"]), _fmt(r["total_returned"])]
-                    for r in rs.activity_report(me, sd, ed)]
+                    for r in self._matching_rows(rs.activity_report(me, sd, ed))]
             return "Employee Activity Report", ["Employee ID", "Full Name", "Role", "Qty Issued", "Active", "Retrieved"], rows
         if report_type == "allocation":
             rows = [[r["project_name"], r["client"] or "—", r["location"] or "—", r["status"], r["tool_name"], _fmt(r["requested"]),
                      _fmt(r["issued"]), _fmt(r["retrieved"]),
                      "Unreturned" if r["issued"] - r["retrieved"] > 0 and r["status"] == "Completed" else "—"]
-                    for r in rs.allocation_report(me, sd, ed)]
+                    for r in self._matching_rows(rs.allocation_report(me, sd, ed))]
             return "Project Allocation Report", ["Project", "Client", "Location", "Status", "Tool", "Requested", "Issued", "Retrieved", "Flag"], rows
         if report_type == "damage":
-            res = rs.damage_loss_report(me, sd, ed)
+            res = self._matching_damage(rs.damage_loss_report(me, sd, ed))
             rows = [[str(r["tool_id"]), r["name"], f"P{float(r['price']):,.2f}", _fmt(r["units"]), r["cond_flag"], r["returned_by"] or "—",
                      r["return_date"] or "—", r["notes"]] for r in res["rows"]]
             sm = res["summary"]
@@ -1285,13 +1335,13 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         if report_type == "lowstock":
             rows = [[str(r["tool_id"]), r["name"], r["item_type"], r["category"], r["supplier"], r["uom"], _fmt(r["qty_avail"]),
                      _fmt(r["minimum_stock"]), _fmt(max(0, float(r["minimum_stock"]) * 2 - float(r["qty_avail"])))]
-                    for r in rs.low_stock_report(me)]
+                    for r in self._matching_rows(rs.low_stock_report(me))]
             return "Low Stock / Procurement Report", ["PID", "Name", "Type", "Category", "Supplier", "UoM", "Available", "Min Stock", "Reorder Qty"], rows
         if report_type == "overdue":
             rows = [[r["employee_id"], r["full_name"], r["tool_name"], r["project_name"],
                      r["due_date"].strftime("%Y-%m-%d") if r.get("due_date") else "—", f"{int(r['days_overdue'] or 0)} days",
                      r["borrow_date"].strftime("%Y-%m-%d") if r.get("borrow_date") else "—", _fmt(r["units"]),
-                     f"P{float(r['price']):,.2f}"] for r in rs.overdue_report(me, sd, ed)]
+                     f"P{float(r['price']):,.2f}"] for r in self._matching_rows(rs.overdue_report(me, sd, ed))]
             return "Overdue Transactions Report", ["Emp ID", "Worker", "Tool", "Project", "Due Date", "Days Overdue", "Issued On", "Units", "Unit Price"], rows
         return "Report", [], []
 
@@ -1311,12 +1361,19 @@ class ReportsView(UiMixin, ctk.CTkFrame):
             sd, ed, valid = self.get_and_validate_dates()
             if not valid:
                 return
+            if not C.confirm("Export report", f"Create the {report_type} PDF for {sd or 'the first record'} through {ed or 'today'}?", parent=self.winfo_toplevel()):
+                return
             try:
                 title, sections, notes = self._export_document(report_type, sd, ed)
             except Exception as e:
                 messagebox.showerror("Export Error", friendly_message(e), parent=self.winfo_toplevel())
                 return
-            criteria_parts = ["Period: " + (f"{sd or 'beginning'} to {ed or 'today'}" if (sd or ed) else "All Time (No filters applied)")]
+            criteria_parts = (["Stock as of today"] if report_type == "lowstock" else
+                              ["Period: " + (f"{sd or 'beginning'} to {ed or 'today'}" if (sd or ed) else "All time")])
+            if report_type == "usage" and hasattr(self, "usage_search_var") and self.usage_search_var.get().strip():
+                criteria_parts.append("Search: " + self.usage_search_var.get().strip())
+            if self.report_search_var.get().strip():
+                criteria_parts.append("Search: " + self.report_search_var.get().strip())
             if criteria_note:
                 criteria_parts.append(f"Notes: {criteria_note}")
             fpath = os.path.join(tempfile.gettempdir(), f"Report_{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")

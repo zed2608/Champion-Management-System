@@ -53,8 +53,8 @@ Numbers are what the seeder produced on 21 Oct 2026; yours will differ slightly 
 |---|---|---|
 | 0:00 | Start the program. Splash, then the 4-slide intro (arrow keys), tick **Don't show again**. | The problem: P10,000 a month in lost tools; scan, issue, return, insight. |
 | 0:45 | Log in as the Admin. Welcome toast appears top right. | Server-side roles: Admin sees every module. |
-| 1:15 | **Dashboard**. | Five cards: 5% utilization (53 units out), 4 of 8 workers active, 3 low-stock items, 5 tools needing action. Project strip: 1 overdue. |
-| 2:00 | **ADMIN INSIGHTS** (Refresh). | Last backup 3 days ago (turns red after 7). Audit chain INTACT with a head hash. Wear forecast: Rotary Hammer Drill at about 190% of its 150 h interval. Recommendations ranked by pesos: follow up the Riverside project (9 overdue issuances), review the worker with the most damaged/lost returns, procure 5 more Angle Grinders. Savings card vs the P10,000 baseline. |
+| 1:15 | **Dashboard**. | Four cards: tools out, overdue projects, open tool issues and low stock. The project strip shows one overdue project. |
+| 2:00 | **System status > Show details > Refresh**. | Last backup 3 days ago, audit chain status, wear forecasts, recommendations and savings. Details are hidden until requested. |
 | 3:30 | **Inventory**: search "grinder", point at `2/5`-style quantities and the fractional consumables; open **Hard Hat** (untagged), **↻ Auto-Gen**, **Save Tag Link**. | Tags are unique; a duplicate is refused in plain words. |
 | 5:00 | **Issuance & Retrieval > 📤 Issue Tools**: worker `WKR-<year>-001`, project *Cavite Fabrication Bay Installation*, scan/type a Welding Helmet tag, issue. Receipt shows the server time. | Four dates are kept per issuance; issuing to an ended project is refused. |
 | 6:00 | Try to issue the **Angle Grinder** (none in stock). | Refused; the attempt is recorded for the anomaly detector. |
@@ -69,8 +69,8 @@ Tips: rehearse once with a throwaway reset; keep the Angle Grinder refusal and t
 
 ## `ui/tour-dashboard` defense UI checks (23 October 2026)
 
-Inventory now has **Select all on this page**, a live selected count, and **Batch Print Tags** enables only after a tagged tool is selected. Untagged rows have disabled checkboxes; assign a tag before printing. Check this with a real mouse on a tagged row, after paging and searching, then on an untagged row. The automated Tk event check can be repeated with `.venv\Scripts\python.exe scripts/check_tour_inventory.py`; it forces the local `champion_demo` database and does not print.
+Inventory now has **Select tagged tools on this page**, a live selected count, and **Batch Print Tags** enables only after a tagged tool is selected. Tagged rows have a clickable **Select** label; untagged rows say **Tag first**. Check this with a real mouse on a tagged row, after paging and searching, then on an untagged row. The automated Tk event check can be repeated with `.venv\Scripts\python.exe scripts/check_tour_inventory.py`; it forces the local `champion_demo` database and does not print.
 
 Reports keep their data charts, but empty chart and summary regions collapse and populated charts are shorter. Open all nine tabs at 1366×768 and 1920×1080. `.venv\Scripts\python.exe scripts/capture_tour_reports.py --check-only` opens each tab at both sizes without writing screenshots. With an unlocked 1920×1080 desktop, omit `--check-only` to save captures under `docs/screenshots/tour_dashboard_after/`. Capture was blocked in the automated session (`OSError: screen grab failed`), so inspect the screen directly.
 
-The dashboard remains the existing five-card Admin / four-card Staff design, and no guided tour was added. See `docs/TOUR_DASHBOARD_SUMMARY.md` for what was deferred and `docs/HAND_TEST_CHECKLIST.md` section T for the remaining manual checks.
+The current `fix/defense-ux` branch has a four-card dashboard for each role. See `docs/HAND_TEST_CHECKLIST.md` for the current manual checks. The older `docs/TOUR_DASHBOARD_SUMMARY.md` records the previous branch's state.

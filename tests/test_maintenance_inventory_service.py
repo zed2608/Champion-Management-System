@@ -225,6 +225,18 @@ def test_edit_uses_locked_values_not_the_modals_stale_copy(w):
     assert inv(d, cal)["quantity_available"] == 0
 
 
+def test_edit_kg_to_fraction_updates_both_total_and_available(w):
+    d, s, u, cal, grs = w
+    # Keep the kilogram already out; only the change in owned total is available.
+    run(d, "UPDATE inventory SET quantity_available = 4 WHERE tool_id=%s", (grs,))
+    inv_svc.update_item(s["admin"], str(grs), **_edit(
+        name="Grease", item_type="Consumable", unit_of_measure="kg",
+        quantity="5.75", min_stock="1.25", tag_id="GRS-001"))
+    i = inv(d, grs)
+    assert (i["quantity_total"], i["quantity_available"], i["minimum_stock"]) == (
+        Decimal("5.75"), Decimal("4.75"), Decimal("1.25"))
+
+
 def test_edit_duplicates_condition_and_legacy_tags(w):
     d, s, u, cal, grs = w
     with pytest.raises(Conflict, match="already exists"):

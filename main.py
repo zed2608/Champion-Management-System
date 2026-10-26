@@ -238,35 +238,32 @@ class LoginApp(ctk.CTk):
     def show_loading_screen(self, user):
         self.withdraw()
         load_win = ctk.CTkToplevel(self)
-        self.center_window(load_win, 400, 200)
+        self.center_window(load_win, 460, 260)
         load_win.overrideredirect(True)
+        load_win.attributes("-topmost", True)
         load_win.configure(fg_color=T.PRIMARY)
-        ctk.CTkLabel(load_win, text="Automated Management System",
-                     font=T.font(16, "bold"), text_color=T.WHITE).pack(pady=(40, 5))
-        ctk.CTkLabel(load_win, text="Initializing environment...",
-                     font=T.font(12), text_color=T.GREEN_TINT).pack(pady=(0, 20))
+        ctk.CTkLabel(load_win, text="CHAMPION FINE TOOLING",
+                     font=T.font(20, "bold"), text_color=T.ON_PRIMARY).pack(pady=(70, 4))
+        ctk.CTkLabel(load_win, text="Opening your dashboard", font=T.font(14), text_color=T.GREEN_TINT).pack()
         progress = ctk.CTkProgressBar(
-            load_win, width=300, fg_color=T.PRIMARY_HOVER, progress_color=T.SUCCESS_BRIGHT)
-        progress.pack()
-        progress.set(0)
+            load_win, width=300, height=3, corner_radius=0, fg_color=T.PRIMARY_HOVER, progress_color=T.ACCENT)
+        progress.pack(pady=(44, 0))
+        progress.configure(mode="indeterminate")
+        progress.start()
 
-        def update_progress(val=0):
-            if val < 1.0:
-                progress.set(val)
-                load_win.after(30, lambda: update_progress(val + 0.05))
-            else:
-                # -> LOG ACTION GOES HERE <-
-                try:
-                    start_session(user['user_id'])           # [PANEL-AWE] session id travels with every audit entry of this login
-                    log_action(user['user_id'], "Login", "Authentication",
-                               f"User '{user['full_name']}' logged in.")
-                except Exception as e:
-                    print(f"Failed to log login action: {e}")
-
-                load_win.destroy()
+        def open_dashboard():
+            try:
+                start_session(user['user_id'])
+                log_action(user['user_id'], "Login", "Authentication", f"User '{user['full_name']}' logged in.")
+            except Exception as e:
+                print(f"Failed to log login action: {e}")
+            try:
                 self.launch_dashboard(user)
+            finally:
+                progress.stop()
+                load_win.destroy()
 
-        update_progress()
+        load_win.after(80, open_dashboard)
 
     def launch_dashboard(self, user):
         try:
