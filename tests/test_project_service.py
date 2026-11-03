@@ -118,6 +118,16 @@ def test_duplicate_workers_and_merged_lines(w):
     assert str(rows(d, "SELECT quantity FROM project_requirements")[0]["quantity"]) == "3.00"
 
 
+def test_project_requirement_never_exceeds_owned_stock_even_when_repeated(w):
+    d, u, admin, staff, cal, grs, data = w
+    for requirements in ([{"tool_id": cal, "qty": 11}],
+                         [{"tool_id": cal, "qty": 6}, {"tool_id": cal, "qty": 5}],
+                         [{"tool_id": grs, "qty": "5.01"}]):
+        with pytest.raises(v.ValidationError, match="exceeds the company total"):
+            ps.create_project(admin, data(requirements=requirements))
+    assert rows(d, "SELECT COUNT(*) AS n FROM projects")[0]["n"] == 0
+
+
 # ---- edit -------------------------------------------------------------------------------------------------------------
 def test_edit_diffs_lines_and_keeps_the_fulfilled_flag(w):
     d, u, admin, staff, cal, grs, data = w

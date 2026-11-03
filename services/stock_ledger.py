@@ -49,7 +49,7 @@ def lock_inventory(cur, tool_ids) -> dict:
     ph = ",".join(["%s"] * len(ids))
     cur.execute(
         f"""SELECT i.tool_id, i.quantity_total, i.quantity_available, i.quantity_in_maintenance, i.quantity_lost,
-                   t.name, t.`condition` AS tool_condition, t.is_archived, t.item_type
+                   t.name, t.`condition` AS tool_condition, t.is_archived, t.item_type, t.unit_of_measure
             FROM inventory i JOIN tool t ON t.tool_id = i.tool_id
             WHERE i.tool_id IN ({ph}) ORDER BY i.tool_id FOR UPDATE OF i""", ids)
     rows = {r["tool_id"]: r for r in cur.fetchall()}

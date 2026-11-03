@@ -1,10 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec for the Champion Management System.
 #
-#   STATUS: UNTESTED. It was written without running PyInstaller (the build was not possible in the unattended session).
-#   Build on a Windows PC that has Python 3.11 and the project's venv:
-#       pip install pyinstaller
-#       pyinstaller ChampionManagement.spec
+#   Build on a Windows PC with Python 3.11 by running scripts\build_windows.ps1.
 #   The program lands in dist\ChampionManagement\ (a folder, "onedir"). Copy the whole folder to each terminal.
 #   Why onedir and not a single .exe: the program writes next to itself (remember_config.json, scanner_config.json, logs\,
 #   assets\profiles\) and a single-file build unpacks to a temporary folder that is deleted on exit, so those would be lost.
@@ -18,8 +15,10 @@ hiddenimports = (
     + collect_submodules("views")
     + collect_submodules("db")
     + collect_submodules("utils")
+    + collect_submodules("cryptography")
     + ["tkcalendar", "babel.numbers", "babel.dates", "PIL._tkinter_finder", "mysql.connector.plugins.mysql_native_password",
-       "mysql.connector.plugins.caching_sha2_password", "mysql.connector.plugins.sha256_password"]
+       "mysql.connector.plugins.caching_sha2_password", "mysql.connector.plugins.sha256_password",
+       "cryptography.hazmat.bindings._rust"]
 )
 
 datas = [

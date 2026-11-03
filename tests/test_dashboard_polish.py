@@ -1,4 +1,4 @@
-"""The tidied Executive Dashboard: five (Admin) or four (Staff) identical KPI cards, the Phase 4 Admin cards intact, one chart style, figures closed."""
+"""The dashboard: four KPI cards for both roles, with optional Admin details."""
 import gc
 import threading
 import time
@@ -68,7 +68,7 @@ def world(svc, monkeypatch):
         pass
 
 
-@pytest.mark.parametrize("role,count", [("Admin", 5), ("Staff", 4)])
+@pytest.mark.parametrize("role,count", [("Admin", 4), ("Staff", 4)])
 def test_kpi_cards_are_identical_in_size_and_type(world, role, count):
     import dashboard as dash
     from ui.components import KpiCard

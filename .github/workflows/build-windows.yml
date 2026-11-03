@@ -1,0 +1,27 @@
+name: Build Windows executable
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/defense-ux]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Build and smoke test
+        shell: pwsh
+        run: .\scripts\build_windows.ps1
+      - name: Upload tested application folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChampionManagement-Windows
+          path: dist/ChampionManagement/
+          if-no-files-found: error
+          retention-days: 14

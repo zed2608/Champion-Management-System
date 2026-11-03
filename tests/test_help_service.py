@@ -40,6 +40,18 @@ def test_staff_never_receive_admin_only_content(svc, people):
     assert len(hs.list_guides(admin)) == 2 and len(hs.list_faqs(admin)) == 2
 
 
+def test_removed_tour_guide_is_hidden_from_staff_and_deleted_for_admin(svc, people):
+    admin, staff, _ = people
+    run(svc, "INSERT INTO help_guides (title, steps, is_admin_only, display_order) VALUES (%s,%s,0,15)",
+        ("15. Guided Tour", "Old instructions"))
+    assert hs.list_guides(staff) == []
+    hs.seed_defaults(admin, [(False, "Basics", ["Use Help"])], [], [], [])
+    assert [g["title"] for g in hs.list_guides(admin)] == ["Basics"]
+    with svc.read() as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM help_guides WHERE title=%s", ("15. Guided Tour",))
+        assert cur.fetchone()["n"] == 0
+
+
 def test_only_admin_edits_content(svc, people):
     admin, staff, _ = people
     for call in (lambda: hs.save_guide(staff, None, "T", ["s"], False, 0), lambda: hs.delete_guide(staff, 1),

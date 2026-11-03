@@ -26,7 +26,7 @@ MAX_PROJECT_TEXT = 255
 
 def find_similar_names(name, exclude_project_id=None):
     """Read-only helper for the "Similar name detected" prompt: (exact_match, similar_names[:3]) among active projects."""
-    name = v.clean_text(name, max_len=MAX_PROJECT_TEXT, field="Project Name")
+    name = v.clean_named_label(name, max_len=MAX_PROJECT_TEXT, field="Project Name")
     with db.read() as cur:
         cur.execute("SELECT name FROM projects WHERE archived_at IS NULL AND project_id <> %s", (exclude_project_id or 0,))
         existing = [r["name"] for r in cur.fetchall() if r["name"]]
@@ -39,9 +39,10 @@ def find_similar_names(name, exclude_project_id=None):
 def _normalise(cur, data, exclude_project_id=None):
     """Validate and normalise the form. Returns a dict with cleaned scalars, worker rows and requirement lines."""
     f = {
-        "name": v.clean_text(data.get("name"), max_len=MAX_PROJECT_TEXT, field="Project Name"),
-        "client": v.clean_text(data.get("client"), max_len=MAX_PROJECT_TEXT, field="Client"),
-        "project_head": v.clean_text(data.get("project_head"), max_len=MAX_PROJECT_TEXT, field="Project Head", required=False) or None,
+        "name": v.clean_named_label(data.get("name"), max_len=MAX_PROJECT_TEXT, field="Project Name"),
+        "client": v.clean_named_label(data.get("client"), max_len=MAX_PROJECT_TEXT, field="Client"),
+        "project_head": v.clean_person_name(data.get("project_head"), max_len=MAX_PROJECT_TEXT,
+                                              field="Project Head", required=False) or None,
         "location": v.clean_text(data.get("location"), max_len=MAX_PROJECT_TEXT, field="Location", required=False) or None,
         "description": v.clean_text(data.get("description"), max_len=2000, field="Description", required=False, multiline=True) or None,
         "start_date": v.parse_iso_date(data.get("start_date"), field="Start Date", required=False),
@@ -76,15 +77,19 @@ def _normalise(cur, data, exclude_project_id=None):
     # requirements: active tools, valid quantities (whole for equipment), one line per tool
     lines = {}
     for item in data.get("requirements") or []:
-        cur.execute("SELECT tool_id, name, item_type, is_archived FROM tool WHERE tool_id = %s", (item.get("tool_id"),))
+        cur.execute("""SELECT t.tool_id, t.name, t.item_type, t.unit_of_measure, t.is_archived,
+                              i.quantity_total FROM tool t JOIN inventory i ON i.tool_id=t.tool_id WHERE t.tool_id = %s""",
+                    (item.get("tool_id"),))
         t = cur.fetchone()
         if not t:
             raise v.ValidationError("A required tool no longer exists.")
         if t["is_archived"]:
             raise v.ValidationError(f"'{t['name']}' is archived and cannot be required by a project.")
-        qty = v.parse_quantity(item.get("qty"), whole=(t["item_type"] or "Equipment") != "Consumable", field=f"Quantity for {t['name']}")
+        qty = v.item_quantity(item.get("qty"), t["item_type"], t["unit_of_measure"], field=f"Quantity for {t['name']}")
         line = lines.setdefault(t["tool_id"], {"tool_id": t["tool_id"], "qty": Decimal(0), "warning": False, "name": t["name"]})
         line["qty"] += qty
+        if line["qty"] > Decimal(str(t["quantity_total"])):
+            raise v.ValidationError(f"'{t['name']}': requested {v.fmt_qty(line['qty'])} exceeds the company total of {v.fmt_qty(t['quantity_total'])}.")
         line["warning"] = line["warning"] or bool(item.get("needs_retrieval"))
     if not lines:
         raise v.ValidationError("Please add at least one tool requirement.")

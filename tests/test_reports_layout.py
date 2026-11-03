@@ -37,3 +37,30 @@ def test_activity_table_starts_near_description_when_chart_has_no_data(monkeypat
         assert any(getattr(w, "_text", "") == "No data for this period" for w in view.activity_table_inner.winfo_children())
     finally:
         root.destroy()
+
+
+def test_report_controls_follow_task_order_and_fit_a_narrow_window(monkeypatch):
+    from conftest import make_window
+    from views.reports import ReportsView
+
+    monkeypatch.setattr(ReportsView, "render_usage_tab", lambda self: None)
+    monkeypatch.setattr(ReportsView, "render_low_stock_tab", lambda self: None)
+    root = make_window(ctk.CTk)
+    root.geometry("740x650+0+0")
+    try:
+        view = ReportsView(root, user_info={"role": "Admin"})
+        view.pack(fill="both", expand=True)
+        root.update()
+        picker = view.seg_btn
+        search = view.report_search
+        dates = view.date_filter_frame
+        assert picker.winfo_rootx() < search.winfo_rootx()
+        assert picker.winfo_rooty() < dates.winfo_rooty()
+        assert search.winfo_rootx() + search.winfo_width() <= root.winfo_rootx() + root.winfo_width()
+        assert dates.winfo_rootx() + dates.winfo_width() <= root.winfo_rootx() + root.winfo_width()
+
+        view.switch_tab("⭣ Low Stock")
+        root.update()
+        assert not dates.winfo_manager()
+    finally:
+        root.destroy()

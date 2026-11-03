@@ -19,6 +19,8 @@ MAX_SEARCH = 64
 MAX_QTY = Decimal("100000")
 MAX_PRICE = Decimal("99999999.99")      # DECIMAL(10,2)
 MAX_PASSWORD_BYTES = 72                 # bcrypt hard limit; bcrypt 5.0 raises ValueError above it
+DIVISIBLE_UNITS = frozenset({"boxes", "sets", "kg", "packs", "liters", "rolls", "meters", "feet"})
+UNITS = DIVISIBLE_UNITS | {"pcs"}
 
 TAG_ID_RE = re.compile(r"^[A-Z0-9][A-Z0-9-]{2,31}$")
 EMPLOYEE_ID_RE = re.compile(r"^(ADM|STF|WKR)-\d{4}-\d{3,}$")
@@ -47,6 +49,23 @@ def clean_text(value, *, max_len: int = MAX_NAME, field: str = "Value", required
     if len(value) > max_len:
         raise ValidationError(f"{field} must be at most {max_len} characters.")
     return value
+
+
+def clean_person_name(value, *, field="Full Name", required=True, max_len=MAX_NAME):
+    """Names may contain spaces and common punctuation, but never digits or control text."""
+    name = clean_text(value, max_len=max_len, field=field, required=required)
+    if name and (not any(ch.isalpha() for ch in name) or
+                 any(not (ch.isalpha() or ch.isspace() or ch in "-'.’,") for ch in name)):
+        raise ValidationError(f"{field} must use letters, spaces, apostrophes, commas, periods or hyphens; no numbers.")
+    return name
+
+
+def clean_named_label(value, *, field, max_len=MAX_NAME, required=True):
+    """A project/tool name needs a word; digits are allowed for phases and sizes."""
+    name = clean_text(value, max_len=max_len, field=field, required=required)
+    if name and not any(ch.isalpha() for ch in name):
+        raise ValidationError(f"{field} must include a name, not just numbers or symbols.")
+    return name
 
 
 def clean_search(query) -> str:
@@ -163,6 +182,20 @@ def parse_quantity(value, *, whole: bool = False, field: str = "Quantity", allow
     return q.quantize(Decimal("0.01"))
 
 
+def whole_quantity_only(item_type, unit_of_measure) -> bool:
+    """Equipment and consumables counted in pieces use whole units throughout the system."""
+    return (item_type or "Equipment") != "Consumable" or (unit_of_measure or "pcs").strip().lower() not in DIVISIBLE_UNITS
+
+
+def item_quantity(value, item_type, unit_of_measure, *, field="Quantity", allow_zero=False) -> Decimal:
+    whole = whole_quantity_only(item_type, unit_of_measure)
+    q = parse_quantity(value, field=field, allow_zero=allow_zero)
+    if whole and q != q.to_integral_value():
+        label = "equipment" if item_type != "Consumable" else f"{unit_of_measure or 'pcs'}"
+        raise ValidationError(f"{field} must be a whole number for {label}.")
+    return q
+
+
 def fmt_qty(x) -> str:
     """Quantity for people: 2.00 -> '2', 2.50 -> '2.5', 100 -> '100'. (Decimal's own ``:g`` keeps trailing zeros: '2.00'.)"""
     try:
@@ -200,6 +233,8 @@ def parse_iso_date(value, *, field: str = "Date", required: bool = True):
 
 def validate_date_range(start, end, *, field_start="Start date", field_end="End date"):
     """[4-DATE] start <= end (hard rule, mirrored by CHECK constraint chk_projects_dates)."""
+    if (start is None) != (end is None):
+        raise ValidationError(f"Enter both {field_start.lower()} and {field_end.lower()}, or leave both blank.")
     if isinstance(start, date) and isinstance(end, date) and start > end:
         raise ValidationError(f"{field_start} must be on or before {field_end.lower()}.")
 

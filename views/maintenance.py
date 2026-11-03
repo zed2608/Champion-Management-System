@@ -42,7 +42,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        C.PageHeader(top_bar, "Maintenance & Archive", "Repairs, archives, service forecasts and backups").pack(side="top", anchor="w")
+        C.PageHeader(top_bar, "Maintenance & Archive", "Repairs, archives, service forecasts and backups").pack(fill="x")
 
         tab_labels = [
             "🔧 Issues & Repairs",
@@ -53,13 +53,10 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             "💾 Backup & Restore",
         ]
         self.tab_var = ctk.StringVar(value=tab_labels[0])
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tab_labels, variable=self.tab_var,
-            command=self.switch_tab,
-            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY,
-            selected_hover_color=T.PRIMARY_HOVER
-        )
-        self.seg_btn.pack(side="top", anchor="w", pady=(10, 0))
+        section_row = ctk.CTkFrame(top_bar, fg_color="transparent")
+        section_row.pack(fill="x", pady=(10, 0))
+        self.seg_btn = C.section_menu(section_row, tab_labels, self.tab_var, self.switch_tab)
+        self.seg_btn.pack(side="right")
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
         self.tab_content.grid(
@@ -194,7 +191,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         self.issues_search_var = ctk.StringVar()
         self.issues_search = C.field(filter_row, placeholder_text="Search tool or reporter...",
                                           width=200, textvariable=self.issues_search_var)
-        self.issues_search.pack(side="left", padx=(0, 5))
+        self.issues_search.pack(side="right")
 
         self._issues_timer = None
 
@@ -224,6 +221,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         if not tool_input or not reported_by:
             messagebox.showerror("Error", "Tool ID/Tag and Reported By are required.",
                                  parent=self.winfo_toplevel())
+            return
+        if not C.confirm("Confirm issue", f"Record {qty} unit(s) of {tool_input} as {condition}?\n\nThis may change available stock.", parent=self.winfo_toplevel()):
             return
         try:
             # [CONCURRENCY][RBAC] one transaction: locks the tool's stock, moves exactly these units, creates the ticket
@@ -306,7 +305,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         modal = ctk.CTkToplevel(self)
         modal.title(f"Issue #{row['issue_id']} — {row['tool_name']}")
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
 
         modal.update_idletasks()
@@ -358,6 +357,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         notes_entry.pack(fill="x", pady=(5, 10))
 
         def resolve_issue():
+            if not C.confirm("Confirm resolution", f"Resolve issue #{row['issue_id']} as {cond_menu.get()}?\nNew units: {restock_entry.get().strip() or '0'}", parent=modal):
+                return
             try:
                 # [CONCURRENCY] one transaction: locks the ticket (a stale modal is refused) and the stock, moves the units
                 out = mnt.resolve_issue(self.user_info, row["issue_id"], cond_menu.get(),
@@ -392,6 +393,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top = ctk.CTkFrame(frame, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(20, 5))
         ctk.CTkLabel(top, text="Wear & Maintenance Forecast", font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
+        self.wear_search = C.field(top, placeholder_text="Search tool or category...", width=C.SEARCH_WIDTH)
+        self.wear_search.pack(side="right")
+        self.wear_search.bind("<Return>", lambda e: self.load_wear())
         ctk.CTkLabel(frame, text="Hours each tool has been out on jobs (open issuances count up to now), how much of its service interval is used, "
                                  "and when service is due at the last 30 days' pace. Click a row to set that tool's own interval or mark it serviced.",
                      font=T.font(12), text_color=T.TEXT_MUTED, wraplength=900, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
@@ -413,6 +417,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                     ("Damage / 100 h", 2, 100), ("Flags", 4, 170)]
 
     def load_wear(self, keep_page=False):
+        search = self.wear_search.get().strip().casefold()
         for w in self._wear_scroll.winfo_children():
             w.destroy()
         loading = ctk.CTkLabel(self._wear_scroll, text="Calculating...", text_color=T.TEXT_MUTED, font=T.font(12, "italic"))
@@ -426,6 +431,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                 msg = friendly_message(e)
                 self.post_ui(lambda: loading.winfo_exists() and loading.configure(text=msg, text_color=T.DANGER_TEXT))
                 return
+            rows = [r for r in rows if search in str(r.get("name") or "").casefold() or search in str(r.get("category") or "").casefold()]
             self.post_ui(lambda: self._show_wear(rows, defaults, loading))
         threading.Thread(target=work, daemon=True).start()
 
@@ -449,6 +455,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
 
     def save_wear_default(self):
         cat, hours = self.wear_cat.get().strip(), self.wear_hours.get().strip()
+        if not C.confirm("Save service interval", f"Set the service interval for {cat or 'this category'} to {hours or 'the entered value'} hours?", parent=self.winfo_toplevel()):
+            return
         try:
             wear_forecast.set_category_default(self.user_info, cat, hours)
         except Exception as e:
@@ -463,7 +471,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         modal = ctk.CTkToplevel(self)
         modal.title(f"Service - {row['name']}")
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         modal.geometry("460x330")
         ctk.CTkLabel(modal, text=row["name"], font=T.font(16, "bold")).pack(pady=(18, 4))
@@ -473,6 +481,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         entry.pack(fill="x", padx=24, pady=(4, 10))
 
         def save():
+            if not C.confirm("Save service interval", f"Update the service interval for {row['name']}?", parent=modal):
+                return
             try:
                 wear_forecast.set_tool_interval(self.user_info, row["tool_id"], entry.get().strip())
             except Exception as e:
@@ -482,7 +492,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             self.load_wear()
 
         def serviced():
-            if not messagebox.askyesno("Mark serviced", f"Restart the service clock of '{row['name']}' from now?", parent=modal):
+            if not C.confirm("Mark serviced", f"Restart the service clock of '{row['name']}' from now?", parent=modal):
                 return
             try:
                 wear_forecast.mark_serviced(self.user_info, row["tool_id"])
@@ -508,6 +518,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Archived & Decommissioned Tools",
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
+        self.tools_search = C.field(top, placeholder_text="Search name or category...", width=C.SEARCH_WIDTH)
+        self.tools_search.pack(side="right")
+        self.tools_search.bind("<KeyRelease>", lambda e: self.load_archived_tools())
 
         self._tools_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
@@ -516,6 +529,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         return frame
 
     def load_archived_tools(self, keep_page=False):
+        self._tools_query = self.tools_search.get()
         if getattr(self, "_tools_table", None) is None or not self._tools_table.winfo_exists():
             for w in self._tools_scroll.winfo_children():
                 w.destroy()
@@ -538,14 +552,15 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             return fetch_page(
                 cur, """SELECT t.tool_id, t.name, t.category, t.`condition`, IFNULL(t.archived_at, t.date_acquired) as archived_date,
                                IFNULL(i.quantity_total, 0) as qty_total""",
-                "FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id WHERE t.is_archived = 1", [],
+                "FROM tool t LEFT JOIN inventory i ON t.tool_id = i.tool_id WHERE t.is_archived = 1 "
+                "AND (t.name LIKE %s OR t.category LIKE %s)", [like_pattern(self._tools_query)] * 2,
                 "ORDER BY t.archived_at DESC, t.tool_id DESC", page, size)
         finally:
             if conn.is_connected():
                 conn.close()
 
     def restore_tool(self, tool_id):
-        if not messagebox.askyesno("Confirm Restore", f"Are you sure you want to restore Tool PID: {tool_id}?"):
+        if not C.confirm("Confirm Restore", f"Are you sure you want to restore Tool PID: {tool_id}?"):
             return
         try:
             res = inv_svc.restore_tool(self.user_info, tool_id)
@@ -571,6 +586,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Inactive / Archived Employees",
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
+        self.employees_search = C.field(top, placeholder_text="Search name or employee ID...", width=C.SEARCH_WIDTH)
+        self.employees_search.pack(side="right")
+        self.employees_search.bind("<KeyRelease>", lambda e: self.load_archived_employees())
 
         self._emp_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
@@ -578,6 +596,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         return frame
 
     def load_archived_employees(self, keep_page=False):
+        self._emp_query = self.employees_search.get()
         if getattr(self, "_emp_table", None) is None or not self._emp_table.winfo_exists():
             for w in self._emp_scroll.winfo_children():
                 w.destroy()
@@ -599,14 +618,15 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         try:
             cur = conn.cursor(dictionary=True)
             return fetch_page(cur, "SELECT user_id, employee_id, full_name, role, status, archived_at",
-                              "FROM `user` WHERE IFNULL(status, 'Inactive') != 'Active'", [],
+                              "FROM `user` WHERE IFNULL(status, 'Inactive') != 'Active' "
+                              "AND (full_name LIKE %s OR employee_id LIKE %s)", [like_pattern(self._emp_query)] * 2,
                               "ORDER BY archived_at DESC, user_id DESC", page, size)
         finally:
             if conn.is_connected():
                 conn.close()
 
     def restore_employee(self, user_id):
-        if not messagebox.askyesno("Confirm Restore", "Restore this employee to Active status? They will be able to log in (Staff/Admin) or receive tools (Workers) again."):
+        if not C.confirm("Confirm Restore", "Restore this employee to Active status? They will be able to log in (Staff/Admin) or receive tools (Workers) again."):
             return
         try:
             res = user_service.restore_user(self.user_info, user_id)
@@ -632,6 +652,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         top.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(top, text="Completed / Archived Projects",
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
+        self.projects_search = C.field(top, placeholder_text="Search project or client...", width=C.SEARCH_WIDTH)
+        self.projects_search.pack(side="right")
+        self.projects_search.bind("<KeyRelease>", lambda e: self.load_archived_projects())
 
         self._proj_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
@@ -639,6 +662,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         return frame
 
     def load_archived_projects(self, keep_page=False):
+        self._proj_query = self.projects_search.get()
         if getattr(self, "_proj_table", None) is None or not self._proj_table.winfo_exists():
             for w in self._proj_scroll.winfo_children():
                 w.destroy()
@@ -665,14 +689,15 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         try:
             cur = conn.cursor(dictionary=True)
             return fetch_page(cur, "SELECT project_id, name, client, status, end_date, archived_at",
-                              "FROM projects WHERE archived_at IS NOT NULL", [],
+                              "FROM projects WHERE archived_at IS NOT NULL AND (name LIKE %s OR client LIKE %s)",
+                              [like_pattern(self._proj_query)] * 2,
                               "ORDER BY archived_at DESC, project_id DESC", page, size)
         finally:
             if conn.is_connected():
                 conn.close()
 
     def restore_project(self, project_id):
-        if not messagebox.askyesno("Confirm Restore", f"Restore Project ID: {project_id}? It returns to the status it had before it was archived."):
+        if not C.confirm("Confirm Restore", f"Restore Project ID: {project_id}? It returns to the status it had before it was archived."):
             return
         try:
             res = proj_svc.restore_project(self.user_info, project_id)     # back to the status it had before archiving
@@ -701,8 +726,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         ctk.CTkLabel(frame,
-                     text="Create verified backups of the entire champion_db database and restore from a "
-                          "previous backup file (.sql). Always backup before making major system changes.",
+                     text="Create verified, encrypted backups of the entire database and restore from a "
+                          "Champion backup (.cftbak) or an older SQL backup (.sql).",
                      font=T.font(12), text_color=T.TEXT_MUTED,
                      wraplength=800, justify="left").pack(anchor="w", padx=20, pady=(0, 12))
 
@@ -720,8 +745,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(backup_card, text="💾  Create Backup",
                      font=T.font(14, "bold"), text_color=T.PRIMARY).pack(anchor="w", padx=15, pady=(14, 4))
         ctk.CTkLabel(backup_card,
-                     text="Exports the full database schema and all data to a .sql file.\n"
-                          "The backup is saved to a folder of your choice.",
+                     text="Exports all schema and data to an AES-256 encrypted .cftbak file.\n"
+                          "Keep its passphrase separate from the backup file.",
                      font=T.font(12), text_color=T.TEXT,
                      wraplength=340, justify="left").pack(anchor="w", padx=15, pady=(0, 8))
 
@@ -756,6 +781,14 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                                                placeholder_text="e.g., Before major update")
         self._backup_note_entry.pack(side="left", fill="x", expand=True)
 
+        pass_row = ctk.CTkFrame(backup_card, fg_color="transparent")
+        pass_row.pack(fill="x", padx=15, pady=(0, 4))
+        ctk.CTkLabel(pass_row, text="Passphrase:", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="left", padx=(0, 6))
+        self._backup_pass_entry = C.field(pass_row, placeholder_text="At least 12 characters", show="•")
+        self._backup_pass_entry.pack(side="left", fill="x", expand=True)
+        self._backup_pass_confirm = C.field(pass_row, placeholder_text="Repeat passphrase", show="•")
+        self._backup_pass_confirm.pack(side="left", fill="x", expand=True, padx=(6, 0))
+
         self._backup_btn = C.button(backup_card, kind="primary", text="⬇  Run Backup Now",
                                          
                                          
@@ -770,7 +803,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(restore_card, text="⬆  Restore from Backup",
                      font=T.font(14, "bold"), text_color=T.WARNING_TEXT).pack(anchor="w", padx=15, pady=(14, 4))
         ctk.CTkLabel(restore_card,
-                     text="Restores the database from a selected .sql backup file.\n"
+                     text="Restores the database from a .cftbak or older .sql file.\n"
                           "⚠ WARNING: This will OVERWRITE all current data.",
                      font=T.font(12), text_color=T.TEXT,
                      wraplength=340, justify="left").pack(anchor="w", padx=15, pady=(0, 8))
@@ -802,6 +835,12 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                                                 placeholder_text="e.g., Rolling back after failed update")
         self._restore_note_entry.pack(side="left", fill="x", expand=True)
 
+        restore_pass_row = ctk.CTkFrame(restore_card, fg_color="transparent")
+        restore_pass_row.pack(fill="x", padx=15, pady=(0, 4))
+        ctk.CTkLabel(restore_pass_row, text="Passphrase:", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="left", padx=(0, 6))
+        self._restore_pass_entry = C.field(restore_pass_row, placeholder_text="Required for .cftbak", show="•")
+        self._restore_pass_entry.pack(side="left", fill="x", expand=True)
+
         self._restore_btn = ctk.CTkButton(restore_card, text="⬆  Restore Database",
                                           fg_color=T.WARNING_TEXT, hover_color=T.WARNING_TEXT,
                                           font=T.font(12, "bold"),
@@ -824,6 +863,9 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                       
                       command=self.load_backup_history).pack(side="right")
 
+        self.backup_search = C.field(hist_hdr, placeholder_text="Search backup name or status...", width=C.SEARCH_WIDTH)
+        self.backup_search.pack(side="right")
+        self.backup_search.bind("<Return>", lambda e: self.load_backup_history())
         self._backup_hist_scroll = ctk.CTkScrollableFrame(
             frame, fg_color="transparent")
         self._backup_hist_scroll.pack(
@@ -842,7 +884,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
     def _browse_restore_file(self):
         filepath = filedialog.askopenfilename(
             title="Select Backup File to Restore",
-            filetypes=[("SQL Backup Files", "*.sql"), ("All Files", "*.*")],
+            filetypes=[("Champion Encrypted Backups", "*.cftbak"), ("Older SQL Backups", "*.sql"), ("All Files", "*.*")],
             parent=self.winfo_toplevel()
         )
         if filepath:
@@ -853,6 +895,15 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         if not dest_folder or dest_folder == "(click Browse to choose folder)":
             messagebox.showerror("No Destination", "Please choose a folder to save the backup.", parent=self.winfo_toplevel())
             return
+        passphrase = self._backup_pass_entry.get()
+        if len(passphrase) < 12:
+            messagebox.showerror("Passphrase Required", "Use a backup passphrase with at least 12 characters.", parent=self.winfo_toplevel())
+            return
+        if passphrase != self._backup_pass_confirm.get():
+            messagebox.showerror("Passphrases Do Not Match", "Enter the same passphrase in both boxes.", parent=self.winfo_toplevel())
+            return
+        if not C.confirm("Create backup", f"Save a database backup in this folder?\n\n{dest_folder}", parent=self.winfo_toplevel()):
+            return
         # Tk values are read HERE, on the main thread; the worker thread never touches a widget.
         note = self._backup_note_entry.get().strip()
         custom_fname = self._backup_fname_entry.get().strip()
@@ -861,7 +912,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
 
         def _do_backup():
             try:
-                out = backup_service.create_backup(self.user_info, dest_folder, custom_fname, note)
+                out = backup_service.create_backup(self.user_info, dest_folder, custom_fname, note, passphrase=passphrase)
             except Exception as e:
                 msg = friendly_message(e)
                 self._after_safe(lambda: self._on_backup_done(False, None, None, msg))
@@ -891,6 +942,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             )
             self._backup_note_entry.delete(0, "end")
             self._backup_fname_entry.delete(0, "end")
+            self._backup_pass_entry.delete(0, "end")
+            self._backup_pass_confirm.delete(0, "end")
             self.load_backup_history()
         else:
             self._backup_status_lbl.configure(
@@ -906,12 +959,12 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
     def _run_restore(self):
         src_file = self._restore_src_var.get().strip()
         if not src_file or src_file == "(no file selected)":
-            messagebox.showerror("No File Selected", "Please select a .sql backup file to restore from.", parent=self.winfo_toplevel())
+            messagebox.showerror("No File Selected", "Please select a .cftbak or .sql backup file to restore from.", parent=self.winfo_toplevel())
             return
         if not os.path.isfile(src_file):
             messagebox.showerror("File Not Found", "The selected backup file no longer exists.", parent=self.winfo_toplevel())
             return
-        confirmed = messagebox.askyesno(
+        confirmed = C.confirm(
             "⚠ Confirm Restore",
             f"This will REPLACE all current data with the contents of:\n\n{os.path.basename(src_file)}\n\n"
             "Before anything is changed, the system saves an automatic safety backup of the current data.\n\n"
@@ -921,12 +974,16 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         if not confirmed:
             return
         restore_note = self._restore_note_entry.get().strip()          # read on the main thread
+        restore_passphrase = self._restore_pass_entry.get()
+        if src_file.lower().endswith(".cftbak") and not restore_passphrase:
+            messagebox.showerror("Passphrase Required", "Enter the passphrase for this encrypted backup.", parent=self.winfo_toplevel())
+            return
         self._restore_btn.configure(state="disabled", text="⏳ Restoring...")
         self._backup_status_lbl.configure(text="⟳ Checking the file, saving a safety backup, then restoring...", text_color=T.WARNING_TEXT)
 
         def _do_restore():
             try:
-                res = backup_service.restore_backup(self.user_info, src_file, restore_note)
+                res = backup_service.restore_backup(self.user_info, src_file, restore_note, passphrase=restore_passphrase)
             except Exception as e:
                 msg = friendly_message(e)
                 self._after_safe(lambda: self._on_restore_done(False, msg))
@@ -951,6 +1008,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             )
             self._restore_src_var.set("(no file selected)")
             self._restore_note_entry.delete(0, "end")
+            self._restore_pass_entry.delete(0, "end")
             self.load_backup_history()
         else:
             self._backup_status_lbl.configure(
@@ -966,12 +1024,13 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
     def load_backup_history(self):
         if not hasattr(self, "_backup_hist_scroll"):
             return
+        self._backup_query = self.backup_search.get()
         if getattr(self, "_backup_table", None) is None or not self._backup_table.winfo_exists():
             for w in self._backup_hist_scroll.winfo_children():
                 w.destroy()
 
             def fetch(page, size):
-                rows, total = backup_service.history_page(self.user_info, size, page * size)
+                rows, total = backup_service.history_page(self.user_info, size, page * size, self._backup_query)
                 return rows, PageInfo(page, size, total)
 
             def fetch_clamped(page, size):                 # the service returns the total; clamp here if the list shrank

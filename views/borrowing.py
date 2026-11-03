@@ -13,6 +13,7 @@ from pyzbar.pyzbar import decode, ZBarSymbol
 import os
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta, date as _date
+from decimal import Decimal
 import calendar as _cal
 import threading
 from ui import components as C
@@ -54,15 +55,14 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
         top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 15))
 
-        C.PageHeader(top_bar, "Issuance & Retrieval", "Issue tools to workers and take them back").pack(side="left")
+        C.PageHeader(top_bar, "Issuance & Retrieval", "Issue tools to workers and take them back").pack(fill="x")
 
         tabs = ["📋 Deployment History", "📅 Deployment Schedule"]
         self.tab_var = ctk.StringVar(value="📋 Deployment History")
 
-        self.seg_btn = ctk.CTkSegmentedButton(
-            top_bar, values=tabs, variable=self.tab_var, command=self.switch_tab,
-            fg_color=T.SURFACE_MUTED, selected_color=T.PRIMARY, selected_hover_color=T.PRIMARY_HOVER
-        )
+        section_row = ctk.CTkFrame(top_bar, fg_color="transparent")
+        section_row.pack(fill="x", pady=(8, 0))
+        self.seg_btn = C.section_menu(section_row, tabs, self.tab_var, self.switch_tab)
         self.seg_btn.pack(side="right")
 
         self.tab_content = ctk.CTkFrame(self, fg_color="transparent")
@@ -365,15 +365,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
     def open_issuance_modal(self):
         self.issuance_modal = ctk.CTkToplevel(self)
         self.issuance_modal.title("Issue Tools")
-        self.issuance_modal.geometry("500x700")
+        C.fit_window(self.issuance_modal, 500, 700)
         self.issuance_modal.configure(fg_color=T.SURFACE)
-        self.issuance_modal.attributes("-topmost", True)
+        C.keep_above(self.issuance_modal)
         self.issuance_modal.grab_set()
-        
-        self.issuance_modal.update_idletasks()
-        x = (self.issuance_modal.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.issuance_modal.winfo_screenheight() // 2) - (700 // 2)
-        self.issuance_modal.geometry(f"+{x}+{y}")
         
         form_card = ctk.CTkScrollableFrame(self.issuance_modal, fg_color=T.SURFACE, corner_radius=0)
         form_card.pack(fill="both", expand=True)
@@ -413,9 +408,9 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.cart_frame.pack(fill="x", padx=20, pady=(10, 20))
         self.refresh_cart_ui() 
 
-        C.button(form_card, kind="primary", text="Issue Tools & Print Receipt", command=self.execute_borrow).pack(fill="x", padx=20, pady=(0, 20))
-        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(0, 20))
+        btn_row = ctk.CTkFrame(self.issuance_modal, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 16))
+        C.button(btn_row, kind="primary", text="Issue & Print Receipt", command=self.execute_borrow).pack(side="left", fill="x", expand=True, padx=(0, 8))
         C.button(btn_row, kind="secondary", text="Cancel", width=80, command=self.issuance_modal.destroy).pack(side="right")
         
         self.active_borrow_user_id = None
@@ -429,15 +424,10 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
     def open_retrieval_modal(self):
         self.retrieval_modal = ctk.CTkToplevel(self)
         self.retrieval_modal.title("Retrieve Tools")
-        self.retrieval_modal.geometry("500x650")
+        C.fit_window(self.retrieval_modal, 500, 650)
         self.retrieval_modal.configure(fg_color=T.SURFACE)
-        self.retrieval_modal.attributes("-topmost", True)
+        C.keep_above(self.retrieval_modal)
         self.retrieval_modal.grab_set()
-        
-        self.retrieval_modal.update_idletasks()
-        x = (self.retrieval_modal.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.retrieval_modal.winfo_screenheight() // 2) - (650 // 2)
-        self.retrieval_modal.geometry(f"+{x}+{y}")
         
         form_card = ctk.CTkScrollableFrame(self.retrieval_modal, fg_color=T.SURFACE, corner_radius=0)
         form_card.pack(fill="both", expand=True)
@@ -488,9 +478,9 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         self.r_qty.pack(fill="x", pady=(5, 0))
         self.r_qty.insert(0, "1")
 
-        C.button(form_card, kind="secondary", text="Confirm Retrieval & Restock", command=self.execute_return).pack(fill="x", padx=20, pady=(0, 20))
-        btn_row = ctk.CTkFrame(form_card, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(10, 20))
+        btn_row = ctk.CTkFrame(self.retrieval_modal, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 16))
+        C.button(btn_row, kind="primary", text="Confirm Retrieval & Restock", command=self.execute_return).pack(side="left", fill="x", expand=True, padx=(0, 8))
         C.button(btn_row, kind="secondary", text="Cancel", width=80, command=self.retrieval_modal.destroy).pack(side="right")
         
         self.active_return_user_id = None
@@ -515,9 +505,12 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(title_col, text="Click any row to view details or reprint receipt.",
                      font=T.font(12), text_color=T.TEXT_MUTED).pack(anchor="w")
 
+        action_bar = ctk.CTkFrame(table_card, fg_color="transparent")
+        action_bar.pack(fill="x", padx=20, pady=(0, 8))
+        controls = ctk.CTkFrame(action_bar, fg_color="transparent")
+        controls.pack(side="right")
         self.search_var = ctk.StringVar()
-        self.search_entry = C.field(top_bar, placeholder_text="Search Name or Tag...", width=200, textvariable=self.search_var)
-        self.search_entry.pack(side="right", padx=(10, 0))
+        self.search_entry = C.field(controls, placeholder_text="Search Name or Tag...", width=C.SEARCH_WIDTH, textvariable=self.search_var)
         
         self._search_timer = None
         def on_search_change(*args):
@@ -526,11 +519,11 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             self._search_timer = self.after(300, self.load_transaction_history)
         self.search_var.trace_add("write", on_search_change)
                       
-        self.history_filter = ctk.CTkOptionMenu(top_bar, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Retrieved", "Overdue", "A-Z (Item)"], width=160, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.load_transaction_history())
-        self.history_filter.pack(side="right", padx=(10, 5))
-
-        C.button(top_bar, kind="secondary", text="📥 Retrieve Tools", width=120, command=self.open_retrieval_modal).pack(side="right", padx=(5, 10))
-        C.button(top_bar, kind="primary", text="📤 Issue Tools", width=110, command=self.open_issuance_modal).pack(side="right", padx=(10, 0))
+        self.history_filter = ctk.CTkOptionMenu(controls, values=["Latest", "Issue (Type)", "Retrieval (Type)", "All Active", "All Retrieved", "Overdue", "A-Z (Item)"], width=160, fg_color=T.SURFACE_ALT, text_color=T.TEXT, command=lambda e: self.load_transaction_history())
+        C.button(controls, kind="primary", text="📤 Issue Tools", width=110, command=self.open_issuance_modal).pack(side="left", padx=(0, 6))
+        C.button(controls, kind="secondary", text="📥 Retrieve Tools", width=120, command=self.open_retrieval_modal).pack(side="left", padx=(0, 12))
+        self.history_filter.pack(side="left", padx=(0, 10))
+        self.search_entry.pack(side="left")
 
         self.data_scroll = ctk.CTkScrollableFrame(table_card, fg_color="transparent")
         self.data_scroll.pack(fill="both", expand=True, padx=20, pady=(10, 20))
@@ -642,7 +635,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         modal.geometry("520x550")
         modal.minsize(400, 450)
         modal.configure(fg_color=T.SURFACE)
-        modal.attributes("-topmost", True)
+        C.keep_above(modal)
         modal.grab_set()
         modal.update_idletasks()
         x = (modal.winfo_screenwidth() // 2) - 260
@@ -905,26 +898,38 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             messagebox.showerror("Unauthorized", f"'{tool.name}' is NOT approved for this project.", parent=self.issuance_modal)
             return
 
-        allowed_qty = float(req['req_qty'])
-        already_issued = float(req['issued_qty'])
-        in_cart = sum(item['qty_borrowed'] for item in self.borrow_cart if item['id'] == tool.tool_id)
-        available = float(tool.available)
+        allowed_qty = Decimal(str(req['req_qty']))
+        already_issued = Decimal(str(req['issued_qty']))
+        in_cart = sum((item['qty_borrowed'] for item in self.borrow_cart if item['id'] == tool.tool_id), Decimal(0))
+        available = Decimal(str(tool.available))
+        whole = v.whole_quantity_only(tool.item_type, tool.unit_of_measure)
+        step = Decimal('1') if whole else Decimal('0.5')
+        if not whole:
+            entered = C.ask_text("Quantity to issue", f"How many {tool.unit_of_measure} of {tool.name}?\nUp to 2 decimal places.",
+                                 initialvalue="1", parent=self.issuance_modal)
+            if entered is None:
+                return
+            try:
+                step = v.item_quantity(entered, tool.item_type, tool.unit_of_measure)
+            except v.ValidationError as e:
+                return messagebox.showwarning("Check quantity", str(e), parent=self.issuance_modal)
 
-        if (already_issued + in_cart + 1) > allowed_qty:
+        if (already_issued + in_cart + step) > allowed_qty:
             messagebox.showerror("Limit Reached", f"Cannot add '{tool.name}'.\nApproved Limit: {fmt_qty(allowed_qty)}\nAlready Issued: {fmt_qty(already_issued)}\nIn Cart: {fmt_qty(in_cart)}", parent=self.issuance_modal)
             return
-        if (in_cart + 1) > available:
+        if (in_cart + step) > available:
             messagebox.showerror("Out of Stock", f"Cannot add '{tool.name}'.\nOnly {fmt_qty(available)} left in the warehouse.", parent=self.issuance_modal)
             return
 
         existing = next((item for item in self.borrow_cart if item['id'] == tool.tool_id), None)
         if existing:
-            existing['qty_borrowed'] += 1
+            existing['qty_borrowed'] += step
             existing['max_qty'] = available
         else:
             self.borrow_cart.append({
                 "id": tool.tool_id, "name": tool.name, "cond": tool.condition,
-                "tag": tool.tag_id, "qty_borrowed": 1, "max_qty": available
+                "tag": tool.tag_id, "qty_borrowed": step, "max_qty": available,
+                "step": step, "uom": tool.unit_of_measure
             })
 
         self.refresh_cart_ui()
@@ -935,8 +940,8 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
         new_qty = item['qty_borrowed'] + change
         req = next((r for r in self.current_project_reqs if r['tool_id'] == item['id']), None)
         if not req: return
-        allowed_qty = float(req['req_qty'])
-        already_issued = float(req['issued_qty'])
+        allowed_qty = Decimal(str(req['req_qty']))
+        already_issued = Decimal(str(req['issued_qty']))
         
         if (already_issued + new_qty) > allowed_qty:
             messagebox.showwarning("Limit Reached", f"You cannot exceed the approved limit of {fmt_qty(allowed_qty)}.", parent=self.issuance_modal)
@@ -963,10 +968,12 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             row.pack(fill="x", pady=2, padx=5)
             row.pack_propagate(False)
             ctk.CTkLabel(row, text=f"✓ {item['name']}  |  Tag: {item['tag']}", font=T.font(12, "bold"), text_color=T.PRIMARY).pack(side="left", padx=10, pady=5)
-            ctk.CTkButton(row, text="✕", width=25, height=25, fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT, hover_color=T.DANGER_BORDER, command=lambda idx=i: self.remove_from_cart(idx)).pack(side="right", padx=(5, 10))
-            C.button(row, compact=True, kind="secondary", text="+", width=25, command=lambda idx=i: self.update_cart_qty(idx, 1)).pack(side="right", padx=2)
-            ctk.CTkLabel(row, text=f"Qty: {item['qty_borrowed']}", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="right", padx=8)
-            C.button(row, compact=True, kind="secondary", text="-", width=25, command=lambda idx=i: self.update_cart_qty(idx, -1)).pack(side="right", padx=2)
+            C.button(row, text="✕", kind="danger", compact=True, width=28,
+                     command=lambda idx=i: self.remove_from_cart(idx)).pack(side="right", padx=(5, 10))
+            step = item.get('step', Decimal(1))
+            C.button(row, compact=True, kind="secondary", text="+", width=25, command=lambda idx=i, s=step: self.update_cart_qty(idx, s)).pack(side="right", padx=2)
+            ctk.CTkLabel(row, text=f"Qty: {fmt_qty(item['qty_borrowed'])} {item.get('uom', '')}", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="right", padx=8)
+            C.button(row, compact=True, kind="secondary", text="-", width=25, command=lambda idx=i, s=step: self.update_cart_qty(idx, -s)).pack(side="right", padx=2)
 
     def execute_borrow(self):
         if not self.active_borrow_user_id:
@@ -979,6 +986,9 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             return messagebox.showerror("Error", "The cart is empty! Scan at least one tool.", parent=self.issuance_modal)
 
         cart = [{"tool_id": it['id'], "qty": it['qty_borrowed']} for it in self.borrow_cart]
+        summary = "\n".join(f"{it['name']}: {fmt_qty(it['qty_borrowed'])} {it.get('uom', '')}" for it in self.borrow_cart)
+        if not C.confirm("Confirm issue", f"Issue these items to {self.active_borrow_user_name} for {selected_proj}?\n\n{summary}", parent=self.issuance_modal):
+            return
         try:
             # [CONCURRENCY] ONE transaction: lock stock + project quota, re-validate, decrement, record, commit (or roll back all)
             res = iss.issue(self.user_info, self.active_borrow_user_id, proj_id, cart, selected_proj)
@@ -1081,7 +1091,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             preview = ctk.CTkToplevel(self)
             preview.title(f"Receipt — TRN-{trans_id_range}")
             preview.configure(fg_color=T.SURFACE)
-            preview.attributes("-topmost", True)
+            C.keep_above(preview)
             preview.grab_set()
             preview.update_idletasks()
             pw, ph = 840, min(img.height // 2 + 120, 700)
@@ -1139,6 +1149,7 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             return
         self.active_return_tool_id = rec['tool_id']
         self.active_return_item_type = rec['item_type']
+        self.active_return_uom = rec.get('unit_of_measure') or 'pcs'
         self.max_returnable = float(rec['deployed'])
         self.r_record_info.configure(text=f"✓ Tool Identified: {rec['name']}\nCurrently Deployed Out: {_fmt_qty(rec['deployed'])}", text_color=T.SUCCESS_TEXT)
         self.r_qty.delete(0, 'end'); self.r_qty.insert(0, "1")
@@ -1168,6 +1179,12 @@ class IssuanceView(UiMixin, ctk.CTkFrame):
             return messagebox.showwarning("Condition Details Required",
                                           f"Please describe what is wrong before returning an item as '{new_cond}'.",
                                           parent=self.retrieval_modal)
+        try:
+            v.item_quantity(self.r_qty.get(), self.active_return_item_type, self.active_return_uom, field="Return quantity")
+        except v.ValidationError as e:
+            return messagebox.showwarning("Check quantity", str(e), parent=self.retrieval_modal)
+        if not C.confirm("Confirm return", f"Return {self.r_qty.get()} {self.active_return_uom} as {new_cond}?\n\nThis will update stock and the project record.", parent=self.retrieval_modal):
+            return
         try:
             # [CONCURRENCY][UNHAPPY-PATH] one transaction: close the issuance rows, move the units (stock / maintenance / lost),
             # create the Maintenance ticket for anything that is not Good, commit. Any failure rolls all of it back.

@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from ui import theme as T       # noqa: E402
+from ui import components as C   # noqa: E402
 import check_contrast as cc      # noqa: E402
 
 
@@ -46,3 +47,15 @@ def test_fonts_come_from_the_scale_only():
     assert T.SIZES == (12, 14, 16, 20, 28, 40)
     assert (T.ANIM_FAST, T.ANIM_NORMAL, T.ANIM_SLOW) == (120, 200, 320)
     assert all(v % 4 == 0 for v in T.SPACE.values())
+
+
+@pytest.mark.parametrize("label,expected", [
+    ("+ Add Project", "accent"), ("+ Add New Item", "accent"),
+    ("📤 Issue Tools", "accent"), ("+ Register New User", "accent"),
+    ("+ Add Guide", "accent"), ("⎙ Export PDF", "accent"),
+    ("Confirm Retrieval & Restock", "accent"), ("📥 Retrieve Tools", "info"),
+    ("Cancel", "danger"), ("Remove", "danger"), ("Delete", "danger"),
+    ("Clear", "danger"), ("Apply", "primary"), ("Search", "secondary"),
+])
+def test_action_labels_choose_consistent_colors(label, expected):
+    assert C.action_kind(label, "secondary" if label == "Search" else "primary") == expected

@@ -46,20 +46,22 @@ class PagedTable(ctk.CTkFrame):
     # ---- layout ---------------------------------------------------------------------------------------------------------------
     def _build_bar(self):
         bar = ctk.CTkFrame(self, fg_color="transparent")
-        bar.pack(fill="x", pady=(0, 4))
+        bar.pack(fill="x", pady=(0, 8))
         self.info_lbl = ctk.CTkLabel(bar, text="", font=T.font(12), text_color=T.TEXT_SECONDARY)
         self.info_lbl.pack(side="left")
-        self.next_btn = C.button(bar, "Next ▶", lambda: self.goto(self.page + 1), "secondary", compact=True, width=70)
-        self.last_btn = C.button(bar, "Last ⏭", lambda: self.goto(10 ** 9), "secondary", compact=True, width=60)
-        self.page_lbl = ctk.CTkLabel(bar, text="Page 1 of 1", font=T.font(12, "bold"), width=90)
-        self.prev_btn = C.button(bar, "◀ Prev", lambda: self.goto(self.page - 1), "secondary", compact=True, width=70)
-        self.first_btn = C.button(bar, "⏮ First", lambda: self.goto(0), "secondary", compact=True, width=60)
-        self.size_menu = ctk.CTkOptionMenu(bar, values=[str(s) for s in PAGE_SIZES], width=70, height=26, command=self._size_changed)
+        controls = ctk.CTkFrame(bar, fg_color="transparent")
+        controls.pack(side="right")
+        self.first_btn = C.button(controls, "⏮ First", lambda: self.goto(0), "secondary", compact=True, width=60)
+        self.prev_btn = C.button(controls, "◀ Prev", lambda: self.goto(self.page - 1), "secondary", compact=True, width=70)
+        self.page_lbl = ctk.CTkLabel(controls, text="Page 1 of 1", font=T.font(12, "bold"), width=90)
+        self.next_btn = C.button(controls, "Next ▶", lambda: self.goto(self.page + 1), "secondary", compact=True, width=70)
+        self.last_btn = C.button(controls, "Last ⏭", lambda: self.goto(10 ** 9), "secondary", compact=True, width=60)
+        self.size_menu = ctk.CTkOptionMenu(controls, values=[str(s) for s in PAGE_SIZES], width=70, height=26, command=self._size_changed)
         self.size_menu.set(str(self.page_size))
-        for w in (self.last_btn, self.next_btn, self.page_lbl, self.prev_btn, self.first_btn):
-            w.pack(side="right", padx=2)
-        ctk.CTkLabel(bar, text="Rows:", font=T.font(12), text_color=T.TEXT_SECONDARY).pack(side="right", padx=(8, 2))
-        self.size_menu.pack(side="right", padx=2)
+        ctk.CTkLabel(controls, text="Rows:", font=T.font(12), text_color=T.TEXT_SECONDARY).pack(side="left", padx=(0, 4))
+        self.size_menu.pack(side="left", padx=(0, 12))
+        for w in (self.first_btn, self.prev_btn, self.page_lbl, self.next_btn, self.last_btn):
+            w.pack(side="left", padx=2)
 
     def _build_grid(self):
         self.grid_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -73,7 +75,7 @@ class PagedTable(ctk.CTkFrame):
         self.message = ctk.CTkLabel(self.grid_frame, text="", text_color=T.TEXT_MUTED, font=T.font(12, "italic"))
 
     def _make_slot(self, index):
-        slot = {"row": None, "cells": [], "labels": [], "check": None, "check_var": None}
+        slot = {"row": None, "cells": [], "labels": [], "check": None, "check_var": None, "check_hint": None}
         for col, (_title, _w, minsize) in enumerate(self.columns):
             cell = ctk.CTkFrame(self.grid_frame, corner_radius=0, cursor="hand2" if self._on_click else "")
             cell.grid(row=index + 1, column=col, sticky="nsew")
@@ -90,9 +92,16 @@ class PagedTable(ctk.CTkFrame):
                 continue
             if self._checkbox and col == self._checkbox["col"]:
                 var = ctk.StringVar(value="off")
-                chk = ctk.CTkCheckBox(cell, text="", variable=var, onvalue="on", offvalue="off", width=36, height=30,
+                # Keep a readable click target alongside the square. CTk only
+                # binds its canvas and text label, not its surrounding frame.
+                chk = ctk.CTkCheckBox(cell, text=self._checkbox.get("label", "Select"), variable=var,
+                                      onvalue="on", offvalue="off", width=76, height=30,
+                                      checkbox_width=20, checkbox_height=20, font=T.font(12),
                                       command=lambda s=slot: self._toggled(s))
                 chk.pack(expand=True, pady=self._cell_pady)
+                if self._checkbox.get("disabled_text"):
+                    slot["check_hint"] = ctk.CTkLabel(cell, text=self._checkbox["disabled_text"],
+                                                      font=T.font(12), text_color=T.TEXT_SECONDARY)
                 cell.bind("<Button-1>", lambda e, s=slot: self._cell_check_clicked(s))
                 slot["check"], slot["check_var"] = chk, var
                 slot["cells"].append(cell)
@@ -225,6 +234,16 @@ class PagedTable(ctk.CTkFrame):
                         cell.configure(cursor="hand2" if enabled else "arrow")
                         slot["check"].configure(cursor="hand2" if enabled else "arrow")
                         slot["check_var"].set("on" if (enabled and checked) else "off")
+                        hint = slot["check_hint"]
+                        if hint is not None:
+                            if enabled:
+                                hint.pack_forget()
+                                if not slot["check"].winfo_manager():
+                                    slot["check"].pack(expand=True, pady=self._cell_pady)
+                            else:
+                                slot["check"].pack_forget()
+                                if not hint.winfo_manager():
+                                    hint.pack(expand=True, pady=self._cell_pady)
                         continue
                     val = "" if values[col] is None else str(values[col])
                     color, bold = (T.TEXT, False)

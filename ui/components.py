@@ -1,4 +1,4 @@
-"""Uniform building blocks for every screen: cards, the four-button set, form fields, the page header and the "More" menu.
+"""Uniform building blocks for every screen: cards, action colors, form fields, the page header and the "More" menu.
 
 Screens call these instead of styling CustomTkinter widgets by hand, so every screen looks and sizes the same.
 They return ordinary CustomTkinter widgets (a button is still a CTkButton), so existing code that reads ``_text`` or calls ``configure`` keeps working.
@@ -6,6 +6,7 @@ Colours, fonts and sizes come from ui.theme only.
 """
 import tkinter as tk
 from tkinter import messagebox
+import re
 
 import customtkinter as ctk
 
@@ -20,7 +21,7 @@ def apply_widget_defaults():
     patch = {
         "CTkButton": dict(fg_color=both("PRIMARY"), hover_color=both("PRIMARY_HOVER"), text_color=both("ON_PRIMARY"), text_color_disabled=both("TEXT_MUTED"),
                           corner_radius=T.RADIUS_SM),
-        "CTkOptionMenu": dict(fg_color=both("SURFACE_ALT"), button_color=both("PRIMARY"), button_hover_color=both("PRIMARY_HOVER"),
+        "CTkOptionMenu": dict(fg_color=both("SURFACE_ALT"), button_color=both("BORDER"), button_hover_color=both("BORDER_STRONG"),
                               text_color=both("TEXT"), dropdown_fg_color=both("SURFACE"), dropdown_text_color=both("TEXT"),
                               dropdown_hover_color=both("SURFACE_MUTED"), corner_radius=T.RADIUS_SM),
         "CTkComboBox": dict(fg_color=both("SURFACE"), border_color=both("BORDER_STRONG"), button_color=both("PRIMARY"),
@@ -47,6 +48,8 @@ apply_widget_defaults()
 
 BUTTON_KINDS = {
     "primary": dict(fg_color=T.PRIMARY, hover_color=T.PRIMARY_HOVER, text_color=T.ON_PRIMARY),
+    "accent": dict(fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER, text_color=T.ON_ACCENT),
+    "info": dict(fg_color=T.INFO, hover_color=T.INFO_HOVER, text_color=T.ON_INFO),
     "secondary": dict(fg_color=T.BORDER, hover_color=T.BORDER_STRONG, text_color=T.TEXT),
     "ghost": dict(fg_color="transparent", hover_color=T.SURFACE_MUTED, text_color=T.PRIMARY),
     "danger": dict(fg_color=T.DANGER, hover_color=T.DANGER_HOVER, text_color=T.ON_DANGER),
@@ -54,10 +57,229 @@ BUTTON_KINDS = {
 BUTTON_HEIGHT = T.BUTTON_HEIGHT          # every normal button
 BUTTON_HEIGHT_COMPACT = 28               # buttons inside table rows
 FIELD_HEIGHT = T.FIELD_HEIGHT
+SEARCH_WIDTH = 200
+SECTION_MENU_WIDTH = 240
+
+
+def section_menu(parent, values, variable, command=None):
+    """Compact section picker used in module headers with many sections."""
+    return ctk.CTkOptionMenu(parent, values=values, variable=variable, command=command,
+                             width=SECTION_MENU_WIDTH, height=FIELD_HEIGHT,
+                             fg_color=T.SURFACE_ALT, text_color=T.TEXT)
+
+
+def fit_window(window, width, height, margin=60):
+    """Center a dialog while keeping its footer inside the screen."""
+    sw, sh = window.winfo_screenwidth(), window.winfo_screenheight()
+    w, h = min(width, max(320, sw - margin)), min(height, max(320, sh - margin))
+    window.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h) // 2)}")
+
+
+def keep_above(window, parent=None):
+    """Keep a newly opened window above the window that opened it."""
+    previous_grab = window.grab_current()
+    if previous_grab is window:
+        previous_grab = None
+    owner = parent if parent is not None else window.master
+    if owner is not None:
+        owner = owner.winfo_toplevel()
+        if owner is not window:
+            # The start-up splash and intro open while login is withdrawn.
+            # A transient child of a withdrawn window would also disappear.
+            try:
+                visible = bool(owner.winfo_viewable())
+            except AttributeError:
+                visible = True
+            if visible:
+                window.transient(owner)
+    window.attributes("-topmost", True)
+    window.lift()
+
+    def raise_after_map():
+        try:
+            if window.winfo_exists():
+                window.lift()
+                window.focus_force()
+        except tk.TclError:
+            pass
+
+    window.after_idle(raise_after_map)
+
+    def restore_parent(event):
+        if event.widget is not window or previous_grab is None:
+            return
+        try:
+            if previous_grab.winfo_exists():
+                previous_grab.grab_set()
+                previous_grab.lift()
+                previous_grab.focus_force()
+        except tk.TclError:
+            pass
+
+    window.bind("<Destroy>", restore_parent, add="+")
+
+
+def _confirm_window(title, message, parent):
+    """An explicit, foreground Yes/No window for nested project and item panels."""
+    owner = parent.winfo_toplevel()
+    previous_grab = owner.grab_current()
+    dialog = ctk.CTkToplevel(owner)
+    dialog.withdraw()
+    dialog.title(title)
+    dialog.configure(fg_color=T.SURFACE)
+    dialog.resizable(False, False)
+    result = {"yes": False}
+
+    # Pack the fixed footer first. The message can scroll, but the decision
+    # buttons must never be pushed outside the dialog at Windows display scale.
+    actions = ctk.CTkFrame(dialog, fg_color="transparent")
+    actions.pack(side="bottom", fill="x", padx=22, pady=(8, 18))
+
+    def close(yes=False):
+        result["yes"] = yes
+        dialog.destroy()
+
+    button(actions, text="Cancel", command=lambda: close(False), kind="secondary", width=100).pack(side="right")
+    button(actions, text="Confirm", command=lambda: close(True), kind="primary", width=100).pack(side="right", padx=(0, 8))
+
+    body = ctk.CTkFrame(dialog, fg_color="transparent")
+    body.pack(fill="both", expand=True, padx=22, pady=(16, 0))
+    ctk.CTkLabel(body, text=title, font=T.font(16, "bold"), text_color=T.PRIMARY,
+                 anchor="w").pack(fill="x", pady=(0, 12))
+    details = (ctk.CTkScrollableFrame(body, fg_color=T.SURFACE_ALT, height=90)
+               if len(message) > 240 else ctk.CTkFrame(body, fg_color=T.SURFACE_ALT))
+    details.pack(fill="both", expand=True)
+    ctk.CTkLabel(details, text=message, font=T.font(12), text_color=T.TEXT,
+                 wraplength=380, justify="left", anchor="w").pack(fill="x", padx=12, pady=12)
+    dialog.protocol("WM_DELETE_WINDOW", lambda: close(False))
+    dialog.bind("<Escape>", lambda _event: close(False))
+    fit_window(dialog, 460, 320)
+    keep_above(dialog, owner)
+    dialog.deiconify()
+    dialog.grab_set()
+    dialog.focus_force()
+    try:
+        owner.wait_window(dialog)
+    finally:
+        if previous_grab is not None:
+            try:
+                if previous_grab.winfo_exists():
+                    previous_grab.grab_set()
+                    previous_grab.lift()
+            except tk.TclError:
+                pass
+    return result["yes"]
+
+
+def _notice_window(title, message, parent, kind):
+    """Show validation, error and success notices in front of their owner."""
+    owner = parent.winfo_toplevel()
+    previous_grab = owner.grab_current()
+    dialog = ctk.CTkToplevel(owner)
+    dialog.withdraw()
+    dialog.title(title)
+    dialog.configure(fg_color=T.SURFACE)
+    dialog.resizable(False, False)
+    button(dialog, text="OK", command=dialog.destroy, kind="primary", width=100).pack(
+        side="bottom", anchor="e", padx=22, pady=(8, 18))
+    body = ctk.CTkFrame(dialog, fg_color="transparent")
+    body.pack(fill="both", expand=True, padx=22, pady=(16, 0))
+    color = T.DANGER_TEXT if kind == "showerror" else (T.WARNING_TEXT if kind == "showwarning" else T.PRIMARY)
+    ctk.CTkLabel(body, text=title, font=T.font(16, "bold"), text_color=color,
+                 anchor="w").pack(fill="x", pady=(0, 12))
+    details = (ctk.CTkScrollableFrame(body, fg_color=T.SURFACE_ALT, height=90)
+               if len(message) > 240 else ctk.CTkFrame(body, fg_color=T.SURFACE_ALT))
+    details.pack(fill="both", expand=True)
+    ctk.CTkLabel(details, text=message, font=T.font(12), text_color=T.TEXT,
+                 wraplength=380, justify="left", anchor="w").pack(fill="x", padx=12, pady=12)
+    dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    fit_window(dialog, 460, 300)
+    keep_above(dialog, owner)
+    dialog.deiconify()
+    dialog.grab_set()
+    dialog.focus_force()
+    try:
+        owner.wait_window(dialog)
+    finally:
+        if previous_grab is not None:
+            try:
+                if previous_grab.winfo_exists():
+                    previous_grab.grab_set()
+                    previous_grab.lift()
+            except tk.TclError:
+                pass
+    return "ok"
+
+
+def ask_text(title, message, *, parent, initialvalue=""):
+    """Get a short value above the active form; Cancel returns None."""
+    owner = parent.winfo_toplevel()
+    previous_grab = owner.grab_current()
+    dialog = ctk.CTkToplevel(owner)
+    dialog.withdraw()
+    dialog.title(title)
+    dialog.configure(fg_color=T.SURFACE)
+    dialog.resizable(False, False)
+    answer = {"value": None}
+
+    def finish(accept):
+        if accept:
+            answer["value"] = entry.get()
+        dialog.destroy()
+
+    actions = ctk.CTkFrame(dialog, fg_color="transparent")
+    actions.pack(side="bottom", fill="x", padx=22, pady=(8, 18))
+    button(actions, text="Cancel", command=lambda: finish(False), kind="secondary", width=100).pack(side="right")
+    button(actions, text="Continue", command=lambda: finish(True), kind="primary", width=100).pack(side="right", padx=(0, 8))
+    ctk.CTkLabel(dialog, text=message, font=T.font(12), text_color=T.TEXT,
+                 justify="left", wraplength=380).pack(anchor="w", padx=22, pady=(20, 12))
+    entry = field(dialog)
+    entry.pack(fill="x", padx=22)
+    if initialvalue:
+        entry.insert(0, initialvalue)
+    dialog.protocol("WM_DELETE_WINDOW", lambda: finish(False))
+    dialog.bind("<Escape>", lambda _event: finish(False))
+    entry.bind("<Return>", lambda _event: finish(True))
+    fit_window(dialog, 460, 220)
+    keep_above(dialog, owner)
+    dialog.deiconify()
+    dialog.grab_set()
+    entry.focus_set()
+    try:
+        owner.wait_window(dialog)
+    finally:
+        if previous_grab is not None:
+            try:
+                if previous_grab.winfo_exists():
+                    previous_grab.grab_set()
+                    previous_grab.lift()
+            except tk.TclError:
+                pass
+    return answer["value"]
+
+
+def _install_foreground_notices():
+    # Every view imports tkinter.messagebox itself; patching the module once
+    # covers warnings and errors in camera, project and inventory workflows.
+    for kind in ("showinfo", "showwarning", "showerror"):
+        original = getattr(messagebox, kind)
+
+        def show(title=None, message=None, *, _kind=kind, _original=original, **options):
+            parent = options.get("parent")
+            if parent is not None and hasattr(parent, "tk"):
+                return _notice_window(str(title or "Notice"), str(message or ""), parent, _kind)
+            return _original(title, message, **options)
+
+        setattr(messagebox, kind, show)
+
+
+_install_foreground_notices()
 
 
 def button(parent, text="", command=None, kind="primary", compact=False, **kw):
-    """One of four buttons: primary (filled green), secondary (grey), ghost (text only) or danger (red). Fixed height, pointer cursor."""
+    """Consistent action colors: add/confirm yellow, retrieval blue, cancel/remove/clear red."""
+    kind = action_kind(text, kind)
     style = BUTTON_KINDS[kind]
     kw.pop("height", None)
     kw.pop("corner_radius", None)
@@ -67,6 +289,20 @@ def button(parent, text="", command=None, kind="primary", compact=False, **kw):
                          text_color=kw.pop("text_color", style["text_color"]), text_color_disabled=kw.pop("text_color_disabled", T.TEXT_MUTED),
                          **kw)
     return motion.enhance_button(btn)               # hover fade, press effect, pointer cursor (all off under CHAMPION_REDUCE_MOTION=1)
+
+
+def action_kind(text, default="primary"):
+    """Pick the same meaning and color for actions throughout the screens."""
+    words = set(re.findall(r"[a-z]+", str(text).lower()))
+    if words & {"cancel", "remove", "delete", "clear"}:
+        return "danger"
+    if "confirm" in words:
+        return "accent"
+    if "retrieve" in words or "retrieval" in words:
+        return "info"
+    if words & {"add", "register", "issue", "export"}:
+        return "accent"
+    return default
 
 
 def field(parent, **kw):
@@ -115,6 +351,45 @@ def notify(widget, message, kind="success"):
         messagebox.showinfo("Done", message, parent=widget.winfo_toplevel())
 
 
+def confirm(title, message, *, parent=None):
+    """Ask before an action; the question stays above the active panel.
+
+    A native Windows question can fall behind a topmost project or catalog
+    window. Use an owned CTk window for real screens; keep the native fallback
+    for callers without a Tk window.
+    """
+    if parent is not None and hasattr(parent, "tk"):
+        return _confirm_window(title, message, parent)
+
+    # The native fallback is also useful to headless integrations which
+    # provide a messagebox parent without an actual Tk window.
+    topmost_windows = []
+    if parent is not None:
+        window = parent
+        while window is not None:
+            try:
+                if window.attributes("-topmost"):
+                    topmost_windows.append(window)
+                    window.attributes("-topmost", False)
+            except Exception:
+                pass
+            window = getattr(window, "master", None)
+        try:
+            parent.lift()
+        except Exception:
+            pass
+    try:
+        return messagebox.askyesno(title, message, parent=parent, default="no", icon="question")
+    finally:
+        for window in reversed(topmost_windows):
+            try:
+                if window.winfo_exists():
+                    window.attributes("-topmost", True)
+                    window.lift()
+            except Exception:
+                pass
+
+
 def label(parent, text="", size=12, weight="normal", color=None, **kw):
     return ctk.CTkLabel(parent, text=text, font=T.font(size, weight), text_color=color or T.TEXT, **kw)
 
@@ -123,8 +398,9 @@ class KpiCard(ctk.CTkFrame):
     """The dashboard's number card: same size and type everywhere. Number on top, label below, a small status line under it, and a
     slim colour stripe on the left. ``with_value=False`` leaves the number row empty (the Action Items card fills it with badges)."""
 
-    def __init__(self, parent, title, note, accent, value="0", with_value=True, **kw):
-        super().__init__(parent, fg_color=T.SURFACE, corner_radius=T.RADIUS_MD, border_width=1, border_color=T.BORDER, height=130, **kw)
+    def __init__(self, parent, title, note, accent, value="0", with_value=True, background=None, **kw):
+        base = background or T.SURFACE
+        super().__init__(parent, fg_color=base, corner_radius=T.RADIUS_MD, border_width=1, border_color=T.BORDER, height=136, **kw)
         self.pack_propagate(False)
         self.stripe = ctk.CTkFrame(self, fg_color=accent, width=5, corner_radius=3)
         self.stripe.pack(side="left", fill="y", padx=(T.S3, 0), pady=T.S4)
@@ -140,7 +416,7 @@ class KpiCard(ctk.CTkFrame):
         self.title_label.pack(anchor="w", pady=(T.S1, 0))
         self.note_label = ctk.CTkLabel(body, text=note, font=T.font(12), text_color=T.TEXT_MUTED, anchor="w")
         self.note_label.pack(anchor="w")
-        self._hover_base = T.SURFACE
+        self._hover_base = base
 
     def set_state(self, fg, border):
         """Change the card colours (e.g. red when something needs attention); hover fades keep returning to THIS colour."""

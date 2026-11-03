@@ -30,7 +30,7 @@ class DuplicateName(Conflict):
 
 def find_similar_names(name, exclude_user_id=None):
     """Read-only helper for the "Similar name detected" prompt: (exact_match_count, similar_names[:3]) among non-archived users."""
-    name = v.clean_text(name, max_len=v.MAX_NAME, field="Full Name")
+    name = v.clean_person_name(name)
     with db.read() as cur:
         cur.execute("SELECT full_name FROM `user` WHERE status <> 'Archived' AND user_id <> %s", (exclude_user_id or 0,))
         existing = [r["full_name"] for r in cur.fetchall() if r["full_name"]]
@@ -78,7 +78,7 @@ def _next_employee_id(cur, role):
 def register_user(actor, *, name, email, role, password="", confirm_password="", allow_duplicate_name=False) -> dict:
     if role not in ROLES:
         raise v.ValidationError("Please choose a role.")
-    name = v.clean_text(name, max_len=v.MAX_NAME, field="Full Name")
+    name = v.clean_person_name(name)
     pw_hash = None
     if role != "Worker":                                   # Workers have no login: no password at all
         if password != confirm_password:
@@ -104,7 +104,7 @@ def update_user(actor, user_id, *, name, email, role, new_password="", confirm_p
     """Edit an account. Saving also clears a lockout / reset request (that is how an Admin unlocks someone)."""
     if role not in ROLES:
         raise v.ValidationError("Please choose a role.")
-    name = v.clean_text(name, max_len=v.MAX_NAME, field="Full Name")
+    name = v.clean_person_name(name)
     new_hash = None
     if new_password or confirm_password:
         if role == "Worker":
@@ -181,7 +181,7 @@ def restore_user(actor, user_id) -> dict:
 # ---- own profile (Admin and Staff). The target is ALWAYS the caller's own row: there is no user-id parameter to tamper with. ----
 @require_role("Admin", "Staff")
 def update_profile(actor, *, name, email, allow_duplicate_name=False) -> dict:
-    name = v.clean_text(name, max_len=v.MAX_NAME, field="Full Name")
+    name = v.clean_person_name(name)
 
     def work(cur):
         em = _check_email(cur, email, actor["role"], exclude_user_id=actor["user_id"])
