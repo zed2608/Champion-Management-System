@@ -1,5 +1,8 @@
 import os
 import json
+import sys
+import tempfile
+from pathlib import Path
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
@@ -406,7 +409,29 @@ class LoginApp(ctk.CTk):
             os._exit(0)
 
 
+def _executable_smoke_test():
+    """No GUI or database connection: verify bundled resources and backup crypto, then exit for Windows CI."""
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    required = (root / "assets", root / "db" / "schema.sql", root / "db" / "triggers.sql", root / ".env.example")
+    missing = [str(p) for p in required if not p.exists()]
+    if missing:
+        raise RuntimeError("Missing bundled files: " + ", ".join(missing))
+    from services.backup_service import _decrypt_file, _encrypt_file
+    with tempfile.TemporaryDirectory() as folder:
+        source = Path(folder) / "source.sql"
+        encrypted = Path(folder) / "test.cftbak"
+        restored = Path(folder) / "restored.sql"
+        source.write_bytes(b"Champion executable smoke test\n")
+        _encrypt_file(source, encrypted, "smoke-test-passphrase")
+        _decrypt_file(encrypted, restored, "smoke-test-passphrase")
+        if restored.read_bytes() != source.read_bytes():
+            raise RuntimeError("Encrypted backup smoke test failed.")
+
+
 if __name__ == "__main__":
+    if "--smoke-test" in sys.argv or os.environ.get("CHAMPION_SMOKE_TEST") == "1":
+        _executable_smoke_test()
+        raise SystemExit(0)
     from ui.intro import run_startup
     app = LoginApp()
     run_startup(app)                  # splash (about 1.5 s), the four-slide intro on the first launch, then the login window

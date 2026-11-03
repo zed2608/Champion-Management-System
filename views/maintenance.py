@@ -726,8 +726,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                      font=T.font(16, "bold"), text_color=T.TEXT).pack(side="left")
 
         ctk.CTkLabel(frame,
-                     text="Create verified backups of the entire champion_db database and restore from a "
-                          "previous backup file (.sql). Always backup before making major system changes.",
+                     text="Create verified, encrypted backups of the entire database and restore from a "
+                          "Champion backup (.cftbak) or an older SQL backup (.sql).",
                      font=T.font(12), text_color=T.TEXT_MUTED,
                      wraplength=800, justify="left").pack(anchor="w", padx=20, pady=(0, 12))
 
@@ -745,8 +745,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(backup_card, text="💾  Create Backup",
                      font=T.font(14, "bold"), text_color=T.PRIMARY).pack(anchor="w", padx=15, pady=(14, 4))
         ctk.CTkLabel(backup_card,
-                     text="Exports the full database schema and all data to a .sql file.\n"
-                          "The backup is saved to a folder of your choice.",
+                     text="Exports all schema and data to an AES-256 encrypted .cftbak file.\n"
+                          "Keep its passphrase separate from the backup file.",
                      font=T.font(12), text_color=T.TEXT,
                      wraplength=340, justify="left").pack(anchor="w", padx=15, pady=(0, 8))
 
@@ -781,6 +781,14 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
                                                placeholder_text="e.g., Before major update")
         self._backup_note_entry.pack(side="left", fill="x", expand=True)
 
+        pass_row = ctk.CTkFrame(backup_card, fg_color="transparent")
+        pass_row.pack(fill="x", padx=15, pady=(0, 4))
+        ctk.CTkLabel(pass_row, text="Passphrase:", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="left", padx=(0, 6))
+        self._backup_pass_entry = C.field(pass_row, placeholder_text="At least 12 characters", show="•")
+        self._backup_pass_entry.pack(side="left", fill="x", expand=True)
+        self._backup_pass_confirm = C.field(pass_row, placeholder_text="Repeat passphrase", show="•")
+        self._backup_pass_confirm.pack(side="left", fill="x", expand=True, padx=(6, 0))
+
         self._backup_btn = C.button(backup_card, kind="primary", text="⬇  Run Backup Now",
                                          
                                          
@@ -795,7 +803,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         ctk.CTkLabel(restore_card, text="⬆  Restore from Backup",
                      font=T.font(14, "bold"), text_color=T.WARNING_TEXT).pack(anchor="w", padx=15, pady=(14, 4))
         ctk.CTkLabel(restore_card,
-                     text="Restores the database from a selected .sql backup file.\n"
+                     text="Restores the database from a .cftbak or older .sql file.\n"
                           "⚠ WARNING: This will OVERWRITE all current data.",
                      font=T.font(12), text_color=T.TEXT,
                      wraplength=340, justify="left").pack(anchor="w", padx=15, pady=(0, 8))
@@ -826,6 +834,12 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         self._restore_note_entry = C.field(restore_note_row,
                                                 placeholder_text="e.g., Rolling back after failed update")
         self._restore_note_entry.pack(side="left", fill="x", expand=True)
+
+        restore_pass_row = ctk.CTkFrame(restore_card, fg_color="transparent")
+        restore_pass_row.pack(fill="x", padx=15, pady=(0, 4))
+        ctk.CTkLabel(restore_pass_row, text="Passphrase:", font=T.font(12, "bold"), text_color=T.TEXT).pack(side="left", padx=(0, 6))
+        self._restore_pass_entry = C.field(restore_pass_row, placeholder_text="Required for .cftbak", show="•")
+        self._restore_pass_entry.pack(side="left", fill="x", expand=True)
 
         self._restore_btn = ctk.CTkButton(restore_card, text="⬆  Restore Database",
                                           fg_color=T.WARNING_TEXT, hover_color=T.WARNING_TEXT,
@@ -870,7 +884,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
     def _browse_restore_file(self):
         filepath = filedialog.askopenfilename(
             title="Select Backup File to Restore",
-            filetypes=[("SQL Backup Files", "*.sql"), ("All Files", "*.*")],
+            filetypes=[("Champion Encrypted Backups", "*.cftbak"), ("Older SQL Backups", "*.sql"), ("All Files", "*.*")],
             parent=self.winfo_toplevel()
         )
         if filepath:
@@ -880,6 +894,13 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         dest_folder = self._backup_dest_var.get().strip()
         if not dest_folder or dest_folder == "(click Browse to choose folder)":
             messagebox.showerror("No Destination", "Please choose a folder to save the backup.", parent=self.winfo_toplevel())
+            return
+        passphrase = self._backup_pass_entry.get()
+        if len(passphrase) < 12:
+            messagebox.showerror("Passphrase Required", "Use a backup passphrase with at least 12 characters.", parent=self.winfo_toplevel())
+            return
+        if passphrase != self._backup_pass_confirm.get():
+            messagebox.showerror("Passphrases Do Not Match", "Enter the same passphrase in both boxes.", parent=self.winfo_toplevel())
             return
         if not C.confirm("Create backup", f"Save a database backup in this folder?\n\n{dest_folder}", parent=self.winfo_toplevel()):
             return
@@ -891,7 +912,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
 
         def _do_backup():
             try:
-                out = backup_service.create_backup(self.user_info, dest_folder, custom_fname, note)
+                out = backup_service.create_backup(self.user_info, dest_folder, custom_fname, note, passphrase=passphrase)
             except Exception as e:
                 msg = friendly_message(e)
                 self._after_safe(lambda: self._on_backup_done(False, None, None, msg))
@@ -921,6 +942,8 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             )
             self._backup_note_entry.delete(0, "end")
             self._backup_fname_entry.delete(0, "end")
+            self._backup_pass_entry.delete(0, "end")
+            self._backup_pass_confirm.delete(0, "end")
             self.load_backup_history()
         else:
             self._backup_status_lbl.configure(
@@ -936,7 +959,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
     def _run_restore(self):
         src_file = self._restore_src_var.get().strip()
         if not src_file or src_file == "(no file selected)":
-            messagebox.showerror("No File Selected", "Please select a .sql backup file to restore from.", parent=self.winfo_toplevel())
+            messagebox.showerror("No File Selected", "Please select a .cftbak or .sql backup file to restore from.", parent=self.winfo_toplevel())
             return
         if not os.path.isfile(src_file):
             messagebox.showerror("File Not Found", "The selected backup file no longer exists.", parent=self.winfo_toplevel())
@@ -951,12 +974,16 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
         if not confirmed:
             return
         restore_note = self._restore_note_entry.get().strip()          # read on the main thread
+        restore_passphrase = self._restore_pass_entry.get()
+        if src_file.lower().endswith(".cftbak") and not restore_passphrase:
+            messagebox.showerror("Passphrase Required", "Enter the passphrase for this encrypted backup.", parent=self.winfo_toplevel())
+            return
         self._restore_btn.configure(state="disabled", text="⏳ Restoring...")
         self._backup_status_lbl.configure(text="⟳ Checking the file, saving a safety backup, then restoring...", text_color=T.WARNING_TEXT)
 
         def _do_restore():
             try:
-                res = backup_service.restore_backup(self.user_info, src_file, restore_note)
+                res = backup_service.restore_backup(self.user_info, src_file, restore_note, passphrase=restore_passphrase)
             except Exception as e:
                 msg = friendly_message(e)
                 self._after_safe(lambda: self._on_restore_done(False, msg))
@@ -981,6 +1008,7 @@ class MaintenanceView(UiMixin, ctk.CTkFrame):
             )
             self._restore_src_var.set("(no file selected)")
             self._restore_note_entry.delete(0, "end")
+            self._restore_pass_entry.delete(0, "end")
             self.load_backup_history()
         else:
             self._backup_status_lbl.configure(

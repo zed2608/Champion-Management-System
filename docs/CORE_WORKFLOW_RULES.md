@@ -1,5 +1,7 @@
 # Project, inventory, and tool movement rules
 
+The approved ABC classification, cycle-count schedule, encrypted off-site backup procedure, and key-custody rules are in [ABC_CYCLE_COUNT_AND_BACKUP_POLICY.md](ABC_CYCLE_COUNT_AND_BACKUP_POLICY.md).
+
 These are the rules users should see in the Help Guide and the service layer enforces when saving. Use a test database for the examples in the hand-test checklist.
 
 | Action | Requirement | If it fails |

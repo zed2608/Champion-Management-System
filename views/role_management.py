@@ -12,8 +12,11 @@ import re
 import difflib
 from services.errors import friendly_message
 from services import user_service
+from services.validators import like_pattern
+from services.paging import fetch_page
 from ui import components as C
 from ui import theme as T
+from views.paged_table import PagedTable
 
 
 class RoleManagementView(UiMixin, ctk.CTkFrame):
@@ -246,120 +249,71 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
         self.user_search_var.trace_add("write", on_user_search)
                                        
 
-        self.user_scroll = ctk.CTkScrollableFrame(
-            table_card, fg_color="transparent")
+        self.user_scroll = ctk.CTkFrame(table_card, fg_color="transparent")
         self.user_scroll.pack(fill="both", expand=True, padx=20, pady=(5, 20))
 
         self.load_user_table()
 
     def load_user_table(self):
-        for w in self.user_scroll.winfo_children():
-            w.destroy()
+        self._user_query = self.user_search.get() if hasattr(self, "user_search") else ""
+        if getattr(self, "_user_table", None) is None or not self._user_table.winfo_exists():
+            self._user_table = PagedTable(
+                self.user_scroll,
+                [("Employee ID", 2, 110), ("Full Name", 3, 160), ("Email", 3, 170),
+                 ("Role", 1, 80), ("Action", 1, 90)],
+                fetch=self._fetch_user_page,
+                cells=self._user_cells,
+                cell_style=self._user_cell_style,
+                on_row_click=self.open_edit_modal,
+                actions={4: {"text": "Manage", "command": self.open_edit_modal, "fg": T.INFO,
+                             "hover": T.INFO_HOVER, "width": 72}},
+                empty_text="No users found.", font_size=12, cell_pady=10, uniform="role_cols")
+            self._user_table.pack(fill="x", expand=True)
+        self._user_table.reload(0)
 
-        # Hard-Bounded Uniform Grid setup
-        table_inner = ctk.CTkFrame(self.user_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
-
-        headers = ["Employee ID", "Full Name", "Email", "Role", "Actions"]
-        weights = [1, 2, 2, 1, 2]
-        min_sizes = [110, 160, 160, 80, 240] # Strict 240px min size specifically to fit all 3 buttons!
-
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(col, weight=w, minsize=min_w, uniform="role_cols")
-
-        # Header Row
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(table_inner, fg_color=T.PRIMARY, corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=T.font(12, "bold"), text_color=T.WHITE, anchor="center")
-            lbl.pack(fill="both", expand=True, padx=2, pady=10)
-
-        q = self.user_search.get().strip() if hasattr(self, "user_search") else ""
+    def _fetch_user_page(self, page, size):
         conn = get_connection()
         if not conn:
-            return
+            raise RuntimeError("Database connection is unavailable.")
+        cursor = None
         try:
             cursor = conn.cursor(dictionary=True)
-            sql = """
-                SELECT user_id, employee_id, full_name,
-                       IFNULL(email,'—') as email, role, IFNULL(status, 'Active') as status,
-                       IFNULL(failed_attempts, 0) as failed_attempts, IFNULL(reset_requested, 0) as reset_requested
-                FROM user WHERE IFNULL(status, 'Active') != 'Archived'
-            """
+            where = "FROM user WHERE IFNULL(status, 'Active') != 'Archived'"
             params = []
-            if q:
-                sql += " AND (full_name LIKE %s OR employee_id LIKE %s)"
-                params = [f"%{q}%", f"%{q}%"]
-            sql += " ORDER BY full_name ASC"
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-
-            if not rows:
-                ctk.CTkLabel(table_inner, text="No users found.",
-                             text_color=T.TEXT_MUTED).grid(row=1, column=0, columnspan=len(headers), pady=20)
-                return
-
-            for i, row in enumerate(rows):
-                r_idx = i + 1
-                bg=T.SURFACE_ALT if i % 2 == 0 else "white"
-
-                is_locked = row["status"] == "Locked" or row["reset_requested"] == 1
-                display_name = f"🔒 {row['full_name']}" if is_locked else row["full_name"]
-
-                raw_email = row["email"]
-                if "@" in raw_email:
-                    local, domain = raw_email.split("@", 1)
-                    censored_email = f"{local[0]}****@{domain}" if local else f"****@{domain}"
-                else:
-                    censored_email = raw_email
-
-                vals = [row["employee_id"], display_name, censored_email, row["role"]]
-                
-                for col, val in enumerate(vals):
-                    cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                    cell.grid(row=r_idx, column=col, sticky="nsew")
-
-                    color=T.TEXT
-                    if is_locked and col in (0, 1, 2):
-                        color=T.DANGER
-                    elif col == 3:
-                        if val == "Admin": color=T.SUCCESS_TEXT
-                        elif val == "Worker": color=T.WARNING_STRONG
-
-                    lbl = ctk.CTkLabel(cell, text=val, font=T.font(12), text_color=color, justify="center", anchor="center")
-                    
-                    lbl.configure(wraplength=min_sizes[col] - 10)
-                    lbl.pack(fill="both", expand=True, padx=4, pady=12)
-
-                # Action Cell (Contains all 3 Buttons)
-                btn_cell = ctk.CTkFrame(table_inner, fg_color=bg, corner_radius=0)
-                btn_cell.grid(row=r_idx, column=4, sticky="nsew")
-                
-                action_frame = ctk.CTkFrame(btn_cell, fg_color="transparent")
-                action_frame.pack(expand=True, pady=6)
-                
-                C.button(action_frame, compact=True, kind="secondary", text="Edit", width=56, 
-                              
-                              
-                              command=lambda r=row: self.open_edit_modal(r)).pack(side="left", padx=(0, 4))
-                              
-                C.button(action_frame, compact=True, kind="primary", text="🔖 Badge", width=80, 
-                              
-                              
-                              command=lambda r=row: self.print_user_badge(r)).pack(side="left", padx=(0, 4))
-                              
-                ctk.CTkButton(action_frame, text="Archive", width=56, height=28,
-                              fg_color=T.DANGER_BG_STRONG, text_color=T.DANGER_TEXT,
-                              hover_color=T.DANGER_BORDER, font=T.font(12, "bold"),
-                              command=lambda r=row: self.delete_user(r)).pack(side="left")
-
-        except Exception as e:
-            ctk.CTkLabel(self.user_scroll,
-                         text=friendly_message(e), text_color=T.DANGER_TEXT).pack(pady=10)
+            if self._user_query:
+                where += " AND (full_name LIKE %s OR employee_id LIKE %s)"
+                params = [like_pattern(self._user_query)] * 2
+            select = """SELECT user_id, employee_id, full_name, IFNULL(email,'—') AS email, role,
+                        IFNULL(status,'Active') AS status, IFNULL(failed_attempts,0) AS failed_attempts,
+                        IFNULL(reset_requested,0) AS reset_requested"""
+            return fetch_page(cursor, select, where, params, "ORDER BY full_name ASC, user_id ASC", page, size)
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
-                conn.close()
+            conn.close()
+
+    @staticmethod
+    def _user_cells(row):
+        locked = row["status"] == "Locked" or row["reset_requested"] == 1
+        name = f"🔒 {row['full_name']}" if locked else row["full_name"]
+        raw = row["email"]
+        if "@" in raw:
+            local, domain = raw.split("@", 1)
+            email = f"{local[0]}****@{domain}" if local else f"****@{domain}"
+        else:
+            email = raw
+        return [row["employee_id"], name, email, row["role"], ""]
+
+    @staticmethod
+    def _user_cell_style(row, col, value):
+        locked = row["status"] == "Locked" or row["reset_requested"] == 1
+        if locked and col in (0, 1, 2):
+            return T.DANGER_TEXT, True
+        if col == 3 and value == "Admin":
+            return T.SUCCESS_TEXT, True
+        if col == 3 and value == "Worker":
+            return T.WARNING_STRONG, True
+        return T.TEXT, False
 
     def delete_user(self, row):
         if not C.confirm("Confirm Archive", f"Deactivate and archive user '{row['full_name']}'?\n\nThey will no longer be able to log in and will be moved to Maintenance > Archived Employees.", parent=self.winfo_toplevel()):
@@ -556,12 +510,16 @@ class RoleManagementView(UiMixin, ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
         btn_row.pack(fill="x", padx=30, pady=(5, 20))
+        C.button(btn_row, kind="primary", text="Print Badge", width=90,
+                 command=lambda: self.print_user_badge(row)).pack(side="left", padx=(0, 8))
         C.button(btn_row, kind="primary", text="Save Changes", 
                       
-                      command=save_edit).pack(side="left", padx=(0, 10), fill="x", expand=True)
-        C.button(btn_row, kind="secondary", text="Cancel", 
+                      command=save_edit).pack(side="left", padx=(0, 8), fill="x", expand=True)
+        C.button(btn_row, kind="danger", text="Archive", width=75,
+                 command=lambda: self.delete_user(row)).pack(side="left", padx=(0, 8))
+        C.button(btn_row, kind="secondary", text="Close", width=65,
                       
-                      command=modal.destroy).pack(side="right", padx=(10, 0), fill="x", expand=True)
+                      command=modal.destroy).pack(side="right")
 
     def print_user_badge(self, row):
         try:

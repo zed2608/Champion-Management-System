@@ -4,6 +4,8 @@ Automated tool issuance, retrieval, inventory, project and maintenance managemen
 Python 3.11, CustomTkinter, MySQL 8, OpenCV (QR scanning). It runs **offline on a local network (LAN)**: one PC hosts the MySQL
 database, every other PC runs the program and connects to it. No internet is needed.
 
+Operational policy: [ABC classification, physical cycle counts, and encrypted off-site backups](docs/ABC_CYCLE_COUNT_AND_BACKUP_POLICY.md).
+
 ```
    Client PC 1 ─┐
    Client PC 2 ─┼── LAN ──►  Server PC  (MySQL 8, the only copy of the data, backups)
@@ -97,9 +99,11 @@ python -m pytest -q
 Database tests create and drop their own **throwaway databases named `test_*`** and never touch `champion_db`. Without `TEST_DB_USER` they are skipped.
 Some tests open real (hidden) windows and need a Windows desktop session.
 
-## 6. Building the .exe (UNTESTED)
+## 6. Building the Windows application
 
-`ChampionManagement.spec` is a PyInstaller recipe (`pip install pyinstaller`, then `pyinstaller ChampionManagement.spec`; output in `dist\ChampionManagement\`).
+From PowerShell on Windows, run `scripts\build_windows.ps1`. It installs the pinned build tool, runs focused tests, builds the application, and runs a database-free smoke test against the actual executable. The tested folder is written to `dist\ChampionManagement\`; copy the whole folder, not only the `.exe`.
+
+GitHub Actions also runs this process for `fix/defense-ux` and stores the tested folder as the `ChampionManagement-Windows` artifact for 14 days.
 **It has never been run.** Expect to adjust hidden imports or data files on the first build, then test every screen, the camera and PDF export from the built folder.
 It builds a folder, not a single file, because the program writes next to itself (`logs\`, `backups\`, `.env`, `scanner_config.json`, `assets\profiles\`).
 

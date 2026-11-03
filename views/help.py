@@ -104,10 +104,12 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "Use filters and keyword search to isolate users, tools, statuses, modules, or date-time context.",
         ]),
         (False, "11. Reports", [
-            "The six reports cover tool use, employee activity, project allocation, damage and loss, low stock, and overdue transactions. Wear forecasts are under Maintenance.",
+            "The seven reports cover ABC inventory classes, tool use, employee activity, project allocation, damage and loss, low stock, and overdue transactions. Wear forecasts are under Maintenance.",
             "Choose a report and search by name, ID or status in the first control row. Press Search or Enter. The Tool Usage report also has a tool search.",
             "Dates are optional and appear in the second row. Choose From and To, then Apply; Clear removes both dates. Low Stock shows current stock and has no date filter.",
             "Export PDF is beside the report title. It uses the search and dates shown on screen. Notes in the export dialog appear on the PDF but do not filter results.",
+            "ABC uses item rank for the selected period: A is the top 20% of active items by quantity issued, B is the next 30%, and C is the last 50%. An item with no issuance in the period is always C.",
+            "Use ABC for physical counts: count A items every two weeks, B items every three months, and C items twice a year. Record and investigate every difference.",
         ]),
         (True, "12. Maintenance & Centralized Archive (Admin Only)", [
             "Issues & Repairs: Submit flags (Damaged, Lost, Needs Repair, etc.) and investigate active issues.",
@@ -116,6 +118,9 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "Archived Tools: restore previously archived inventory items.",
             "Archived Employees: restore deactivated users back to active status.",
             "Archived Projects: only explicitly archived projects appear; restore sets project back to active workflow state.",
+            "Backup & Restore creates encrypted .cftbak files. Use a passphrase of at least 12 characters and keep it separate from the backup.",
+            "Keep one encrypted backup off-site. Two authorized custodians should hold the recovery details; never put the passphrase in the file name, note, database, or same storage folder.",
+            "Test a restore on a safe test database at least monthly. A lost passphrase cannot be recovered by the system.",
         ]),
         (True, "13. Role Management (Admin Only)", [
             "Register users as Admin, Staff, or Worker.",
@@ -129,6 +134,13 @@ class HelpView(UiMixin, ctk.CTkFrame):
             "Upload avatar image from local files.",
             "Print your Employee ID QR badge for site verification workflows.",
             "Borrowing history table shows your recent transactions and statuses.",
+        ]),
+        (True, "15. Inventory Counts & Secure Backups", [
+            "ABC is rank-based for the selected report period: A is the top 20% of active items by quantity issued, B is the next 30%, and C is the last 50%. Items with no issuance in the period are always C.",
+            "Count A items every two weeks, B items every three months, and C items twice a year. Record the date, counter, expected amount, actual amount and difference.",
+            "Investigate a difference before changing stock. An Admin approves the correction and records its reason; damaged or worn items go through Retrieval or Maintenance.",
+            "Create encrypted .cftbak backups and keep at least one copy off-site. Test a restore on a safe test database every month.",
+            "Use a unique passphrase of at least 12 characters. Keep it separate from the backup file with two authorized custodians. The system does not store it and cannot recover it.",
         ]),
     ]
 
@@ -189,6 +201,10 @@ class HelpView(UiMixin, ctk.CTkFrame):
          "Enter both Start Date and End Date, or leave both blank. End Date must be on or after Start Date."),
         (False, "Can I issue a replacement after returning a tool?",
          "Yes, returning a tool frees its project's approved quantity. The project must still be eligible and stock must be available."),
+        (False, "How often should we physically count inventory?",
+         "Count ABC class A every two weeks, B every three months, and C twice a year. Record the counter, date, expected amount, actual amount and approved correction."),
+        (True, "Where should the backup passphrase be kept?",
+         "Keep it separate from the encrypted .cftbak file. Two authorized custodians should hold the recovery details in an approved password manager or sealed management record. The system cannot recover a lost passphrase."),
     ]
 
     LEGACY_GUIDE_HASHES = [

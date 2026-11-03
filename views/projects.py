@@ -6,12 +6,14 @@ from datetime import datetime
 import cv2
 from pyzbar.pyzbar import decode, ZBarSymbol
 import difflib
-from services.validators import fmt_qty
+from services.validators import fmt_qty, like_pattern
+from services.paging import fetch_page
 from services import validators as v
 from services.errors import friendly_message
 from services import project_service as ps
 from ui import components as C
 from ui import theme as T
+from views.paged_table import PagedTable
 
 
 class ProjectsView(UiMixin, ctk.CTkFrame):
@@ -743,119 +745,66 @@ class ProjectsView(UiMixin, ctk.CTkFrame):
             ctk.CTkLabel(top, text="View only: ask an administrator to create or change projects.", font=T.font(12, "italic"),
                          text_color=T.TEXT_MUTED).pack(side="right", padx=(10, 10))
 
-        # Removed the crashing "both" orientation - back to safe standard vertical scrolling
-        self.project_scroll = ctk.CTkScrollableFrame(
-            table_card, fg_color="transparent")
+        self.project_scroll = ctk.CTkFrame(table_card, fg_color="transparent")
         self.project_scroll.pack(
             fill="both", expand=True, padx=20, pady=(5, 20))
 
         self.load_projects()
 
     def load_projects(self, search_q=""):
-        for w in self.project_scroll.winfo_children():
-            w.destroy()
+        self._project_query = search_q
+        if getattr(self, "_project_table", None) is None or not self._project_table.winfo_exists():
+            self._project_table = PagedTable(
+                self.project_scroll,
+                [("ID", 1, 50), ("Project Name", 3, 180), ("Client", 2, 120),
+                 ("Project Head", 2, 120), ("Status", 2, 110), ("Action", 1, 80)],
+                fetch=self._fetch_project_page,
+                cells=lambda r: [r["project_id"], r["name"], r["client"], r.get("project_head") or "—",
+                                 r["display_status"], ""],
+                cell_style=self._project_cell_style,
+                on_row_click=self.open_project_modal,
+                actions={5: {"text": "View", "command": self.open_project_modal, "fg": T.INFO,
+                             "hover": T.INFO_HOVER, "width": 65}},
+                empty_text="No projects found.", font_size=12, cell_pady=10, uniform="p_cols")
+            self._project_table.pack(fill="x", expand=True)
+        self._project_table.reload(0)
 
-        # --- NEW SAFE UNIFORM GRID ---
-        table_inner = ctk.CTkFrame(self.project_scroll, fg_color="transparent")
-        table_inner.pack(fill="x", expand=True)
-
-        headers = ["ID", "Project Name", "Client",
-                   "Project Head", "Status", "Actions"]
-        weights = [1, 3, 2, 2, 2, 1]
-        min_sizes = [50, 180, 120, 120, 100, 80]
-
-        # Enforce exact column alignment
-        for col, (w, min_w) in enumerate(zip(weights, min_sizes)):
-            table_inner.grid_columnconfigure(
-                col, weight=w, minsize=min_w, uniform="p_cols")
-
-        # Header Row
-        for col, text in enumerate(headers):
-            cell = ctk.CTkFrame(
-                table_inner, fg_color=T.PRIMARY, corner_radius=0)
-            cell.grid(row=0, column=col, sticky="nsew", pady=(0, 2))
-            lbl = ctk.CTkLabel(cell, text=text, font=T.font(12, "bold"), text_color=T.WHITE, anchor="center")
-            lbl.pack(fill="both", expand=True, padx=5, pady=10)
-
+    def _fetch_project_page(self, page, size):
         conn = get_connection()
         if not conn:
-            return
+            raise RuntimeError("Database connection is unavailable.")
+        cursor = None
         try:
             cursor = conn.cursor(dictionary=True)
-            sql = '''
-                SELECT p.*, a.full_name as admin_approver,
-                       CASE
-                           WHEN p.status IN ('Approved', 'Ongoing') AND p.end_date < CURDATE() THEN CONCAT(p.status, ' (OVERDUE)')
-                           ELSE p.status
-                       END as display_status
-                FROM projects p
-                LEFT JOIN user a ON p.approved_by = a.user_id
-                WHERE p.archived_at IS NULL
-            '''
+            where = """FROM projects p LEFT JOIN user a ON p.approved_by = a.user_id
+                       WHERE p.archived_at IS NULL"""
             params = []
-            if search_q:
-                sql += " AND (p.name LIKE %s OR p.client LIKE %s OR p.project_head LIKE %s)"
-                params = [f"%{search_q}%", f"%{search_q}%", f"%{search_q}%"]
-
-            sql += " ORDER BY p.project_id DESC"
-            cursor.execute(sql, tuple(params))
-            results = cursor.fetchall()
-
-            if not results:
-                ctk.CTkLabel(table_inner, text="No projects found.", text_color=T.TEXT_MUTED).grid(
-                    row=1, column=0, columnspan=len(headers), pady=20)
-                return
-
-            for i, row in enumerate(results):
+            if self._project_query:
+                where += " AND (p.name LIKE %s OR p.client LIKE %s OR p.project_head LIKE %s)"
+                params = [like_pattern(self._project_query)] * 3
+            select = """SELECT p.*, a.full_name AS admin_approver,
+                        CASE WHEN p.status IN ('Approved','Ongoing') AND p.end_date < CURDATE()
+                             THEN CONCAT(p.status, ' (OVERDUE)') ELSE p.status END AS display_status"""
+            rows, info = fetch_page(cursor, select, where, params, "ORDER BY p.project_id DESC", page, size)
+            for row in rows:
                 row["status"] = row["display_status"]
-                r_idx = i + 1
-                bg=T.SURFACE_ALT if i % 2 == 0 else "white"
-
-                # Define data
-                vals = [
-                    str(row["project_id"]),
-                    row["name"],
-                    row["client"],
-                    row.get("project_head") or "—",
-                    row["status"]
-                ]
-
-                # Render Data Cells
-                for col, val in enumerate(vals):
-                    cell = ctk.CTkFrame(
-                        table_inner, fg_color=bg, corner_radius=0)
-                    cell.grid(row=r_idx, column=col, sticky="nsew")
-
-                    txt_color=T.TEXT_MUTED if col == 4 and "Draft" in val else (
-                        T.WARNING_STRONG if col == 4 and "Pending" in val else (T.SUCCESS_TEXT if col == 4 and "Approved" in val else T.TEXT))
-                    font_w = "bold" if col == 4 else "normal"
-
-                    lbl = ctk.CTkLabel(cell, text=val, font=T.font(12, font_w), text_color=txt_color, justify="center", anchor="center")
-                    # Set wrap to ensure long text stacks downward instead of pushing grid wide
-                    lbl.configure(wraplength=min_sizes[col] - 10)
-
-                    lbl.pack(fill="both", expand=True, padx=10, pady=12)
-
-                # Render Actions Cell Button
-                btn_cell = ctk.CTkFrame(
-                    table_inner, fg_color=bg, corner_radius=0)
-                btn_cell.grid(row=r_idx, column=5, sticky="nsew")
-                
-                btn_color=T.INFO if row['status'] == 'Pending' else T.BORDER_STRONG
-                btn_text = "Review" if row['status'] == 'Pending' else "View"
-                
-                btn = ctk.CTkButton(btn_cell, text=btn_text, width=65, height=28, fg_color=btn_color, text_color=T.ON_INFO if row['status'] == 'Pending' else T.TEXT,
-                                    hover_color=T.INFO_HOVER, font=T.font(12, "bold"), command=lambda r=row: self.open_project_modal(r))
-                # expand=True forces the button perfectly into the horizontal and vertical center
-                btn.pack(expand=True, pady=10)
-
-        except Exception as e:
-            ctk.CTkLabel(table_inner, text=friendly_message(e), text_color=T.DANGER_TEXT).grid(
-                row=1, column=0, columnspan=len(headers), pady=20)
+            return rows, info
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
-                conn.close()
+            conn.close()
+
+    @staticmethod
+    def _project_cell_style(row, col, value):
+        if col != 4:
+            return T.TEXT, False
+        if "Pending" in value:
+            return T.WARNING_STRONG, True
+        if "Approved" in value or "Completed" in value:
+            return T.SUCCESS_TEXT, True
+        if "OVERDUE" in value or value in ("Declined", "Cancelled"):
+            return T.DANGER_TEXT, True
+        return T.TEXT_MUTED, True
 
     def open_project_modal(self, row):
         modal = ctk.CTkToplevel(self)

@@ -14,6 +14,9 @@ restored files of any kind without looking, and gave no way back if a restore wa
   * the backup history survives a restore (the dump replaces ``backup_logs``; the old rows are put back).
 """
 import hashlib
+import base64
+import binascii
+import json
 import os
 import re
 import shutil
@@ -22,6 +25,10 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 from db import db
 from services.validators import like_pattern
@@ -32,6 +39,10 @@ TRAILER = "-- Dump completed"
 MIN_FREE_BYTES = 50 * 1024 * 1024
 SAFETY_DIR = PROJECT_ROOT / "backups"
 DUMP_TIMEOUT = 900
+ENCRYPTED_MAGIC = b"CFTBACKUP1\n"
+ENCRYPTED_EXT = ".cftbak"
+CRYPT_CHUNK = 1 << 20
+SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 14, 8, 1
 
 
 class BackupError(ServiceError):
@@ -122,12 +133,112 @@ def _check_disk_space(folder, needed=None):
                           "Choose another drive or free some space.")
 
 
-def _safe_name(custom, stamp, database):
+def _safe_name(custom, stamp, database, encrypted=False):
     if custom:
         base = "".join(c if c.isalnum() or c in "-_" else "_" for c in custom.replace(" ", "_"))[:60].strip("_")
         if base:
-            return f"{base}_{stamp}.sql"
-    return f"{database}_backup_{stamp}.sql"
+            return f"{base}_{stamp}{ENCRYPTED_EXT if encrypted else '.sql'}"
+    return f"{database}_backup_{stamp}{ENCRYPTED_EXT if encrypted else '.sql'}"
+
+
+def _passphrase_bytes(passphrase):
+    value = str(passphrase or "")
+    if len(value) < 12:
+        raise BackupError("The backup passphrase must be at least 12 characters.")
+    return value.encode("utf-8")
+
+
+def _derive_backup_key(passphrase, salt, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P):
+    return Scrypt(salt=salt, length=32, n=n, r=r, p=p).derive(_passphrase_bytes(passphrase))
+
+
+def _is_encrypted(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(len(ENCRYPTED_MAGIC)) == ENCRYPTED_MAGIC
+    except OSError:
+        return False
+
+
+def _encrypt_file(source, destination, passphrase):
+    """Stream-encrypt a verified SQL dump with AES-256-GCM. The authenticated header records only non-secret format data."""
+    source, destination = Path(source), Path(destination)
+    salt, nonce = os.urandom(16), os.urandom(12)
+    header = json.dumps({"version": 1, "cipher": "AES-256-GCM", "kdf": "scrypt", "n": SCRYPT_N,
+                         "r": SCRYPT_R, "p": SCRYPT_P, "salt": base64.b64encode(salt).decode("ascii"),
+                         "nonce": base64.b64encode(nonce).decode("ascii")},
+                        separators=(",", ":"), sort_keys=True).encode("utf-8")
+    prefix = ENCRYPTED_MAGIC + len(header).to_bytes(4, "big") + header
+    key = _derive_backup_key(passphrase, salt)
+    encryptor = Cipher(algorithms.AES(key), modes.GCM(nonce)).encryptor()
+    encryptor.authenticate_additional_data(prefix)
+    part = destination.with_name(destination.name + ".part")
+    try:
+        with open(source, "rb") as src, open(part, "wb") as out:
+            out.write(prefix)
+            for block in iter(lambda: src.read(CRYPT_CHUNK), b""):
+                out.write(encryptor.update(block))
+            out.write(encryptor.finalize())
+            out.write(encryptor.tag)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(part, destination)
+    finally:
+        if part.exists():
+            part.unlink()
+    return destination.stat().st_size, _sha256_of(destination)
+
+
+def _decrypt_file(source, destination, passphrase):
+    source, destination = Path(source), Path(destination)
+    try:
+        with open(source, "rb") as src:
+            if src.read(len(ENCRYPTED_MAGIC)) != ENCRYPTED_MAGIC:
+                raise BackupError("That file is not an encrypted Champion backup.")
+            header_len = int.from_bytes(src.read(4), "big")
+            if header_len < 32 or header_len > 4096:
+                raise BackupError("The encrypted backup header is invalid.")
+            header_bytes = src.read(header_len)
+            prefix = ENCRYPTED_MAGIC + header_len.to_bytes(4, "big") + header_bytes
+            meta = json.loads(header_bytes.decode("utf-8"))
+            if meta.get("version") != 1 or meta.get("cipher") != "AES-256-GCM" or meta.get("kdf") != "scrypt":
+                raise BackupError("This encrypted backup format is not supported.")
+            if (meta.get("n"), meta.get("r"), meta.get("p")) != (SCRYPT_N, SCRYPT_R, SCRYPT_P):
+                raise BackupError("This encrypted backup uses unsupported key settings.")
+            salt, nonce = base64.b64decode(meta["salt"]), base64.b64decode(meta["nonce"])
+            key = _derive_backup_key(passphrase, salt, int(meta["n"]), int(meta["r"]), int(meta["p"]))
+            payload_start = src.tell()
+            total = source.stat().st_size
+            cipher_len = total - payload_start - 16
+            if cipher_len <= 0:
+                raise BackupError("The encrypted backup is incomplete.")
+            src.seek(total - 16)
+            tag = src.read(16)
+            src.seek(payload_start)
+            decryptor = Cipher(algorithms.AES(key), modes.GCM(nonce, tag)).decryptor()
+            decryptor.authenticate_additional_data(prefix)
+            remaining = cipher_len
+            with open(destination, "wb") as out:
+                while remaining:
+                    block = src.read(min(CRYPT_CHUNK, remaining))
+                    if not block:
+                        raise BackupError("The encrypted backup is incomplete.")
+                    remaining -= len(block)
+                    out.write(decryptor.update(block))
+                out.write(decryptor.finalize())
+    except BackupError:
+        try:
+            destination.unlink()
+        except OSError:
+            pass
+        raise
+    except (InvalidTag, ValueError, KeyError, json.JSONDecodeError, UnicodeDecodeError, binascii.Error):
+        try:
+            destination.unlink()
+        except OSError:
+            pass
+        raise BackupError("The passphrase is incorrect, or the encrypted backup was changed or damaged.")
+    return destination
 
 
 def _read_head_tail(path, head=4096, tail=2048):
@@ -200,19 +311,36 @@ def _log_row(actor_id, filename, filepath, size_text, note, status, kind, sha):
 
 
 @require_role("Admin")
-def create_backup(actor, dest_folder, custom_name="", note="", exe=None, run=subprocess.run):
+def create_backup(actor, dest_folder, custom_name="", note="", passphrase="", exe=None, run=subprocess.run):
     """Make a verified backup in ``dest_folder`` and record it. Returns {"path","size","sha256"}."""
     dest = Path(str(dest_folder or "").strip())
     if not str(dest_folder or "").strip() or not dest.is_dir():
         raise BackupError("Please choose a folder that exists to save the backup.")
     cfg = _cfg()
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    final = dest / _safe_name(custom_name, stamp, cfg["database"])
+    encrypted = bool(passphrase)
+    final = dest / _safe_name(custom_name, stamp, cfg["database"], encrypted=encrypted)
+    plain = None
     try:
-        size, sha = _dump_to_file(final, cfg, exe=exe, run=run)
-    except Exception as e:
+        if encrypted:
+            _passphrase_bytes(passphrase)
+            fd, plain_name = tempfile.mkstemp(prefix=".champion_backup_", suffix=".sql", dir=dest)
+            os.close(fd)
+            plain = Path(plain_name)
+            plain.unlink()
+            _dump_to_file(plain, cfg, exe=exe, run=run)
+            size, sha = _encrypt_file(plain, final, passphrase)
+        else:
+            size, sha = _dump_to_file(final, cfg, exe=exe, run=run)
+    except Exception:
         _log_row(actor["user_id"], final.name, final, "—", note, "Failed", "Backup", None)
         raise
+    finally:
+        if plain is not None:
+            try:
+                plain.unlink()
+            except OSError:
+                pass
     _log_row(actor["user_id"], final.name, final, _human_size(size), note, "Success", "Backup", sha)
     from database import log_action
     log_action(actor["user_id"], "Backup", "Maintenance", f"Database backup created: {final.name} ({_human_size(size)})")
@@ -237,12 +365,35 @@ def _restore_history(rows):
 
 
 @require_role("Admin")
-def restore_backup(actor, src_file, note="", expected_sha256=None, exe_dump=None, exe_mysql=None, run=subprocess.run, safety_dir=None):
+def restore_backup(actor, src_file, note="", expected_sha256=None, passphrase="", exe_dump=None, exe_mysql=None, run=subprocess.run, safety_dir=None):
     """Validate, take an automatic safety backup, then load ``src_file`` over the current database.
     Returns {"safety_backup": path}. Other computers using the system must log out first (the UI says so)."""
-    cfg = _cfg()
     src = Path(str(src_file or ""))
-    _validate_dump(src, cfg["database"], expected_sha256)
+    if not src.is_file():
+        raise BackupError("That backup file does not exist.")
+    if expected_sha256 and _sha256_of(src).lower() != expected_sha256.lower():
+        raise BackupError("That backup file has changed since it was made (its checksum does not match). It will not be restored.")
+    decrypted = None
+    load_src = src
+    try:
+        if _is_encrypted(src):
+            fd, name = tempfile.mkstemp(prefix="champion_restore_", suffix=".sql")
+            os.close(fd)
+            decrypted = Path(name)
+            _decrypt_file(src, decrypted, passphrase)
+            load_src = decrypted
+        return _restore_plain(actor, src, load_src, note, exe_dump, exe_mysql, run, safety_dir)
+    finally:
+        if decrypted is not None:
+            try:
+                decrypted.unlink()
+            except OSError:
+                pass
+
+
+def _restore_plain(actor, original_src, load_src, note, exe_dump, exe_mysql, run, safety_dir):
+    cfg = _cfg()
+    _validate_dump(load_src, cfg["database"])
     mysql_exe = exe_mysql or _find_mysql()
     if not mysql_exe:
         raise BackupError("The mysql program was not found. Install MySQL Server/Workbench or add its 'bin' folder to the PATH, then try again.")
@@ -251,7 +402,7 @@ def restore_backup(actor, src_file, note="", expected_sha256=None, exe_dump=None
     stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     safety = safety_dir / f"before_restore_{cfg['database']}_{stamp}.sql"
     n = 1
-    while safety.exists() or safety == src:                  # two restores in one second must never overwrite each other's safety copy
+    while safety.exists() or safety == original_src:
         n += 1
         safety = safety_dir / f"before_restore_{cfg['database']}_{stamp}_{n}.sql"
     try:
@@ -259,12 +410,13 @@ def restore_backup(actor, src_file, note="", expected_sha256=None, exe_dump=None
     except BackupError as e:
         raise BackupError(f"The restore was NOT started because the safety backup of the current data failed: {e}")
     history = _snapshot_history()
+    restore_status = "Failed"
     try:
         history.append({"filename": safety.name, "filepath": str(safety), "file_size": _human_size(size), "note": "Automatic safety backup before a restore",
                         "created_by": actor["user_id"], "created_at": datetime.now(), "status": "Success", "type": "Backup", "sha256": sha})
         # 2. load the file
         try:
-            with _Defaults(cfg) as cnf, open(src, "rb") as f:
+            with _Defaults(cfg) as cnf, open(load_src, "rb") as f:
                 proc = run([mysql_exe, f"--defaults-extra-file={cnf}", "--default-character-set=utf8mb4", cfg["database"]],
                            stdin=f, capture_output=True, timeout=DUMP_TIMEOUT)
         except subprocess.TimeoutExpired:
@@ -273,15 +425,16 @@ def restore_backup(actor, src_file, note="", expected_sha256=None, exe_dump=None
             get_logger().error("mysql restore exit %s: %s", proc.returncode, (proc.stderr or b"").decode("utf-8", "replace")[:500])
             raise BackupError(f"The restore failed part-way (code {proc.returncode}). The data may be incomplete. "
                               f"Restore the safety backup made just before: {safety}")
+        restore_status = "Success"
     finally:
         try:
-            history.append({"filename": src.name, "filepath": str(src), "file_size": _human_size(src.stat().st_size), "note": note or None,
-                            "created_by": actor["user_id"], "created_at": datetime.now(), "status": "Success", "type": "Restore", "sha256": None})
+            history.append({"filename": original_src.name, "filepath": str(original_src), "file_size": _human_size(original_src.stat().st_size), "note": note or None,
+                            "created_by": actor["user_id"], "created_at": datetime.now(), "status": restore_status, "type": "Restore", "sha256": None})
             _restore_history(history)
         except Exception:
             get_logger().exception("Could not rebuild the backup history after a restore")
     from database import log_action
-    log_action(actor["user_id"], "Restore", "Maintenance", f"Database restored from backup: {src.name}")
+    log_action(actor["user_id"], "Restore", "Maintenance", f"Database restored from backup: {original_src.name}")
     return {"safety_backup": str(safety)}
 
 

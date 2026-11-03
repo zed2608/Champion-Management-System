@@ -63,7 +63,7 @@ class ReportsView(UiMixin, ctk.CTkFrame):
         self.tab_var = ctk.StringVar(value="⛭ Tool Usage Report")
         self.seg_btn = ctk.CTkOptionMenu(
             controls,
-            values=["⛭ Tool Usage Report", "🖹 Employee Activity", "📋 Project Allocation",
+            values=["▤ Inventory ABC Analysis", "⛭ Tool Usage Report", "🖹 Employee Activity", "📋 Project Allocation",
                     "⚠ Damage & Loss", "⭣ Low Stock", "⧖ Overdue Transactions"],
             variable=self.tab_var,
             width=210, fg_color=T.SURFACE_ALT, text_color=T.TEXT,
