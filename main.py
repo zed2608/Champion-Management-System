@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import Image
 import bcrypt
+from auth_helpers import verify_password
 from database import get_connection, log_action
 from dashboard import DashboardApp
 from database import log_action
@@ -215,7 +216,7 @@ class LoginApp(ctk.CTk):
         self.update_idletasks()
 
         username = self.user_entry.get().strip()
-        password = self.pass_entry.get().strip()
+        password = self.pass_entry.get()
 
         if not username or not password:
             self.show_error("Please fill in all fields.")
@@ -246,12 +247,12 @@ class LoginApp(ctk.CTk):
                 self.login_button.configure(state="normal", text="Login")
                 return
 
-            if user.get("status") == "Locked":
-                self.show_error("Account Locked. Please contact Admin.")
+            if user.get("status") != "Active":
+                self.show_error("Account unavailable. Please contact Admin.")
                 self.login_button.configure(state="disabled", text="Locked")
                 return
 
-            if bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+            if verify_password(password, user.get("password_hash")):
                 if user.get("failed_attempts", 0) > 0:
                     cursor.execute("UPDATE user SET failed_attempts = 0 WHERE user_id = %s", (user['user_id'],))
                     conn.commit()
@@ -273,7 +274,7 @@ class LoginApp(ctk.CTk):
                     f"Invalid Credentials. {3 - failed_attempts} attempt(s) left.")
                 self.login_button.configure(state="normal", text="Login")
         except Exception as e:
-            self.show_error(f"System Error: {e}")
+            self.show_error("Authentication unavailable. Please contact Admin.")
             self.login_button.configure(state="normal", text="Login")
         finally:
             if conn and conn.is_connected():

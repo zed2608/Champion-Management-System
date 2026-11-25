@@ -1,6 +1,4 @@
-import bcrypt
 from database import get_connection
-import datetime
 
 def setup_database():
     conn = get_connection()
@@ -111,22 +109,7 @@ def setup_database():
         )
     """)
 
-    # Create Default Admin Account
-    current_year = datetime.datetime.now().year
-    admin_id = f"ADM-{current_year}-001"
-    
-    cursor.execute("SELECT * FROM user WHERE role = 'Admin'")
-    if not cursor.fetchone():
-        print("Inserting default Admin account...")
-        default_password = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        cursor.execute(
-            "INSERT INTO user (employee_id, full_name, email, role, password_hash) VALUES (%s, %s, %s, %s, %s)",
-            (admin_id, 'System Administrator', 'admin@champion.com', 'Admin', default_password)
-        )
-        print(f"\n✅ Default Admin created!\n   Username: {admin_id}\n   Password: admin123\n")
-    else:
-        print("✅ Admin account already exists.")
-
+    # Account creation is explicit; no default password or automatic reset.
     conn.commit()
     cursor.close()
     conn.close()

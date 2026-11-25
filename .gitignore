@@ -1,4 +1,17 @@
+.venv/
 venv/
 __pycache__/
+*.py[cod]
 .env
+.env.*
+!.env.example
+!.env.lan.example
+remember_config.json
 assets/profiles/
+*.sql
+*.dump
+*.db
+*.log
+build/
+dist/
+.pytest_cache/

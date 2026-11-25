@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 # Load the secret credentials from the .env file
 # DB_HOST can be a LAN MySQL host/IP, a remote server, or localhost.
 # Using a LAN host preserves the app logic and only changes which database server is targeted.
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
 _db_pool = None
 
@@ -17,6 +17,14 @@ def get_connection():
     global _db_pool
     try:
         if _db_pool is None:
+            required = ("DB_USER", "DB_PASS", "DB_NAME")
+            if any(not os.getenv(key) for key in required):
+                raise ValueError("Set DB_USER, DB_PASS and DB_NAME in local .env.")
+            tls = {}
+            if os.getenv("DB_SSL_CA"):
+                tls = {"ssl_ca": os.environ["DB_SSL_CA"], "ssl_verify_cert": True, "ssl_verify_identity": True}
+            elif os.getenv("DB_HOST", "localhost") not in ("localhost", "127.0.0.1", "::1"):
+                raise ValueError("Remote/LAN connections require DB_SSL_CA for verified TLS.")
             _db_pool = pooling.MySQLConnectionPool(
                 pool_name="champion_pool",
                 pool_size=10,
@@ -25,11 +33,13 @@ def get_connection():
                 port=int(os.getenv("DB_PORT") or 3306),
                 user=os.getenv("DB_USER", "root"),
                 password=os.getenv("DB_PASS", ""),
-                database=os.getenv("DB_NAME", "champion_db")
+                database=os.environ["DB_NAME"],
+                connection_timeout=10,
+                **tls
             )
         return _db_pool.get_connection()
-    except mysql.connector.Error as err:
-        print(f"Database Connection Error: {err}")
+    except (mysql.connector.Error, ValueError):
+        print("Database connection failed. Check local configuration and server availability.")
         return None
 
 def log_action(user_id, action_type, module, details):
@@ -139,7 +149,7 @@ def generate_id_badge(emp_id, emp_name, emp_role, company_name="CHAMPION", outpu
         name_str = emp_name
         if len(name_str) > 30: name_str = name_str[:27] + "..."
         
-        draw.text((center_x(emp_name, f_name), y_base),
+        draw.text((center_x(name_str, f_name), y_base),
                   name_str, fill="#1A1A1A", font=f_name)
         draw.text((center_x(f"ID: {emp_id}", f_id), y_base + 24),
                   f"ID: {emp_id}", fill="#555555", font=f_id)
@@ -148,7 +158,9 @@ def generate_id_badge(emp_id, emp_name, emp_role, company_name="CHAMPION", outpu
         if output_dir is None:
             output_dir = tempfile.gettempdir()
         
-        file_path = os.path.join(output_dir, f"Badge_{emp_id}.pdf")
+        import re
+        safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", emp_id)[:80] or "employee"
+        file_path = os.path.join(output_dir, f"Badge_{safe_id}.pdf")
         canvas.save(file_path, "PDF", resolution=300.0)
         
         return file_path
