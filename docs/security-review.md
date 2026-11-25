@@ -5,3 +5,6 @@ The initial commit included a real-looking database password in .env and comment
 The base schema is not a verified full migration chain. Legacy db_patch*, db_upgrade, fix_db and migration scripts remain unchanged; they can alter schemas or copy records, so do not run them on production. The desktop application currently performs some schema checks during startup, and role enforcement depends on client behavior. Test with a disposable database before using real inventory. Review permissions, transaction boundaries, concurrent stock updates, PDF/QR workflows and audit retention separately.
 
 TLS verification is required for non-loopback database hosts. Provide a CA bundle matching the intended MySQL server and connect using a certificate-matching hostname. This may require LAN server configuration. No live service was contacted.
+
+## QR printing merge repair
+Three unresolved conflict blocks prevented Python from compiling the tagging module. The retained side uses 450 × 300 px labels at 300 DPI, matching the original badge dimensions. The alternative 100 DPI paths remain in the prior commit. Printer and scanner behavior still needs hardware testing.

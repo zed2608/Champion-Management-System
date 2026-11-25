@@ -253,7 +253,6 @@ class TaggingView(ctk.CTkFrame):
                 print_qr = qrcode.QRCode(version=1, box_size=6, border=1)
                 print_qr.add_data(qr_payload)
                 print_qr.make(fit=True)
-<<<<<<< HEAD
                 qr_img = print_qr.make_image(fill_color="black", back_color="white").convert("RGB")
                 
                 canvas_width = 450
@@ -290,43 +289,6 @@ class TaggingView(ctk.CTkFrame):
                 draw.text((text_x1, text_y1), text_str1, fill="black", font=font)
                 draw.text((text_x2, text_y2), text_str2, fill="black", font=font_small)
                 
-=======
-                qr_img = print_qr.make_image(
-                    fill_color="black", back_color="white").convert("RGB")
-
-                canvas_width = qr_img.width + 100
-                canvas_height = qr_img.height + 150
-                pil_canvas = Image.new(
-                    'RGB', (canvas_width, canvas_height), 'white')
-
-                offset_x = (canvas_width - qr_img.width) // 2
-                pil_canvas.paste(qr_img, (offset_x, 30))
-
-                draw = ImageDraw.Draw(pil_canvas)
-                try:
-                    font = ImageFont.truetype("arial.ttf", 30)
-                except IOError:
-                    font = ImageFont.load_default()
-
-                text_str1 = f"{tag_id}"
-                text_str2 = f"{tool['name']}"
-
-                bbox1 = draw.textbbox((0, 0), text_str1, font=font)
-                text_w1 = bbox1[2] - bbox1[0]
-                text_x1 = (canvas_width - text_w1) // 2
-                text_y1 = qr_img.height + 40
-
-                bbox2 = draw.textbbox((0, 0), text_str2, font=font)
-                text_w2 = bbox2[2] - bbox2[0]
-                text_x2 = (canvas_width - text_w2) // 2
-                text_y2 = text_y1 + 40
-
-                draw.text((text_x1, text_y1), text_str1,
-                          fill="black", font=font)
-                draw.text((text_x2, text_y2), text_str2,
-                          fill="black", font=font)
-
->>>>>>> 0b6201e84f79ad7979c24a12ec2139103238ad25
                 images.append(pil_canvas)
 
             if not images:
@@ -336,14 +298,8 @@ class TaggingView(ctk.CTkFrame):
 
             temp_dir = tempfile.gettempdir()
             file_path = os.path.join(temp_dir, f"Batch_Print_Labels.pdf")
-<<<<<<< HEAD
             images[0].save(file_path, "PDF", resolution=300.0, save_all=True, append_images=images[1:])
             
-=======
-            images[0].save(file_path, "PDF", resolution=100.0,
-                           save_all=True, append_images=images[1:])
-
->>>>>>> 0b6201e84f79ad7979c24a12ec2139103238ad25
             import time
             time.sleep(0.5)
             os.startfile(file_path)
@@ -589,7 +545,6 @@ class TaggingView(ctk.CTkFrame):
                 try:
                     modal.attributes("-topmost", False)
 
-<<<<<<< HEAD
                     print_qr = qrcode.QRCode(version=1, box_size=6, border=1)
                     print_qr.add_data(qr_payload) 
                     print_qr.make(fit=True)
@@ -635,54 +590,6 @@ class TaggingView(ctk.CTkFrame):
                     
                     canvas.save(file_path, "PDF", resolution=300.0)
                     
-=======
-                    print_qr = qrcode.QRCode(version=1, box_size=15, border=2)
-                    print_qr.add_data(qr_payload)
-                    print_qr.make(fit=True)
-                    qr_img = print_qr.make_image(
-                        fill_color="black", back_color="white").convert("RGB")
-
-                    canvas_width = qr_img.width + 100
-                    canvas_height = qr_img.height + 150
-                    canvas = Image.new(
-                        'RGB', (canvas_width, canvas_height), 'white')
-
-                    offset_x = (canvas_width - qr_img.width) // 2
-                    canvas.paste(qr_img, (offset_x, 30))
-
-                    draw = ImageDraw.Draw(canvas)
-                    try:
-                        font = ImageFont.truetype("arial.ttf", 30)
-                    except IOError:
-                        font = ImageFont.load_default()
-
-                    text_str1 = f"{current_val}"
-                    text_str2 = f"{tool_name}"
-
-                    bbox1 = draw.textbbox((0, 0), text_str1, font=font)
-                    text_w1 = bbox1[2] - bbox1[0]
-                    text_x1 = (canvas_width - text_w1) // 2
-                    text_y1 = qr_img.height + 40
-
-                    bbox2 = draw.textbbox((0, 0), text_str2, font=font)
-                    text_w2 = bbox2[2] - bbox2[0]
-                    text_x2 = (canvas_width - text_w2) // 2
-                    text_y2 = text_y1 + 40
-
-                    draw.text((text_x1, text_y1), text_str1,
-                              fill="black", font=font)
-                    draw.text((text_x2, text_y2), text_str2,
-                              fill="black", font=font)
-
-                    temp_dir = tempfile.gettempdir()
-                    safe_filename = "".join(
-                        c for c in current_val if c.isalnum() or c in ('-', '_'))
-                    file_path = os.path.join(
-                        temp_dir, f"Print_Label_{safe_filename}.pdf")
-
-                    canvas.save(file_path, "PDF", resolution=100.0)
-
->>>>>>> 0b6201e84f79ad7979c24a12ec2139103238ad25
                     import time
                     time.sleep(0.5)
                     os.startfile(file_path)
